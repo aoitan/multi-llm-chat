@@ -1,6 +1,18 @@
 import os
 import google.generativeai as genai
+from dotenv import load_dotenv
 # import openai # Will uncomment when actually implementing ChatGPT API
+
+load_dotenv() # Load environment variables from .env file
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+if not GOOGLE_API_KEY:
+    print("Error: GOOGLE_API_KEY not found in environment variables or .env file.")
+    exit(1)
+
+genai.configure(api_key=GOOGLE_API_KEY)
 
 def call_gemini_api(history):
     # Placeholder for actual Gemini API call
@@ -38,6 +50,9 @@ def main():
 
         elif prompt.startswith("@chatgpt"):
             print("DEBUG: Routing to ChatGPT API (placeholder)")
+            if not OPENAI_API_KEY:
+                print("Error: OPENAI_API_KEY not found. Cannot call ChatGPT API.")
+                continue
             response_c = call_chatgpt_api(history)
             history.append({"role": "chatgpt", "content": response_c})
             print(f"[ChatGPT]: {response_c}")
@@ -45,7 +60,13 @@ def main():
         elif prompt.startswith("@all"):
             print("DEBUG: Routing to both Gemini and ChatGPT APIs (placeholder)")
             response_g = call_gemini_api(history)
-            response_c = call_chatgpt_api(history)
+            
+            if not OPENAI_API_KEY:
+                print("Error: OPENAI_API_KEY not found. Cannot call ChatGPT API for @all.")
+                response_c = "ChatGPT API call skipped due to missing API key."
+            else:
+                response_c = call_chatgpt_api(history)
+
             history.append({"role": "gemini", "content": response_g})
             history.append({"role": "chatgpt", "content": response_c})
             print(f"[Gemini]: {response_g}")
