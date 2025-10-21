@@ -37,14 +37,18 @@ def call_gemini_api(history):
         model = genai.GenerativeModel('gemini-pro')
         gemini_history = format_history_for_gemini(history)
         response = model.generate_content(gemini_history)
+        if response._error_message:
+            return f"Gemini API Error: {response._error_message}"
         return response.text
+    except genai.types.BlockedPromptException as e:
+        return f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
     except Exception as e:
-        return f"Gemini API Error: {e}"
+        return f"Gemini API Error: An unexpected error occurred: {e}"
 
 def call_chatgpt_api(history):
     try:
         if not OPENAI_API_KEY:
-            return "ChatGPT API Error: OPENAI_API_KEY not set."
+            return "ChatGPT API Error: OPENAI_API_KEYが設定されていません。"
         
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         chatgpt_history = format_history_for_chatgpt(history)
@@ -53,8 +57,14 @@ def call_chatgpt_api(history):
             messages=chatgpt_history
         )
         return response.choices[0].message.content
+    except openai.APIError as e:
+        return f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
+    except openai.APITimeoutError as e:
+        return f"ChatGPT API Error: リクエストがタイムアウトしました: {e}"
+    except openai.APIConnectionError as e:
+        return f"ChatGPT API Error: APIへの接続に失敗しました: {e}"
     except Exception as e:
-        return f"ChatGPT API Error: {e}"
+        return f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
 
 def main():
     history = []
