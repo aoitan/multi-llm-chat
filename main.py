@@ -1,7 +1,7 @@
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
-# import openai # Will uncomment when actually implementing ChatGPT API
+import openai
 
 load_dotenv() # Load environment variables from .env file
 
@@ -14,19 +14,47 @@ if not GOOGLE_API_KEY:
 
 genai.configure(api_key=GOOGLE_API_KEY)
 
+def format_history_for_gemini(history):
+    # Gemini API expects a list of dicts with 'role' and 'parts'
+    # 'user' role for user input, 'model' for AI responses
+    gemini_history = []
+    for entry in history:
+        role = "user" if entry["role"] == "user" else "model"
+        gemini_history.append({"role": role, "parts": [entry["content"]]})
+    return gemini_history
+
+def format_history_for_chatgpt(history):
+    # ChatGPT API expects a list of dicts with 'role' and 'content'
+    # 'user' for user, 'assistant' for AI
+    chatgpt_history = []
+    for entry in history:
+        role = "user" if entry["role"] == "user" else "assistant"
+        chatgpt_history.append({"role": role, "content": entry["content"]})
+    return chatgpt_history
+
 def call_gemini_api(history):
-    # Placeholder for actual Gemini API call
-    print("DEBUG: Calling Gemini API with history...")
-    # In a real scenario, you would format the history for Gemini API
-    # and make the actual API call here.
-    return "Gemini's response (placeholder)"
+    try:
+        model = genai.GenerativeModel('gemini-pro')
+        gemini_history = format_history_for_gemini(history)
+        response = model.generate_content(gemini_history)
+        return response.text
+    except Exception as e:
+        return f"Gemini API Error: {e}"
 
 def call_chatgpt_api(history):
-    # Placeholder for actual ChatGPT API call
-    print("DEBUG: Calling ChatGPT API with history...")
-    # In a real scenario, you would format the history for ChatGPT API
-    # and make the actual API call here.
-    return "ChatGPT's response (placeholder)"
+    try:
+        if not OPENAI_API_KEY:
+            return "ChatGPT API Error: OPENAI_API_KEY not set."
+        
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        chatgpt_history = format_history_for_chatgpt(history)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo", # Or another suitable model
+            messages=chatgpt_history
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"ChatGPT API Error: {e}"
 
 def main():
     history = []
@@ -43,29 +71,21 @@ def main():
         print(f"DEBUG: User input added to history. Current length: {len(history)}")
 
         if prompt.startswith("@gemini"):
-            print("DEBUG: Routing to Gemini API (placeholder)")
+            print("DEBUG: Routing to Gemini API...")
             response_g = call_gemini_api(history)
             history.append({"role": "gemini", "content": response_g})
             print(f"[Gemini]: {response_g}")
 
         elif prompt.startswith("@chatgpt"):
-            print("DEBUG: Routing to ChatGPT API (placeholder)")
-            if not OPENAI_API_KEY:
-                print("Error: OPENAI_API_KEY not found. Cannot call ChatGPT API.")
-                continue
+            print("DEBUG: Routing to ChatGPT API...")
             response_c = call_chatgpt_api(history)
             history.append({"role": "chatgpt", "content": response_c})
             print(f"[ChatGPT]: {response_c}")
 
         elif prompt.startswith("@all"):
-            print("DEBUG: Routing to both Gemini and ChatGPT APIs (placeholder)")
+            print("DEBUG: Routing to both Gemini and ChatGPT APIs...")
             response_g = call_gemini_api(history)
-            
-            if not OPENAI_API_KEY:
-                print("Error: OPENAI_API_KEY not found. Cannot call ChatGPT API for @all.")
-                response_c = "ChatGPT API call skipped due to missing API key."
-            else:
-                response_c = call_chatgpt_api(history)
+            response_c = call_chatgpt_api(history)
 
             history.append({"role": "gemini", "content": response_g})
             history.append({"role": "chatgpt", "content": response_c})
