@@ -7,6 +7,8 @@ load_dotenv() # Load environment variables from .env file
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-pro")
+CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
 if not GOOGLE_API_KEY:
     print("Error: GOOGLE_API_KEY not found in environment variables or .env file.")
@@ -34,7 +36,7 @@ def format_history_for_chatgpt(history):
 
 def call_gemini_api(history):
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel(GEMINI_MODEL)
         gemini_history = format_history_for_gemini(history)
         response_stream = model.generate_content(gemini_history, stream=True)
         full_response = []
@@ -57,7 +59,7 @@ def call_chatgpt_api(history):
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         chatgpt_history = format_history_for_chatgpt(history)
         response_stream = client.chat.completions.create(
-            model="gpt-3.5-turbo", # Or another suitable model
+            model=CHATGPT_MODEL, # Use configurable model
             messages=chatgpt_history,
             stream=True
         )
