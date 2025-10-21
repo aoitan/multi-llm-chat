@@ -36,10 +36,14 @@ def call_gemini_api(history):
     try:
         model = genai.GenerativeModel('gemini-pro')
         gemini_history = format_history_for_gemini(history)
-        response = model.generate_content(gemini_history)
-        if response._error_message:
-            return f"Gemini API Error: {response._error_message}"
-        return response.text
+        response_stream = model.generate_content(gemini_history, stream=True)
+        full_response = []
+        for chunk in response_stream:
+            if chunk.text:
+                print(chunk.text, end='', flush=True)
+                full_response.append(chunk.text)
+        print() # Newline after streaming
+        return "".join(full_response)
     except genai.types.BlockedPromptException as e:
         return f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
     except Exception as e:
@@ -52,11 +56,18 @@ def call_chatgpt_api(history):
         
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         chatgpt_history = format_history_for_chatgpt(history)
-        response = client.chat.completions.create(
+        response_stream = client.chat.completions.create(
             model="gpt-3.5-turbo", # Or another suitable model
-            messages=chatgpt_history
+            messages=chatgpt_history,
+            stream=True
         )
-        return response.choices[0].message.content
+        full_response = []
+        for chunk in response_stream:
+            if chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end='', flush=True)
+                full_response.append(chunk.choices[0].delta.content)
+        print() # Newline after streaming
+        return "".join(full_response)
     except openai.APIError as e:
         return f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
     except openai.APITimeoutError as e:
