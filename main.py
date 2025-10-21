@@ -91,33 +91,35 @@ def main():
         # Add user's prompt to the unified conversation history
         # The 'role' will be 'user' for all user inputs, regardless of mention.
         history.append({"role": "user", "content": prompt})
-        print(f"DEBUG: User input added to history. Current length: {len(history)}")
+        # print(f"DEBUG: User input added to history. Current length: {len(history)}")
 
         if prompt.startswith("@gemini"):
-            print("DEBUG: Routing to Gemini API...")
+            # print("DEBUG: Routing to Gemini API...")
             response_g = call_gemini_api(history)
             history.append({"role": "gemini", "content": response_g})
-            print(f"[Gemini]: {response_g}")
+            # print(f"[Gemini]: {response_g}")
 
         elif prompt.startswith("@chatgpt"):
-            print("DEBUG: Routing to ChatGPT API...")
+            # print("DEBUG: Routing to ChatGPT API...")
             response_c = call_chatgpt_api(history)
             history.append({"role": "chatgpt", "content": response_c})
-            print(f"[ChatGPT]: {response_c}")
+            # print(f"[ChatGPT]: {response_c}")
 
         elif prompt.startswith("@all"):
-            print("DEBUG: Routing to both Gemini and ChatGPT APIs...")
+            # print("DEBUG: Routing to both Gemini and ChatGPT APIs...")
             response_g = call_gemini_api(history)
             response_c = call_chatgpt_api(history)
 
             history.append({"role": "gemini", "content": response_g})
             history.append({"role": "chatgpt", "content": response_c})
-            print(f"[Gemini]: {response_g}")
-            print(f"[ChatGPT]: {response_c}")
+            # print(f"[Gemini]: {response_g}")
+            # print(f"[ChatGPT]: {response_c}")
 
         else:
-            print("DEBUG: No mention, just adding to history (thought memo).")
+            # print("DEBUG: No mention, just adding to history (thought memo).")
             # No API call, history already updated with user prompt.
+            pass
+    return history
 
 
 if __name__ == "__main__":
