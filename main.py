@@ -81,20 +81,17 @@ def main():
 
     while True:
         prompt = input("> ").strip()
-        print(f"DEBUG: Raw input: '{prompt}'") # Added debug print
 
         if prompt.lower() in ["exit", "quit"]:
             break
 
         history.append({"role": "user", "content": prompt})
 
-        if prompt.startswith("@gemini"):
+        if prompt.startswith("#gemini"):
             print("[Gemini]: ", end='', flush=True)
             full_response = []
             gemini_response_stream = call_gemini_api(history)
-            print(f"DEBUG: Gemini response stream object: {gemini_response_stream}", flush=True) # Added debug print
             for chunk in gemini_response_stream:
-                print(f"DEBUG: Gemini chunk: {chunk}", flush=True) # Added debug print
                 if hasattr(chunk, 'text') and chunk.text:
                     print(chunk.text, end='', flush=True)
                     full_response.append(chunk.text)
@@ -105,7 +102,7 @@ def main():
             response_g = "".join(full_response)
             history.append({"role": "gemini", "content": response_g})
 
-        elif prompt.startswith("@chatgpt"):
+        elif prompt.startswith("#chatgpt"):
             print("[ChatGPT]: ", end='', flush=True)
             full_response = []
             for chunk in call_chatgpt_api(history):
@@ -119,7 +116,7 @@ def main():
             response_c = "".join(full_response)
             history.append({"role": "chatgpt", "content": response_c})
 
-        elif prompt.startswith("@all"):
+        elif prompt.startswith("#all"):
             # Call both APIs in sequence for now, can be parallelized later
             print("[Gemini]: ", end='', flush=True)
             full_response_g = []
