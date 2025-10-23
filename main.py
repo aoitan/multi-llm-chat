@@ -34,6 +34,12 @@ def format_history_for_chatgpt(history):
         chatgpt_history.append({"role": role, "content": entry["content"]})
     return chatgpt_history
 
+def list_gemini_models():
+    print("利用可能なGeminiモデル:")
+    for m in genai.list_models():
+        if "generateContent" in m.supported_generation_methods:
+            print(f"  - {m.name}")
+
 def call_gemini_api(history):
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
@@ -49,6 +55,8 @@ def call_gemini_api(history):
     except genai.types.BlockedPromptException as e:
         return f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
     except Exception as e:
+        print(f"Gemini API Error: An unexpected error occurred: {e}")
+        list_gemini_models() # List models on error
         return f"Gemini API Error: An unexpected error occurred: {e}"
 
 def call_chatgpt_api(history):
