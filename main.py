@@ -44,7 +44,9 @@ def call_gemini_api(history):
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         gemini_history = format_history_for_gemini(history)
+        print(f"DEBUG: Gemini API request history: {gemini_history}", flush=True)
         response_stream = model.generate_content(gemini_history, stream=True)
+        print(f"DEBUG: Gemini API response stream object: {response_stream}", flush=True)
         return response_stream
     except genai.types.BlockedPromptException as e:
         yield f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
@@ -61,11 +63,13 @@ def call_chatgpt_api(history):
         
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         chatgpt_history = format_history_for_chatgpt(history)
+        print(f"DEBUG: ChatGPT API request history: {chatgpt_history}", flush=True)
         response_stream = client.chat.completions.create(
             model=CHATGPT_MODEL,
             messages=chatgpt_history,
             stream=True
         )
+        print(f"DEBUG: ChatGPT API response stream object: {response_stream}", flush=True)
         return response_stream
     except openai.APIError as e:
         yield f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
@@ -92,6 +96,7 @@ def main():
             full_response = []
             gemini_response_stream = call_gemini_api(history)
             for chunk in gemini_response_stream:
+                print(f"DEBUG: Gemini chunk: {chunk}", flush=True)
                 if hasattr(chunk, 'text') and chunk.text:
                     print(chunk.text, end='', flush=True)
                     full_response.append(chunk.text)
@@ -100,12 +105,15 @@ def main():
                     full_response.append(chunk)
             print()
             response_g = "".join(full_response)
+            print(f"DEBUG: Gemini full response collected: '{response_g}'")
             history.append({"role": "gemini", "content": response_g})
 
         elif prompt.startswith("#chatgpt"):
             print("[ChatGPT]: ", end='', flush=True)
             full_response = []
-            for chunk in call_chatgpt_api(history):
+            chatgpt_response_stream = call_chatgpt_api(history)
+            for chunk in chatgpt_response_stream:
+                print(f"DEBUG: ChatGPT chunk: {chunk}", flush=True)
                 if hasattr(chunk, 'choices') and chunk.choices[0].delta.content:
                     print(chunk.choices[0].delta.content, end='', flush=True)
                     full_response.append(chunk.choices[0].delta.content)
@@ -114,13 +122,16 @@ def main():
                     full_response.append(chunk)
             print()
             response_c = "".join(full_response)
+            print(f"DEBUG: ChatGPT full response collected: '{response_c}'")
             history.append({"role": "chatgpt", "content": response_c})
 
         elif prompt.startswith("#all"):
             # Call both APIs in sequence for now, can be parallelized later
             print("[Gemini]: ", end='', flush=True)
             full_response_g = []
-            for chunk in call_gemini_api(history):
+            gemini_response_stream = call_gemini_api(history)
+            for chunk in gemini_response_stream:
+                print(f"DEBUG: Gemini chunk (all): {chunk}", flush=True)
                 if hasattr(chunk, 'text') and chunk.text:
                     print(chunk.text, end='', flush=True)
                     full_response_g.append(chunk.text)
@@ -129,11 +140,14 @@ def main():
                     full_response_g.append(chunk)
             print()
             response_g = "".join(full_response_g)
+            print(f"DEBUG: Gemini full response collected (all): '{response_g}'")
             history.append({"role": "gemini", "content": response_g})
 
             print("[ChatGPT]: ", end='', flush=True)
             full_response_c = []
-            for chunk in call_chatgpt_api(history):
+            chatgpt_response_stream = call_chatgpt_api(history)
+            for chunk in chatgpt_response_stream:
+                print(f"DEBUG: ChatGPT chunk (all): {chunk}", flush=True)
                 if hasattr(chunk, 'choices') and chunk.choices[0].delta.content:
                     print(chunk.choices[0].delta.content, end='', flush=True)
                     full_response_c.append(chunk.choices[0].delta.content)
@@ -142,6 +156,7 @@ def main():
                     full_response_c.append(chunk)
             print()
             response_c = "".join(full_response_c)
+            print(f"DEBUG: ChatGPT full response collected (all): '{response_c}'")
             history.append({"role": "chatgpt", "content": response_c})
 
         else:
