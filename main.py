@@ -97,13 +97,13 @@ def main():
             # print("DEBUG: Routing to Gemini API...")
             response_g = call_gemini_api(history)
             history.append({"role": "gemini", "content": response_g})
-            # print(f"[Gemini]: {response_g}")
+            print(f"[Gemini]: {response_g}")
 
         elif prompt.startswith("@chatgpt"):
             # print("DEBUG: Routing to ChatGPT API...")
             response_c = call_chatgpt_api(history)
             history.append({"role": "chatgpt", "content": response_c})
-            # print(f"[ChatGPT]: {response_c}")
+            print(f"[ChatGPT]: {response_c}")
 
         elif prompt.startswith("@all"):
             # print("DEBUG: Routing to both Gemini and ChatGPT APIs...")
@@ -112,8 +112,8 @@ def main():
 
             history.append({"role": "gemini", "content": response_g})
             history.append({"role": "chatgpt", "content": response_c})
-            # print(f"[Gemini]: {response_g}")
-            # print(f"[ChatGPT]: {response_c}")
+            print(f"[Gemini]: {response_g}")
+            print(f"[ChatGPT]: {response_c}")
 
         else:
             # print("DEBUG: No mention, just adding to history (thought memo).")
