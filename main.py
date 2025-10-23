@@ -80,7 +80,7 @@ def main():
     history = []
 
     while True:
-        prompt = input("> ")
+        prompt = input("> ").strip()
         print(f"DEBUG: Raw input: '{prompt}'") # Added debug print
 
         if prompt.lower() in ["exit", "quit"]:
