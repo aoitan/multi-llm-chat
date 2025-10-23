@@ -81,6 +81,7 @@ def main():
 
     while True:
         prompt = input("> ")
+        print(f"DEBUG: Raw input: '{prompt}'") # Added debug print
 
         if prompt.lower() in ["exit", "quit"]:
             break
