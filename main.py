@@ -45,47 +45,36 @@ def call_gemini_api(history):
         model = genai.GenerativeModel(GEMINI_MODEL)
         gemini_history = format_history_for_gemini(history)
         response_stream = model.generate_content(gemini_history, stream=True)
-        full_response = []
-        for chunk in response_stream:
-            if chunk.text:
-                print(chunk.text, end='', flush=True)
-                full_response.append(chunk.text)
-        print() # Newline after streaming
-        return "".join(full_response)
+        return response_stream
     except genai.types.BlockedPromptException as e:
-        return f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
+        yield f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
     except Exception as e:
         print(f"Gemini API Error: An unexpected error occurred: {e}")
-        list_gemini_models() # List models on error
-        return f"Gemini API Error: An unexpected error occurred: {e}"
+        list_gemini_models()
+        yield f"Gemini API Error: An unexpected error occurred: {e}"
 
 def call_chatgpt_api(history):
     try:
         if not OPENAI_API_KEY:
-            return "ChatGPT API Error: OPENAI_API_KEYが設定されていません。"
+            yield "ChatGPT API Error: OPENAI_API_KEYが設定されていません。"
+            return
         
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         chatgpt_history = format_history_for_chatgpt(history)
         response_stream = client.chat.completions.create(
-            model=CHATGPT_MODEL, # Use configurable model
+            model=CHATGPT_MODEL,
             messages=chatgpt_history,
             stream=True
         )
-        full_response = []
-        for chunk in response_stream:
-            if chunk.choices[0].delta.content:
-                print(chunk.choices[0].delta.content, end='', flush=True)
-                full_response.append(chunk.choices[0].delta.content)
-        print() # Newline after streaming
-        return "".join(full_response)
+        return response_stream
     except openai.APIError as e:
-        return f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
+        yield f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
     except openai.APITimeoutError as e:
-        return f"ChatGPT API Error: リクエストがタイムアウトしました: {e}"
+        yield f"ChatGPT API Error: リクエストがタイムアウトしました: {e}"
     except openai.APIConnectionError as e:
-        return f"ChatGPT API Error: APIへの接続に失敗しました: {e}"
+        yield f"ChatGPT API Error: APIへの接続に失敗しました: {e}"
     except Exception as e:
-        return f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
+        yield f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
 
 def main():
     history = []
@@ -96,36 +85,65 @@ def main():
         if prompt.lower() in ["exit", "quit"]:
             break
 
-        # Add user's prompt to the unified conversation history
-        # The 'role' will be 'user' for all user inputs, regardless of mention.
         history.append({"role": "user", "content": prompt})
-        # print(f"DEBUG: User input added to history. Current length: {len(history)}")
 
         if prompt.startswith("@gemini"):
-            # print("DEBUG: Routing to Gemini API...")
-            response_g = call_gemini_api(history)
+            print("[Gemini]: ", end='', flush=True)
+            full_response = []
+            for chunk in call_gemini_api(history):
+                if hasattr(chunk, 'text') and chunk.text:
+                    print(chunk.text, end='', flush=True)
+                    full_response.append(chunk.text)
+                elif isinstance(chunk, str): # For error messages yielded
+                    print(chunk, end='', flush=True)
+                    full_response.append(chunk)
+            print()
+            response_g = "".join(full_response)
             history.append({"role": "gemini", "content": response_g})
-            print(f"[Gemini]: {response_g}")
 
         elif prompt.startswith("@chatgpt"):
-            # print("DEBUG: Routing to ChatGPT API...")
-            response_c = call_chatgpt_api(history)
+            print("[ChatGPT]: ", end='', flush=True)
+            full_response = []
+            for chunk in call_chatgpt_api(history):
+                if hasattr(chunk, 'choices') and chunk.choices[0].delta.content:
+                    print(chunk.choices[0].delta.content, end='', flush=True)
+                    full_response.append(chunk.choices[0].delta.content)
+                elif isinstance(chunk, str): # For error messages yielded
+                    print(chunk, end='', flush=True)
+                    full_response.append(chunk)
+            print()
+            response_c = "".join(full_response)
             history.append({"role": "chatgpt", "content": response_c})
-            print(f"[ChatGPT]: {response_c}")
 
         elif prompt.startswith("@all"):
-            # print("DEBUG: Routing to both Gemini and ChatGPT APIs...")
-            response_g = call_gemini_api(history)
-            response_c = call_chatgpt_api(history)
-
+            # Call both APIs in sequence for now, can be parallelized later
+            print("[Gemini]: ", end='', flush=True)
+            full_response_g = []
+            for chunk in call_gemini_api(history):
+                if hasattr(chunk, 'text') and chunk.text:
+                    print(chunk.text, end='', flush=True)
+                    full_response_g.append(chunk.text)
+                elif isinstance(chunk, str): # For error messages yielded
+                    print(chunk, end='', flush=True)
+                    full_response_g.append(chunk)
+            print()
+            response_g = "".join(full_response_g)
             history.append({"role": "gemini", "content": response_g})
+
+            print("[ChatGPT]: ", end='', flush=True)
+            full_response_c = []
+            for chunk in call_chatgpt_api(history):
+                if hasattr(chunk, 'choices') and chunk.choices[0].delta.content:
+                    print(chunk.choices[0].delta.content, end='', flush=True)
+                    full_response_c.append(chunk.choices[0].delta.content)
+                elif isinstance(chunk, str): # For error messages yielded
+                    print(chunk, end='', flush=True)
+                    full_response_c.append(chunk)
+            print()
+            response_c = "".join(full_response_c)
             history.append({"role": "chatgpt", "content": response_c})
-            print(f"[Gemini]: {response_g}")
-            print(f"[ChatGPT]: {response_c}")
 
         else:
-            # print("DEBUG: No mention, just adding to history (thought memo).")
-            # No API call, history already updated with user prompt.
             pass
     return history
 
