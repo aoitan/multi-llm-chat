@@ -91,6 +91,7 @@ def main():
             print("[Gemini]: ", end='', flush=True)
             full_response = []
             for chunk in call_gemini_api(history):
+                print(f"DEBUG: Gemini chunk: {chunk}", flush=True) # Added debug print
                 if hasattr(chunk, 'text') and chunk.text:
                     print(chunk.text, end='', flush=True)
                     full_response.append(chunk.text)
