@@ -96,8 +96,8 @@ def main():
             full_response = []
             gemini_response_stream = call_gemini_api(history)
             for chunk in gemini_response_stream:
-                print(f"DEBUG: Gemini chunk: {chunk}", flush=True)
-                if hasattr(chunk, 'text') and chunk.text:
+                # print(f"DEBUG: Gemini chunk: {chunk}", flush=True)
+                if chunk.text:
                     print(chunk.text, end='', flush=True)
                     full_response.append(chunk.text)
                 elif isinstance(chunk, str): # For error messages yielded
@@ -105,7 +105,7 @@ def main():
                     full_response.append(chunk)
             print()
             response_g = "".join(full_response)
-            print(f"DEBUG: Gemini full response collected: '{response_g}'")
+            # print(f"DEBUG: Gemini full response collected: '{response_g}'")
             history.append({"role": "gemini", "content": response_g})
 
         elif prompt.startswith("#chatgpt"):
@@ -113,8 +113,8 @@ def main():
             full_response = []
             chatgpt_response_stream = call_chatgpt_api(history)
             for chunk in chatgpt_response_stream:
-                print(f"DEBUG: ChatGPT chunk: {chunk}", flush=True)
-                if hasattr(chunk, 'choices') and chunk.choices[0].delta.content:
+                # print(f"DEBUG: ChatGPT chunk: {chunk}", flush=True)
+                if chunk.choices[0].delta.content:
                     print(chunk.choices[0].delta.content, end='', flush=True)
                     full_response.append(chunk.choices[0].delta.content)
                 elif isinstance(chunk, str): # For error messages yielded
@@ -122,7 +122,7 @@ def main():
                     full_response.append(chunk)
             print()
             response_c = "".join(full_response)
-            print(f"DEBUG: ChatGPT full response collected: '{response_c}'")
+            # print(f"DEBUG: ChatGPT full response collected: '{response_c}'")
             history.append({"role": "chatgpt", "content": response_c})
 
         elif prompt.startswith("#all"):
@@ -131,8 +131,8 @@ def main():
             full_response_g = []
             gemini_response_stream = call_gemini_api(history)
             for chunk in gemini_response_stream:
-                print(f"DEBUG: Gemini chunk (all): {chunk}", flush=True)
-                if hasattr(chunk, 'text') and chunk.text:
+                # print(f"DEBUG: Gemini chunk (all): {chunk}", flush=True)
+                if chunk.text:
                     print(chunk.text, end='', flush=True)
                     full_response_g.append(chunk.text)
                 elif isinstance(chunk, str): # For error messages yielded
@@ -140,15 +140,15 @@ def main():
                     full_response_g.append(chunk)
             print()
             response_g = "".join(full_response_g)
-            print(f"DEBUG: Gemini full response collected (all): '{response_g}'")
+            # print(f"DEBUG: Gemini full response collected (all): '{response_g}'")
             history.append({"role": "gemini", "content": response_g})
 
             print("[ChatGPT]: ", end='', flush=True)
             full_response_c = []
             chatgpt_response_stream = call_chatgpt_api(history)
             for chunk in chatgpt_response_stream:
-                print(f"DEBUG: ChatGPT chunk (all): {chunk}", flush=True)
-                if hasattr(chunk, 'choices') and chunk.choices[0].delta.content:
+                # print(f"DEBUG: ChatGPT chunk (all): {chunk}", flush=True)
+                if chunk.choices[0].delta.content:
                     print(chunk.choices[0].delta.content, end='', flush=True)
                     full_response_c.append(chunk.choices[0].delta.content)
                 elif isinstance(chunk, str): # For error messages yielded
@@ -156,7 +156,7 @@ def main():
                     full_response_c.append(chunk)
             print()
             response_c = "".join(full_response_c)
-            print(f"DEBUG: ChatGPT full response collected (all): '{response_c}'")
+            # print(f"DEBUG: ChatGPT full response collected (all): '{response_c}'")
             history.append({"role": "chatgpt", "content": response_c})
 
         else:
