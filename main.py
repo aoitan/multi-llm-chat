@@ -44,9 +44,9 @@ def call_gemini_api(history):
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         gemini_history = format_history_for_gemini(history)
-        print(f"DEBUG: Gemini API request history: {gemini_history}", flush=True)
+        # print(f"DEBUG: Gemini API request history: {gemini_history}", flush=True)
         response_stream = model.generate_content(gemini_history, stream=True)
-        print(f"DEBUG: Gemini API response stream object: {response_stream}", flush=True)
+        # print(f"DEBUG: Gemini API response stream object: {response_stream}", flush=True)
         return response_stream
     except genai.types.BlockedPromptException as e:
         yield f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
@@ -63,13 +63,13 @@ def call_chatgpt_api(history):
         
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         chatgpt_history = format_history_for_chatgpt(history)
-        print(f"DEBUG: ChatGPT API request history: {chatgpt_history}", flush=True)
+        # print(f"DEBUG: ChatGPT API request history: {chatgpt_history}", flush=True)
         response_stream = client.chat.completions.create(
             model=CHATGPT_MODEL,
             messages=chatgpt_history,
             stream=True
         )
-        print(f"DEBUG: ChatGPT API response stream object: {response_stream}", flush=True)
+        # print(f"DEBUG: ChatGPT API response stream object: {response_stream}", flush=True)
         return response_stream
     except openai.APIError as e:
         yield f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
