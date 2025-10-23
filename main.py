@@ -90,7 +90,9 @@ def main():
         if prompt.startswith("@gemini"):
             print("[Gemini]: ", end='', flush=True)
             full_response = []
-            for chunk in call_gemini_api(history):
+            gemini_response_stream = call_gemini_api(history)
+            print(f"DEBUG: Gemini response stream object: {gemini_response_stream}", flush=True) # Added debug print
+            for chunk in gemini_response_stream:
                 print(f"DEBUG: Gemini chunk: {chunk}", flush=True) # Added debug print
                 if hasattr(chunk, 'text') and chunk.text:
                     print(chunk.text, end='', flush=True)
