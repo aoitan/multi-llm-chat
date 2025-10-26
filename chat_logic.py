@@ -46,8 +46,8 @@ def call_gemini_api(history):
         gemini_history = format_history_for_gemini(history)
         # print(f"DEBUG: Gemini API request history: {gemini_history}", flush=True)
         response_stream = model.generate_content(gemini_history, stream=True)
-        # print(f"DEBUG: Gemini API response stream object: {response_stream}", flush=True)
-        return response_stream
+        for chunk in response_stream:
+            yield chunk
     except genai.types.BlockedPromptException as e:
         yield f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
     except Exception as e:
@@ -69,8 +69,8 @@ def call_chatgpt_api(history):
             messages=chatgpt_history,
             stream=True
         )
-        # print(f"DEBUG: ChatGPT API response stream object: {response_stream}", flush=True)
-        return response_stream
+        for chunk in response_stream:
+            yield chunk
     except openai.APIError as e:
         yield f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
     except openai.APITimeoutError as e:
@@ -97,14 +97,18 @@ def main():
             gemini_response_stream = call_gemini_api(history)
             for chunk in gemini_response_stream:
                 # print(f"DEBUG: Gemini chunk: {chunk}", flush=True)
-                if chunk.text:
-                    print(chunk.text, end='', flush=True)
-                    full_response.append(chunk.text)
-                elif isinstance(chunk, str): # For error messages yielded
-                    print(chunk, end='', flush=True)
-                    full_response.append(chunk)
+                try:
+                    if chunk.text:
+                        print(chunk.text, end='', flush=True)
+                        full_response.append(chunk.text)
+                except (AttributeError, TypeError):
+                    if isinstance(chunk, str): # For error messages yielded
+                        print(chunk, end='', flush=True)
+                        full_response.append(chunk)
             print()
             response_g = "".join(full_response)
+            if not response_g.strip():
+                print("[System: Geminiからの応答がありませんでした。プロンプトがブロックされた可能性があります。]", flush=True)
             # print(f"DEBUG: Gemini full response collected: '{response_g}'")
             history.append({"role": "gemini", "content": response_g})
 
@@ -114,14 +118,18 @@ def main():
             chatgpt_response_stream = call_chatgpt_api(history)
             for chunk in chatgpt_response_stream:
                 # print(f"DEBUG: ChatGPT chunk: {chunk}", flush=True)
-                if chunk.choices[0].delta.content:
-                    print(chunk.choices[0].delta.content, end='', flush=True)
-                    full_response.append(chunk.choices[0].delta.content)
-                elif isinstance(chunk, str): # For error messages yielded
-                    print(chunk, end='', flush=True)
-                    full_response.append(chunk)
+                try:
+                    if chunk.choices[0].delta.content:
+                        print(chunk.choices[0].delta.content, end='', flush=True)
+                        full_response.append(chunk.choices[0].delta.content)
+                except (AttributeError, IndexError, TypeError):
+                    if isinstance(chunk, str): # For error messages yielded
+                        print(chunk, end='', flush=True)
+                        full_response.append(chunk)
             print()
             response_c = "".join(full_response)
+            if not response_c.strip():
+                print("[System: ChatGPTからの応答がありませんでした。プロンプトがブロックされた可能性があります。]", flush=True)
             # print(f"DEBUG: ChatGPT full response collected: '{response_c}'")
             history.append({"role": "chatgpt", "content": response_c})
 
@@ -132,14 +140,18 @@ def main():
             gemini_response_stream = call_gemini_api(history)
             for chunk in gemini_response_stream:
                 # print(f"DEBUG: Gemini chunk (all): {chunk}", flush=True)
-                if chunk.text:
-                    print(chunk.text, end='', flush=True)
-                    full_response_g.append(chunk.text)
-                elif isinstance(chunk, str): # For error messages yielded
-                    print(chunk, end='', flush=True)
-                    full_response_g.append(chunk)
+                try:
+                    if chunk.text:
+                        print(chunk.text, end='', flush=True)
+                        full_response_g.append(chunk.text)
+                except (AttributeError, TypeError):
+                    if isinstance(chunk, str): # For error messages yielded
+                        print(chunk, end='', flush=True)
+                        full_response_g.append(chunk)
             print()
             response_g = "".join(full_response_g)
+            if not response_g.strip():
+                print("[System: Geminiからの応答がありませんでした。プロンプトがブロックされた可能性があります。]", flush=True)
             # print(f"DEBUG: Gemini full response collected (all): '{response_g}'")
             history.append({"role": "gemini", "content": response_g})
 
@@ -148,14 +160,18 @@ def main():
             chatgpt_response_stream = call_chatgpt_api(history)
             for chunk in chatgpt_response_stream:
                 # print(f"DEBUG: ChatGPT chunk (all): {chunk}", flush=True)
-                if chunk.choices[0].delta.content:
-                    print(chunk.choices[0].delta.content, end='', flush=True)
-                    full_response_c.append(chunk.choices[0].delta.content)
-                elif isinstance(chunk, str): # For error messages yielded
-                    print(chunk, end='', flush=True)
-                    full_response_c.append(chunk)
+                try:
+                    if chunk.choices[0].delta.content:
+                        print(chunk.choices[0].delta.content, end='', flush=True)
+                        full_response_c.append(chunk.choices[0].delta.content)
+                except (AttributeError, IndexError, TypeError):
+                    if isinstance(chunk, str): # For error messages yielded
+                        print(chunk, end='', flush=True)
+                        full_response_c.append(chunk)
             print()
             response_c = "".join(full_response_c)
+            if not response_c.strip():
+                print("[System: ChatGPTからの応答がありませんでした。プロンプトがブロックされた可能性があります。]", flush=True)
             # print(f"DEBUG: ChatGPT full response collected (all): '{response_c}'")
             history.append({"role": "chatgpt", "content": response_c})
 
@@ -164,5 +180,3 @@ def main():
     return history
 
 
-if __name__ == "__main__":
-    main()
