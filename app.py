@@ -62,7 +62,7 @@ def respond(user_message, display_history, logic_history):
             if text:
                 full_response += text
                 display_history[-1][1] += text
-                yield display_history, logic_history
+                yield display_history, display_history, logic_history
         return full_response
 
     # 1. ユーザーメッセージを両方の履歴に追加

@@ -28,7 +28,7 @@ graph TD
         B --> D[Python: メイン処理関数];
     end
 
-    subgraph "Backend Logic (main.py)"
+    subgraph "Backend Logic (chat_logic.py)"
         D --> E{入力解析 (@mention)};
         E -->|@gemini| F[call_gemini_api];
         E -->|@chatgpt| G[call_chatgpt_api];
