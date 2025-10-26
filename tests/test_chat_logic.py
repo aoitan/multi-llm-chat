@@ -16,7 +16,7 @@ def test_repl_exit_commands():
             assert True # If it reaches here without error, it exited
 
 def test_history_management_user_input():
-    test_inputs = ["hello gemini", "#gemini how are you?", "just a thought"]
+    test_inputs = ["hello gemini", "@gemini how are you?", "just a thought"]
     
     with patch('builtins.input', side_effect=test_inputs + ["exit"]):
         with patch('builtins.print'): # Mock print to avoid console output
@@ -30,7 +30,7 @@ def test_history_management_user_input():
             assert history[0]["role"] == "user"
             assert history[0]["content"] == "hello gemini"
             assert history[1]["role"] == "user"
-            assert history[1]["content"] == "#gemini how are you?"
+            assert history[1]["content"] == "@gemini how are you?"
             assert history[2]["role"] == "gemini"
             assert history[2]["content"] == "Mocked Gemini Response"
             assert history[3]["role"] == "user"
@@ -40,8 +40,8 @@ def test_history_management_user_input():
 @patch('chat_logic.call_gemini_api', return_value="Mocked Gemini Response")
 @patch('chat_logic.call_chatgpt_api', return_value="Mocked ChatGPT Response")
 def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
-    # Test #gemini
-    with patch('builtins.input', side_effect=[@gemini, "exit"]):
+    # Test @gemini
+    with patch('builtins.input', side_effect=["@gemini hello", "exit"]):
         with patch('builtins.print'):
             history = chat_logic.main()
             assert mock_gemini_api.called
@@ -51,7 +51,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_gemini_api.reset_mock()
             mock_chatgpt_api.reset_mock()
 
-    # Test #chatgpt
+    # Test @chatgpt
     with patch('builtins.input', side_effect=["@chatgpt hello", "exit"]):
         with patch('builtins.print'):
             history = chat_logic.main()
@@ -62,7 +62,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_gemini_api.reset_mock()
             mock_chatgpt_api.reset_mock()
 
-    # Test #all
+    # Test @all
     with patch('builtins.input', side_effect=["@all hello", "exit"]):
         with patch('builtins.print'):
             history = chat_logic.main()
