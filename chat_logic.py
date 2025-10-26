@@ -117,17 +117,17 @@ def main():
 
         history.append({"role": "user", "content": prompt})
 
-        if prompt.startswith("#gemini"):
+        if prompt.startswith("@gemini"):
             gemini_stream = call_gemini_api(history)
             response_g = _process_response_stream(gemini_stream, "gemini")
             history.append({"role": "gemini", "content": response_g})
 
-        elif prompt.startswith("#chatgpt"):
+        elif prompt.startswith("@chatgpt"):
             chatgpt_stream = call_chatgpt_api(history)
             response_c = _process_response_stream(chatgpt_stream, "chatgpt")
             history.append({"role": "chatgpt", "content": response_c})
 
-        elif prompt.startswith("#all"):
+        elif prompt.startswith("@all"):
             # Call both APIs in sequence for now, can be parallelized later
             gemini_stream = call_gemini_api(history)
             response_g = _process_response_stream(gemini_stream, "gemini")

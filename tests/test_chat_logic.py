@@ -41,7 +41,7 @@ def test_history_management_user_input():
 @patch('chat_logic.call_chatgpt_api', return_value="Mocked ChatGPT Response")
 def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     # Test #gemini
-    with patch('builtins.input', side_effect=["#gemini hello", "exit"]):
+    with patch('builtins.input', side_effect=[@gemini, "exit"]):
         with patch('builtins.print'):
             history = chat_logic.main()
             assert mock_gemini_api.called
@@ -52,7 +52,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_chatgpt_api.reset_mock()
 
     # Test #chatgpt
-    with patch('builtins.input', side_effect=["#chatgpt hello", "exit"]):
+    with patch('builtins.input', side_effect=["@chatgpt hello", "exit"]):
         with patch('builtins.print'):
             history = chat_logic.main()
             assert not mock_gemini_api.called
@@ -63,7 +63,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_chatgpt_api.reset_mock()
 
     # Test #all
-    with patch('builtins.input', side_effect=["#all hello", "exit"]):
+    with patch('builtins.input', side_effect=["@all hello", "exit"]):
         with patch('builtins.print'):
             history = chat_logic.main()
             assert mock_gemini_api.called
