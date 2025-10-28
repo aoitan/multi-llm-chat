@@ -129,4 +129,4 @@ with gr.Blocks() as demo:
     user_input.submit(lambda: "", None, user_input)
 
 if __name__ == "__main__":
-    demo.launch(debug=True)
+    demo.launch(server_name="0.0.0.0", debug=True) # debug=Trueで詳細なログを出力
