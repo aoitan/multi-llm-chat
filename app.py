@@ -1,5 +1,6 @@
 import gradio as gr
 import time
+import os
 
 from gradio_client import utils as gradio_utils
 
@@ -129,4 +130,6 @@ with gr.Blocks() as demo:
     user_input.submit(lambda: "", None, user_input)
 
 if __name__ == "__main__":
-    demo.launch(debug=True)
+    # デフォルトはlocalhost、環境変数で上書き可能にする
+    server_name = os.getenv("MLC_SERVER_NAME", "127.0.0.1")
+    demo.launch(server_name=server_name, debug=True)
