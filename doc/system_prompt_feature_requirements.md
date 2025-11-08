@@ -31,7 +31,7 @@
         -   ユーザー入力の解析
         -   `core.py`の関数を呼び出して、結果をコンソールに表示する
 
-この再編成により、`chat_logic.py`は`core.py`と`cli.py`に分割され、廃止される。
+この再編成により、`chat_logic.py`は`core.py`と`cli.py`に分割され、削除される。
 
 ### 3. システムプロンプト機能 要件定義
 
@@ -48,7 +48,8 @@
 ### 4. MVP設計提案
 
 -   **`core.py`**:
-    -   `apply_system_prompt(history, system_prompt)` のような、会話履歴の先頭にシステムプロンプトを挿入する関数を新設する。OpenAIの`system`ロールと、Geminiの初回ユーザープロンプト形式の両方に対応する。
+    -   `apply_system_prompt(history, system_prompt, model_name)` のような、会話履歴の先頭にシステムプロンプトを挿入する関数を新設する。
+    -   `model_name`に応じて、OpenAIの`system`ロールと、Geminiの`system_instruction`を使い分ける。
 
 -   **`webui.py`**:
     -   `gr.Textbox(lines=3, label="System Prompt")` をUI上部に追加する。その内容は`gr.State`で管理し、応答生成時に`core.py`の関数に渡す。
