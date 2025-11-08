@@ -66,9 +66,13 @@
 
 -   **`core.py`**:
     -   `get_token_info(text, model_name)`: 指定されたテキストのトークン数、モデルの**最大コンテキスト長**、および計算が概算かどうかのフラグ (`is_estimated`) を含む辞書を返すインターフェースを設ける。UI/CLIはこのAPIを呼び出す。
+    -   モデルインスタンスの管理:
+        -   `core.py`内で、`GenerativeModel`のようなモデルクライアントのインスタンスをキャッシュ（保持）する。
+        -   システムプロンプトが更新された場合、関連するモデル（特にGemini）のキャッシュを破棄し、次回のAPI呼び出し時に新しいシステムプロンプトで再初期化する。
+        -   ストリーミング応答中のシステムプロンプト更新は、MVPではサポートしない（UI/CLI側で編集中は送信ボタンを無効化するなどで対応）。
     -   `prepare_request(history, system_prompt, model_name)`: モデルに応じてシステムプロンプトの適用や履歴のフォーマットを行う。
         -   **OpenAIの場合**: `history` リストの先頭に `{'role': 'system', 'content': ...}` を追加したリストを返す。
-        -   **Geminiの場合**: `system_prompt`文字列と整形済み`history`をタプル `(system_prompt, history)` として返す。呼び出し側は、`system_prompt`が変更されたことを検知した場合、`GenerativeModel(model_name, system_instruction=...)` のようにモデルを再初期化する必要がある。
+        -   **Geminiの場合**: `system_prompt`文字列と整形済み`history`をタプル `(system_prompt, history)` として返す。この戻り値を受け取った`call_llm_api`が、キャッシュされたモデルインスタンスを使用するか、プロンプト変更に基づき再初期化するかを判断する。
         -   **その他 (Claude等)**: 将来の拡張性を考慮し、`model_name`に基づいて処理を分岐できる構造にする。
 
 -   **`webui.py`**:
