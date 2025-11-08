@@ -50,8 +50,9 @@
 ### 4. MVP設計提案
 
 -   **`core.py`**:
-    -   `apply_system_prompt(history, system_prompt, model_name)` のような、会話履歴の先頭にシステムプロンプトを挿入する関数を新設する。
-    -   `model_name`に応じて、OpenAIの`system`ロールと、Geminiの`system_instruction`を使い分ける。
+    -   `apply_system_prompt(history, system_prompt, model_name)` のような、モデルに応じてシステムプロンプトを適用するためのロジックを実装する。このロジックは、モデルごとに異なる形式の出力を返す。
+        -   **OpenAIの場合**: `history` リストの先頭に `{'role': 'system', 'content': ...}` を追加した新しい `history` リストを返す。
+        -   **Geminiの場合**: `system_prompt` の文字列そのものを返し、API呼び出し側が `GenerativeModel(model_name, system_instruction=...)` のようにモデルを初期化できるようにする。
 
 -   **`webui.py`**:
     -   `gr.Textbox(lines=3, label="System Prompt")` をUI上部に追加する。その内容は`gr.State`で管理し、応答生成時に`core.py`の関数に渡す。
