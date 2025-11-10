@@ -37,7 +37,7 @@ This project follows **Test-Driven Development (TDD)** for all feature additions
 - Run `uv run pytest` to confirm tests fail for the right reason
 - Implement the minimal code to make tests pass
 - Refactor if needed, ensuring tests remain green
-- Commit with a message listing the test cases added (e.g., "feat: add X功能 - Added test_x_behavior, test_x_edge_case")
+- Commit with a message listing the test cases added（例: "feat: X機能を追加 - test_x_behavior, test_x_edge_case を追加"）
 
 **Exceptions**: Emergency hotfixes or documentation-only changes may skip the TDD cycle, but must be explicitly noted in the PR description with justification.
 
