@@ -32,11 +32,7 @@ packages = ["src/multi_llm_chat"]
 target-version = "py310"
 line-length = 100
 src = ["src"]
-extend-include = ["tests/**", "app.py", "chat_logic.py"]
+extend-include = ["tests/**"]
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "I"]
-ignore = [
-    "E203",
-    "E501",
-]

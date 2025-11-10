@@ -148,7 +148,8 @@ def _process_response_stream(stream, model_name):
     print()  # Newline after the full response
     if not full_response.strip():
         print(
-            f"[System: {model_name.capitalize()}からの応答がありませんでした。プロンプトがブロックされた可能性があります。]",
+            f"[System: {model_name.capitalize()}からの応答がありませんでした。"
+            f"プロンプトがブロックされた可能性があります。]",
             flush=True,
         )
 
