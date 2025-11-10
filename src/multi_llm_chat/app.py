@@ -88,7 +88,7 @@ def respond(user_message, display_history, logic_history):
         
         logic_history.append({"role": "gemini", "content": full_response_g})
         if not full_response_g.strip():
-             display_history[-1][1] = "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
+            display_history[-1][1] = "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
         yield display_history, display_history, logic_history
 
     # 4. ChatGPTへの応答処理
@@ -104,7 +104,7 @@ def respond(user_message, display_history, logic_history):
 
         logic_history.append({"role": "chatgpt", "content": full_response_c})
         if not full_response_c.strip():
-             display_history[-1][1] = "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
+            display_history[-1][1] = "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
         yield display_history, display_history, logic_history
 
 # --- Gradio UIの構築 ---

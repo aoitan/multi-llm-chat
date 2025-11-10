@@ -10,12 +10,35 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
+_gemini_model = None
+_openai_client = None
+
 def _configure_gemini():
     """Configure the Gemini SDK if an API key is available."""
     if not GOOGLE_API_KEY:
         return False
     genai.configure(api_key=GOOGLE_API_KEY)
     return True
+
+def _get_gemini_model():
+    """Return a cached GenerativeModel instance if available."""
+    global _gemini_model
+    if _gemini_model is not None:
+        return _gemini_model
+    if not _configure_gemini():
+        return None
+    _gemini_model = genai.GenerativeModel(GEMINI_MODEL)
+    return _gemini_model
+
+def _get_openai_client():
+    """Return a cached OpenAI client."""
+    global _openai_client
+    if _openai_client is not None:
+        return _openai_client
+    if not OPENAI_API_KEY:
+        return None
+    _openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+    return _openai_client
 
 def format_history_for_gemini(history):
     # Gemini API expects a list of dicts with 'role' and 'parts'
@@ -46,12 +69,12 @@ def list_gemini_models():
             print(f"  - {m.name}")
 
 def call_gemini_api(history):
-    if not _configure_gemini():
+    model = _get_gemini_model()
+    if not model:
         yield "Gemini API Error: GOOGLE_API_KEY not found in environment variables or .env file."
         return
 
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
         gemini_history = format_history_for_gemini(history)
         # print(f"DEBUG: Gemini API request history: {gemini_history}", flush=True)
         response_stream = model.generate_content(gemini_history, stream=True)
@@ -66,11 +89,11 @@ def call_gemini_api(history):
 
 def call_chatgpt_api(history):
     try:
-        if not OPENAI_API_KEY:
+        client = _get_openai_client()
+        if client is None:
             yield "ChatGPT API Error: OPENAI_API_KEYが設定されていません。"
             return
         
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
         chatgpt_history = format_history_for_chatgpt(history)
         # print(f"DEBUG: ChatGPT API request history: {chatgpt_history}", flush=True)
         response_stream = client.chat.completions.create(
