@@ -989,6 +989,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -998,6 +999,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "tiktoken", specifier = ">=0.5" },
 ]
 provides-extras = ["dev"]
