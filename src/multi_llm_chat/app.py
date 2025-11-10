@@ -3,7 +3,6 @@ import os
 import gradio as gr
 from gradio_client import utils as gradio_utils
 
-
 # Gradio 4.42.0時点のバグで、JSON Schema内にboolが含まれると
 # gradio_client.utils.json_schema_to_python_typeが落ちる。
 # Blocks.launch()時にAPI情報の生成で呼ばれるため、
@@ -38,12 +37,13 @@ gradio_utils.get_type = _safe_get_type
 # Gradioのバグを回避するため、ロジックのインポートは
 # UIイベントがトリガーされる関数内で行う（遅延インポート）
 
+
 def respond(user_message, display_history, logic_history):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
     """
     # --- 遅延インポート ---
-    from .chat_logic import call_gemini_api, call_chatgpt_api
+    from .chat_logic import call_chatgpt_api, call_gemini_api
 
     # --- 内部ヘルパー関数 ---
     def _stream_response(model_name, stream):
@@ -58,7 +58,7 @@ def respond(user_message, display_history, logic_history):
             except (AttributeError, IndexError, TypeError, ValueError):
                 if isinstance(chunk, str):
                     text = chunk  # エラー文字列を処理
-            
+
             if text:
                 full_response += text
                 display_history[-1][1] += text
@@ -88,7 +88,7 @@ def respond(user_message, display_history, logic_history):
         gemini_input_history = history_snapshot or logic_history
         gemini_stream = call_gemini_api(gemini_input_history)
         full_response_g = yield from _stream_response("gemini", gemini_stream)
-        
+
         logic_history.append({"role": "gemini", "content": full_response_g})
         if not full_response_g.strip():
             display_history[-1][1] = "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
@@ -101,7 +101,7 @@ def respond(user_message, display_history, logic_history):
             display_history.append([None, "**ChatGPT:**\n"])
         else:
             display_history[-1][1] = "**ChatGPT:**\n"
-        
+
         chatgpt_input_history = history_snapshot or logic_history
         chatgpt_stream = call_chatgpt_api(chatgpt_input_history)
         full_response_c = yield from _stream_response("chatgpt", chatgpt_stream)
@@ -111,28 +111,34 @@ def respond(user_message, display_history, logic_history):
             display_history[-1][1] = "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
         yield display_history, display_history, logic_history
 
+
 # --- Gradio UIの構築 ---
 with gr.Blocks() as demo:
     gr.Markdown("# Multi-LLM Chat")
-    
+
     # 履歴を管理するための非表示Stateコンポーネント
     display_history_state = gr.State([])
     logic_history_state = gr.State([])
 
     # UIコンポーネント
     chatbot_ui = gr.Chatbot(label="Conversation", height=600)
-    user_input = gr.Textbox(show_label=False, placeholder="Enter text with @mention...", container=False)
+    user_input = gr.Textbox(
+        show_label=False, placeholder="Enter text with @mention...", container=False
+    )
 
     # イベントハンドラを定義
     user_input.submit(
-        respond, # メインの応答関数
-        [user_input, display_history_state, logic_history_state], # 入力
-        [chatbot_ui, display_history_state, logic_history_state]  # 出力
+        respond,  # メインの応答関数
+        [user_input, display_history_state, logic_history_state],  # 入力
+        [chatbot_ui, display_history_state, logic_history_state],  # 出力
     )
     # 送信後、入力ボックスをクリアする
     user_input.submit(lambda: "", None, user_input)
 
+
 def launch(server_name=None, debug=True):
     """Launch the Gradio demo with env-aware defaults."""
-    resolved_server = os.getenv("MLC_SERVER_NAME", "127.0.0.1") if server_name is None else server_name
+    resolved_server = (
+        os.getenv("MLC_SERVER_NAME", "127.0.0.1") if server_name is None else server_name
+    )
     demo.launch(server_name=resolved_server, debug=debug)

@@ -40,6 +40,35 @@ Web UI版とCLI版の2つのインターフェースを提供します。
    ```
    `pyproject.toml`と`uv.lock`に定義されたランタイム／テスト依存（`dev`エクストラを含む）がすべてインストールされます。依存関係を追加・更新した場合は`pyproject.toml`を編集した上で`uv lock`を実行し、続けて`uv sync --extra dev`で環境を最新化してください。
 
+## 開発
+
+### コード品質チェック
+
+プロジェクトでは[Ruff](https://docs.astral.sh/ruff/)を使用して、コードのlintとフォーマットを行っています。
+
+**Lintチェック**:
+```bash
+uv run ruff check .
+```
+
+**フォーマット適用**:
+```bash
+uv run ruff format .
+```
+
+**フォーマット確認のみ（CI用）**:
+```bash
+uv run ruff format --check .
+```
+
+### テストの実行
+
+```bash
+uv run pytest
+```
+
+すべてのPull Requestは、CI（GitHub Actions）でlintとテストが自動実行されます。ローカルでも同じチェックを実行してから、コミットすることを推奨します。
+
 ## 使い方
 
 **注意: 現在、全体リファクタリングが計画されています。以下の手順はリファクタリング完了後のものです。現行バージョンでは、`webui.py`を`app.py`に、`cli.py`を`chat_logic.py`に読み替えて実行してください。**

@@ -1,9 +1,10 @@
 import os
-import google.generativeai as genai
-from dotenv import load_dotenv
-import openai
 
-load_dotenv() # Load environment variables from .env file
+import google.generativeai as genai
+import openai
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -13,12 +14,14 @@ CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 _gemini_model = None
 _openai_client = None
 
+
 def _configure_gemini():
     """Configure the Gemini SDK if an API key is available."""
     if not GOOGLE_API_KEY:
         return False
     genai.configure(api_key=GOOGLE_API_KEY)
     return True
+
 
 def _get_gemini_model():
     """Return a cached GenerativeModel instance if available."""
@@ -30,6 +33,7 @@ def _get_gemini_model():
     _gemini_model = genai.GenerativeModel(GEMINI_MODEL)
     return _gemini_model
 
+
 def _get_openai_client():
     """Return a cached OpenAI client."""
     global _openai_client
@@ -40,9 +44,11 @@ def _get_openai_client():
     _openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
     return _openai_client
 
+
 def _clone_history(history):
     """Create a shallow copy of the conversation history."""
     return [entry.copy() for entry in history]
+
 
 def format_history_for_gemini(history):
     # Gemini API expects a list of dicts with 'role' and 'parts'
@@ -53,6 +59,7 @@ def format_history_for_gemini(history):
         gemini_history.append({"role": role, "parts": [entry["content"]]})
     return gemini_history
 
+
 def format_history_for_chatgpt(history):
     # ChatGPT API expects a list of dicts with 'role' and 'content'
     # 'user' for user, 'assistant' for AI
@@ -61,6 +68,7 @@ def format_history_for_chatgpt(history):
         role = "user" if entry["role"] == "user" else "assistant"
         chatgpt_history.append({"role": role, "content": entry["content"]})
     return chatgpt_history
+
 
 def list_gemini_models():
     if not _configure_gemini():
@@ -71,6 +79,7 @@ def list_gemini_models():
     for m in genai.list_models():
         if "generateContent" in m.supported_generation_methods:
             print(f"  - {m.name}")
+
 
 def call_gemini_api(history):
     model = _get_gemini_model()
@@ -91,19 +100,18 @@ def call_gemini_api(history):
         list_gemini_models()
         yield f"Gemini API Error: An unexpected error occurred: {e}"
 
+
 def call_chatgpt_api(history):
     try:
         client = _get_openai_client()
         if client is None:
             yield "ChatGPT API Error: OPENAI_API_KEYが設定されていません。"
             return
-        
+
         chatgpt_history = format_history_for_chatgpt(history)
         # print(f"DEBUG: ChatGPT API request history: {chatgpt_history}", flush=True)
         response_stream = client.chat.completions.create(
-            model=CHATGPT_MODEL,
-            messages=chatgpt_history,
-            stream=True
+            model=CHATGPT_MODEL, messages=chatgpt_history, stream=True
         )
         for chunk in response_stream:
             yield chunk
@@ -116,11 +124,12 @@ def call_chatgpt_api(history):
     except Exception as e:
         yield f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
 
+
 def _process_response_stream(stream, model_name):
     """Helper function to process and print response streams from LLMs."""
     full_response = ""
-    print(f"[{model_name.capitalize()}]: ", end='', flush=True)
-    
+    print(f"[{model_name.capitalize()}]: ", end="", flush=True)
+
     for chunk in stream:
         text = ""
         try:
@@ -130,17 +139,22 @@ def _process_response_stream(stream, model_name):
                 text = chunk.choices[0].delta.content
         except (AttributeError, IndexError, TypeError, ValueError):
             if isinstance(chunk, str):
-                text = chunk # Handle yielded error strings
-        
+                text = chunk  # Handle yielded error strings
+
         if text:
-            print(text, end='', flush=True)
+            print(text, end="", flush=True)
             full_response += text
-            
-    print() # Newline after the full response
+
+    print()  # Newline after the full response
     if not full_response.strip():
-        print(f"[System: {model_name.capitalize()}からの応答がありませんでした。プロンプトがブロックされた可能性があります。]", flush=True)
-        
+        print(
+            f"[System: {model_name.capitalize()}からの応答がありませんでした。"
+            f"プロンプトがブロックされた可能性があります。]",
+            flush=True,
+        )
+
     return full_response
+
 
 def main():
     history = []
