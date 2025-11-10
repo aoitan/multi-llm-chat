@@ -24,10 +24,35 @@ uv run ruff format .      # Auto-format code
 Follow PEP 8 with 4-space indentation, snake_case for functions, and UPPER_CASE for config constants such as `GEMINI_MODEL`. The project uses Ruff (configured in `pyproject.toml`) for linting (`select = ["E", "F", "B", "I"]`) and formatting (Black-compatible, 100-char line length). Keep streaming helpers pure where possible and prefer small, testable functions (e.g., `format_history_for_gemini`). UI patches that work around upstream bugs—like the runtime Gradio monkey patch in `webui.py` (currently `app.py`)—should include concise comments explaining the rationale and version. Type hints are welcome when they aid readability, but ergonomic generator code may remain unannotated.
 
 ## Testing Guidelines
-All behavioral changes require a `tests/test_*.py` addition or update. Mirror existing naming (`test_<feature>`) and rely on `unittest.mock.patch` for I/O or API boundaries so tests stay hermetic. For new LLM flows, assert both routing (which API is called) and history shape (roles/content). Aim to keep `uv run pytest` passing locally before opening a PR; add regression cases whenever a bug is fixed. CI enforces both Ruff compliance and pytest success on every PR.
+
+### TDD Workflow (Required)
+This project follows **Test-Driven Development (TDD)** for all feature additions and bug fixes. Follow the Red-Green-Refactor cycle:
+
+1. **Red**: Write a failing test first that captures the desired behavior
+2. **Green**: Write minimal code to make the test pass
+3. **Refactor**: Clean up the implementation while keeping tests green
+
+**Process**:
+- Before implementing any feature, write one or more failing tests in `tests/test_*.py`
+- Run `uv run pytest` to confirm tests fail for the right reason
+- Implement the minimal code to make tests pass
+- Refactor if needed, ensuring tests remain green
+- Commit with a message listing the test cases added（例: "feat: X機能を追加 - test_x_behavior, test_x_edge_case を追加"）
+
+**Exceptions**: Emergency hotfixes or documentation-only changes may skip the TDD cycle, but must be explicitly noted in the PR description with justification.
+
+### Test Requirements
+All behavioral changes require a `tests/test_*.py` addition or update. Mirror existing naming (`test_<feature>`) and rely on `unittest.mock.patch` for I/O or API boundaries so tests stay hermetic. For new LLM flows, assert both routing (which API is called) and history shape (roles/content). Add regression cases whenever a bug is fixed. CI enforces both Ruff compliance and pytest success on every PR.
 
 ## Commit & Pull Request Guidelines
-Commits follow the `<scope>: <short summary>` pattern already in history (e.g., `doc: update specs`). Keep scope tokens short (`feat`, `fix`, `refactor`, `tests`). Pull requests should describe the user goal, outline key changes, note any follow-up todos, and link related issues or specs under `doc/`. Include verification steps (`pytest`, manual CLI/Web walkthroughs) plus screenshots/GIFs when the UI changes.
+Commits follow the `<scope>: <short summary>` pattern already in history (e.g., `doc: update specs`). Keep scope tokens short (`feat`, `fix`, `refactor`, `tests`). 
+
+Pull requests should:
+- Describe the user goal and outline key changes
+- **List all test cases added** (required for TDD compliance, e.g., "Added: test_mention_routing, test_history_validation")
+- Note any follow-up todos and link related issues or specs under `doc/`
+- Include verification steps (`uv run pytest`, manual CLI/Web walkthroughs) plus screenshots/GIFs when the UI changes
+- Explicitly note if TDD cycle was skipped (e.g., "Hotfix: skipped TDD due to production outage")
 
 ## Security & Configuration Tips
 Store secrets in `.env`; `GOOGLE_API_KEY` is mandatory, while `OPENAI_API_KEY` unlocks ChatGPT routing. Never commit `.env` or paste raw keys in logs. When debugging API errors, prefer the safe helper `list_gemini_models()` instead of printing keys, and document any new environment variables in `README.md`.
