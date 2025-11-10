@@ -36,9 +36,9 @@ Web UI版とCLI版の2つのインターフェースを提供します。
 
 4. **依存関係のインストール**:
    ```bash
-   uv sync --dev
+   uv sync --extra dev
    ```
-   `pyproject.toml`と`uv.lock`に定義されたランタイム／テスト依存がすべてインストールされます。依存関係を追加・更新した場合は`pyproject.toml`を編集した上で`uv lock`を実行し、続けて`uv sync --dev`で環境を最新化してください。
+   `pyproject.toml`と`uv.lock`に定義されたランタイム／テスト依存（`dev`エクストラを含む）がすべてインストールされます。依存関係を追加・更新した場合は`pyproject.toml`を編集した上で`uv lock`を実行し、続けて`uv sync --extra dev`で環境を最新化してください。
 
 ## 使い方
 

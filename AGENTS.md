@@ -7,9 +7,9 @@ Root scripts separate the two user experiences: `app.py` hosts the Gradio UI (we
 Use `uv` for Python environment setup and dependency syncing:
 ```bash
 uv venv .venv && source .venv/bin/activate
-uv sync --dev
+uv sync --extra dev
 ```
-This installs everything defined in `pyproject.toml` / `uv.lock`. When dependencies change, update `pyproject.toml` and refresh the lockfile via `uv lock`.
+This installs everything defined in `pyproject.toml` / `uv.lock`, including the `dev` extra for tests. When dependencies change, update `pyproject.toml`, refresh the lockfile via `uv lock`, and re-run `uv sync --extra dev`.
 Run the Web UI with `python app.py` (or `MLC_SERVER_NAME=0.0.0.0 python app.py` to share on a LAN). Launch the CLI with `python chat_logic.py`. _After Epic 003 lands, use `python webui.py` / `python cli.py` instead._ Execute the regression suite via `pytest` from the repo root; tests mock API calls, so no keys are needed.
 
 ## Coding Style & Naming Conventions

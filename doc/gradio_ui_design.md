@@ -54,7 +54,7 @@ graph TD
 ## 4. 実装計画
 
 1.  **環境構築**:
-    -   `pyproject.toml` に Gradio を含めたうえで `uv sync --dev` を実行し、依存関係をインストールする。
+    -   `pyproject.toml` に Gradio を含めたうえで `uv sync --extra dev` を実行し、依存関係をインストールする。
 
 2.  **ファイル構成**:
     -   Web UI関連のコードを格納するため、新たに`app.py`を作成する。

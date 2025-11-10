@@ -10,11 +10,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
-if not GOOGLE_API_KEY:
-    print("Error: GOOGLE_API_KEY not found in environment variables or .env file.")
-    exit(1)
-
-genai.configure(api_key=GOOGLE_API_KEY)
+def _configure_gemini():
+    """Configure the Gemini SDK if an API key is available."""
+    if not GOOGLE_API_KEY:
+        return False
+    genai.configure(api_key=GOOGLE_API_KEY)
+    return True
 
 def format_history_for_gemini(history):
     # Gemini API expects a list of dicts with 'role' and 'parts'
@@ -35,12 +36,20 @@ def format_history_for_chatgpt(history):
     return chatgpt_history
 
 def list_gemini_models():
+    if not _configure_gemini():
+        print("Error: GOOGLE_API_KEY not found in environment variables or .env file.")
+        return
+
     print("利用可能なGeminiモデル:")
     for m in genai.list_models():
         if "generateContent" in m.supported_generation_methods:
             print(f"  - {m.name}")
 
 def call_gemini_api(history):
+    if not _configure_gemini():
+        yield "Gemini API Error: GOOGLE_API_KEY not found in environment variables or .env file."
+        return
+
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         gemini_history = format_history_for_gemini(history)
@@ -141,5 +150,3 @@ def main():
             # Thinking memo
             pass
     return history
-
-
