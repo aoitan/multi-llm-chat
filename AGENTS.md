@@ -1,14 +1,15 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Root scripts separate the two user experiences: `app.py` hosts the Gradio UI (web), while `chat_logic.py` implements the CLI loop plus API adapters for Gemini and ChatGPT. _Epic 003 (Core Refactor) renames these entry points to `webui.py` and `cli.py`; this guide reflects the current state and should be updated after the refactor ships._ Supporting assets live under `doc/` (feature specs) and `issues/` (planning notes). Tests reside in `tests/` and currently focus on CLI behavior via `tests/test_chat_logic.py`. Keep new modules colocated with their interface (e.g., future `core.py` next to the UI/CLI entry points) so both front-ends can import without circular dependencies.
+Root scripts separate the two user experiences: `app.py` hosts the Gradio UI (web), while `chat_logic.py` implements the CLI loop plus API adapters for Gemini and ChatGPT. These scripts now proxy into the `src/multi_llm_chat/` package, which contains the actual implementation. _Epic 003 (Core Refactor) renames these entry points to `webui.py` and `cli.py`; this guide reflects the current state and should be updated after the refactor ships._ Supporting assets live under `doc/` (feature specs) and `issues/` (planning notes). Tests reside in `tests/` and currently focus on CLI behavior via `tests/test_chat_logic.py`. Keep new modules colocated with their interface (e.g., future `core.py` next to the UI/CLI entry points) so both front-ends can import without circular dependencies.
 
 ## Build, Test, and Development Commands
-Use `uv` for Python environment setup:
+Use `uv` for Python environment setup and dependency syncing:
 ```bash
 uv venv .venv && source .venv/bin/activate
-uv pip install google-generativeai openai python-dotenv gradio pytest tiktoken
+uv sync --extra dev
 ```
+This installs everything defined in `pyproject.toml` / `uv.lock`, including the `dev` extra for tests. When dependencies change, update `pyproject.toml`, refresh the lockfile via `uv lock`, and re-run `uv sync --extra dev`.
 Run the Web UI with `python app.py` (or `MLC_SERVER_NAME=0.0.0.0 python app.py` to share on a LAN). Launch the CLI with `python chat_logic.py`. _After Epic 003 lands, use `python webui.py` / `python cli.py` instead._ Execute the regression suite via `pytest` from the repo root; tests mock API calls, so no keys are needed.
 
 ## Coding Style & Naming Conventions

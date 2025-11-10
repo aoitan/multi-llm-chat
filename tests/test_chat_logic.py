@@ -1,6 +1,14 @@
 import pytest
 from unittest.mock import patch
-import chat_logic
+import multi_llm_chat.chat_logic as chat_logic
+
+
+def _gemini_stream(*_args, **_kwargs):
+    return iter(["Mocked Gemini Response"])
+
+
+def _chatgpt_stream(*_args, **_kwargs):
+    return iter(["Mocked ChatGPT Response"])
 
 def test_repl_exit_commands():
     with patch('builtins.input', side_effect=["hello", "exit"]):
@@ -21,8 +29,8 @@ def test_history_management_user_input():
     with patch('builtins.input', side_effect=test_inputs + ["exit"]):
         with patch('builtins.print'): # Mock print to avoid console output
             # Mock API calls to control history length
-            with patch('chat_logic.call_gemini_api', return_value="Mocked Gemini Response"):
-                with patch('chat_logic.call_chatgpt_api', return_value="Mocked ChatGPT Response"):
+            with patch('multi_llm_chat.chat_logic.call_gemini_api', side_effect=_gemini_stream):
+                with patch('multi_llm_chat.chat_logic.call_chatgpt_api', side_effect=_chatgpt_stream):
                     history = chat_logic.main()
             
             # Expected history: user, user, gemini, user
@@ -37,8 +45,8 @@ def test_history_management_user_input():
             assert history[3]["content"] == "just a thought"
 
 # Mock API calls for testing routing and API responses
-@patch('chat_logic.call_gemini_api', return_value="Mocked Gemini Response")
-@patch('chat_logic.call_chatgpt_api', return_value="Mocked ChatGPT Response")
+@patch('multi_llm_chat.chat_logic.call_gemini_api', side_effect=_gemini_stream)
+@patch('multi_llm_chat.chat_logic.call_chatgpt_api', side_effect=_chatgpt_stream)
 def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     # Test @gemini
     with patch('builtins.input', side_effect=["@gemini hello", "exit"]):
@@ -65,6 +73,19 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     # Test @all
     with patch('builtins.input', side_effect=["@all hello", "exit"]):
         with patch('builtins.print'):
+            history_snapshots = {}
+
+            def gemini_capture(history):
+                history_snapshots["gemini"] = [entry.copy() for entry in history]
+                return iter(["Mocked Gemini Response"])
+
+            def chatgpt_capture(history):
+                history_snapshots["chatgpt"] = [entry.copy() for entry in history]
+                return iter(["Mocked ChatGPT Response"])
+
+            mock_gemini_api.side_effect = gemini_capture
+            mock_chatgpt_api.side_effect = chatgpt_capture
+
             history = chat_logic.main()
             assert mock_gemini_api.called
             assert mock_chatgpt_api.called
@@ -73,6 +94,11 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             assert history[-2]["content"] == "Mocked Gemini Response"
             assert history[-1]["role"] == "chatgpt"
             assert history[-1]["content"] == "Mocked ChatGPT Response"
+            assert history_snapshots["gemini"] == history_snapshots["chatgpt"]
+            assert all(entry["role"] != "gemini" for entry in history_snapshots["chatgpt"])
+
+            mock_gemini_api.side_effect = _gemini_stream
+            mock_chatgpt_api.side_effect = _chatgpt_stream
             mock_gemini_api.reset_mock()
             mock_chatgpt_api.reset_mock()
 

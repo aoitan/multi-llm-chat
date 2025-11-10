@@ -1,0 +1,28 @@
+[project]
+name = "multi-llm-chat"
+version = "0.1.0"
+description = "CLI and web UI frontends for chatting with Gemini and ChatGPT in a shared history."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Multi LLM Chat Contributors" },
+]
+dependencies = [
+    "google-generativeai>=0.4",
+    "gradio>=4.0",
+    "openai>=1.0",
+    "python-dotenv>=1.0",
+    "tiktoken>=0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+packages = ["src/multi_llm_chat"]
