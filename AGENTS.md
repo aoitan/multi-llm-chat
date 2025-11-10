@@ -7,7 +7,7 @@ Root scripts separate the two user experiences: `app.py` hosts the Gradio UI (we
 Use `uv` for Python environment setup:
 ```bash
 uv venv .venv && source .venv/bin/activate
-uv pip install google-generativeai openai python-dotenv gradio
+uv pip install google-generativeai openai python-dotenv gradio pytest tiktoken
 ```
 Run the Web UI with `python app.py` (or `MLC_SERVER_NAME=0.0.0.0 python app.py` to share on a LAN). Launch the CLI with `python chat_logic.py`. Execute the regression suite via `pytest` from the repo root; tests mock API calls, so no keys are needed.
 

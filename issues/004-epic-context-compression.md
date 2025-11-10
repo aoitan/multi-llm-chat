@@ -17,19 +17,21 @@
     - `GEMINI_MAX_CONTEXT_LENGTH`や`CHATGPT_MAX_CONTEXT_LENGTH`を読み込み、数値に変換できない場合は警告ログを出してデフォルトを使用する。
     - 未設定モデルには`DEFAULT_MAX_CONTEXT_LENGTH`が適用される。
     - 設定値は`core.py`のAPIで参照可能で、UI/CLIからも確認できる。
+    - README / `AGENTS.md` / `.env.example` に各環境変数の意味・単位・デフォルトを追記し、利用者が安全に設定できる。
 - **Tasks**:
     - **Task: 環境変数ローダ実装** — 最大長とデフォルト値を読み込み・検証し、`core`内部で参照できる設定オブジェクトを整備する。
     - **Task: ロギングとフォールバック** — 不正値検出時の警告とフォールバックルールを記述し、READMEに設定方法を追記する。
+    - **Task: ドキュメント更新** — README / `AGENTS.md` / `.env.example` に新しい環境変数の説明、推奨値、フォールバック挙動を明記する。
 
 ### Story: トークン計測サービス
 - **概要**: プロバイダごとに計測ロジックを切り替え、概算時は安全マージンを掛ける`get_token_info`を実装する。
 - **Acceptance Criteria**:
-    - OpenAIは`tiktoken`で正確に計測し、Geminiなど計測できないモデルには文字数ベースの概算+`TOKEN_ESTIMATION_BUFFER_FACTOR`を適用する。
-    - 戻り値に`count`, `max_allowed`, `is_estimated`を含む。
+    - Epic 3で用意した`get_token_info`のインターフェースを拡張し、OpenAIは`tiktoken`で正確に計測、Geminiなど計測できないモデルには文字数ベースの概算+`TOKEN_ESTIMATION_BUFFER_FACTOR`を適用する。
+    - 戻り値に`count`, `max_allowed`, `is_estimated`を含む（Epic 3時点のフィールドをそのまま利用）。
     - 未対応プロバイダを簡単に追加できるプラガブルな構造である。
 - **Tasks**:
     - **Task: プロバイダ別トークナイザ登録** — 関数ディクショナリ等を用いて、モデル→計測関数のマッピングを実装する。
-    - **Task: バッファ係数の設定** — 概算に安全マージンを適用し、環境変数で係数を調整できるようにする。
+    - **Task: バッファ係数の設定** — 概算に安全マージンを適用し、環境変数で係数を調整できるようにする（README / `AGENTS.md` / `.env.example` へ手順を追加）。
 
 ### Story: スライディングウィンドウ枝刈り
 - **概要**: API送信直前に最新ターンを優先して履歴を削減し、最大長内へ収める。

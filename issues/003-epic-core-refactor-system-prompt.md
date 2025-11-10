@@ -28,10 +28,10 @@
 - **Acceptance Criteria**:
     - `prepare_request(history, system_prompt, model_name)`がOpenAI/Gemini向けに正しいフォーマットを返す。
     - システムプロンプト変更時にGeminiモデルキャッシュが再初期化される。
-    - `get_token_info`が入力テキストの推定トークン数と最大長を返し、UI/CLIで利用できる。
+    - `get_token_info`が`{"count": <int>, "max_allowed": <int>, "is_estimated": <bool>}`を返し、現段階では簡易な概算実装でもよいが、Epic 4で精緻化されることを明記している。
 - **Tasks**:
     - **Task: リクエスト整形とキャッシュ制御** — モデル別の履歴構築を統合し、システムプロンプト更新時に該当クライアントを再生成するロジックを追加。
-    - **Task: トークン情報APIの実装** — `get_token_info`がトークン数・最大長・推定フラグを返すようにし、未設定モデルにはデフォルトを適用する。
+    - **Task: トークン情報APIの実装** — `get_token_info`がトークン数・最大長・推定フラグを返すようにし、未設定モデルにはデフォルトを適用する。Gemini等の概算ロジックは簡易でよく、Epic 4でプロバイダ別精度向上を行う旨をコメントする。
 
 ### Story: Web UIでのシステムプロンプト編集
 - **概要**: Gradio UIにシステムプロンプト入力欄とトークン残量表示を追加し、上限超過時は送信ボタンを無効化・警告表示する。
