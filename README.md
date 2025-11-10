@@ -113,7 +113,8 @@ python cli.py
 
 ## 実装の優先順位と依存関係
 
-機能開発は、以下の順序で進めることを推奨します。これは各仕様書間の依存関係を考慮したものです。
+機能開発は、以下の順序で進めることを推奨します。これは各仕様書間の依存関係を考慮したものです。  
+並行度の違いで担当者を分ける場合は `issues/009-task-sequential-core-system-prompt.md`（フェーズ1: 並行不可）と `issues/010-task-parallel-context-history.md`（フェーズ2: 並行可能）を参照してください。
 
 1.  **全体リファクタリング (`system_prompt_feature_requirements.md`)**
     -   まず`core.py`, `webui.py`, `cli.py`へのファイル分割リファクタリングを行います。
@@ -138,6 +139,11 @@ python cli.py
 - [x] GradioによるWeb UIの実装
 - [ ] 設定ファイルの外部化
 - [x] テストの追加
+- [ ] Epic 003: Coreリファクタリングとシステムプロンプト機能（`issues/003-epic-core-refactor-system-prompt.md`）
+- [ ] Epic 004: コンテキスト圧縮とトークンガードレール（`issues/004-epic-context-compression.md`）
+- [ ] Epic 005: 会話履歴の永続化と管理（`issues/005-epic-history-management.md`）
+
+これらのEpicを担当者単位に細分化する場合は、フェーズ1（並行不可）をまとめた`issues/009-task-sequential-core-system-prompt.md`と、フェーズ2（並行可能）を2タスクに整理した`issues/010-task-parallel-context-history.md`の補助タスク票を参照してください。
 
 ## ライセンス
 [LICENSE](LICENSE) (TBD)
