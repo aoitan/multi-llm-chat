@@ -23,7 +23,7 @@ READMEの「実装の優先順位」で示されている、コンテキスト�
    - CLIに`/system`系コマンドを追加し、トークン上限チェックとエラーメッセージを実装。
 
 4. **永続化フローへの組み込み**
-   - 履歴保存・読み込み処理で`system_prompt`フィールドを扱う（`history_feature_requirements.md`との整合性確保）。
+   - 履歴保存・読み込み処理で`system_prompt`フィールドを扱う（`doc/history_feature_requirements.md`との整合性確保）。
 
 ## 完了条件
 - `core.py`, `webui.py`, `cli.py`が新しい責務分割を反映し、旧`app.py`/`chat_logic.py`は廃止。
