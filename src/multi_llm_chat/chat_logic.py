@@ -40,6 +40,10 @@ def _get_openai_client():
     _openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
     return _openai_client
 
+def _clone_history(history):
+    """Create a shallow copy of the conversation history."""
+    return [entry.copy() for entry in history]
+
 def format_history_for_gemini(history):
     # Gemini API expects a list of dicts with 'role' and 'parts'
     # 'user' role for user input, 'model' for AI responses
@@ -160,12 +164,13 @@ def main():
             history.append({"role": "chatgpt", "content": response_c})
 
         elif prompt.startswith("@all"):
-            # Call both APIs in sequence for now, can be parallelized later
-            gemini_stream = call_gemini_api(history)
+            shared_history = _clone_history(history)
+
+            gemini_stream = call_gemini_api(shared_history)
             response_g = _process_response_stream(gemini_stream, "gemini")
             history.append({"role": "gemini", "content": response_g})
 
-            chatgpt_stream = call_chatgpt_api(history)
+            chatgpt_stream = call_chatgpt_api(shared_history)
             response_c = _process_response_stream(chatgpt_stream, "chatgpt")
             history.append({"role": "chatgpt", "content": response_c})
 

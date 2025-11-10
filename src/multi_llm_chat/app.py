@@ -80,10 +80,13 @@ def respond(user_message, display_history, logic_history):
     elif msg_stripped.startswith("@all"):
         mention = "all"
 
+    history_snapshot = [entry.copy() for entry in logic_history] if mention == "all" else None
+
     # 3. Geminiへの応答処理
     if mention in ["gemini", "all"]:
         display_history[-1][1] = "**Gemini:**\n"
-        gemini_stream = call_gemini_api(logic_history)
+        gemini_input_history = history_snapshot or logic_history
+        gemini_stream = call_gemini_api(gemini_input_history)
         full_response_g = yield from _stream_response("gemini", gemini_stream)
         
         logic_history.append({"role": "gemini", "content": full_response_g})
@@ -99,7 +102,8 @@ def respond(user_message, display_history, logic_history):
         else:
             display_history[-1][1] = "**ChatGPT:**\n"
         
-        chatgpt_stream = call_chatgpt_api(logic_history)
+        chatgpt_input_history = history_snapshot or logic_history
+        chatgpt_stream = call_chatgpt_api(chatgpt_input_history)
         full_response_c = yield from _stream_response("chatgpt", chatgpt_stream)
 
         logic_history.append({"role": "chatgpt", "content": full_response_c})
@@ -130,5 +134,5 @@ with gr.Blocks() as demo:
 
 def launch(server_name=None, debug=True):
     """Launch the Gradio demo with env-aware defaults."""
-    resolved_server = server_name or os.getenv("MLC_SERVER_NAME", "127.0.0.1")
+    resolved_server = os.getenv("MLC_SERVER_NAME", "127.0.0.1") if server_name is None else server_name
     demo.launch(server_name=resolved_server, debug=debug)
