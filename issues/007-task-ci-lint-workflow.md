@@ -9,8 +9,8 @@
 - `.github/workflows/ci.yml` を新規作成し、仕様書の 2 ジョブ（`lint` と `tests`）を定義する。
   - `lint`: Python 3.10、`uv run ruff check .` と `uv run ruff format --check .`。
   - `tests`: Python 3.10/3.11 マトリクスで `uv run pytest`。
-- `README.md` や `AGENTS.md` にローカル開発コマンドとして `uv run ruff check .` を追加し、lint を必須手順として周知する。
-- 初回 Ruff 実行で検出される違反を修正（必要なら `# noqa`/`# pragma: no cover` を最小限追加）。
+- `README.md` にローカル開発手順として `uv run ruff check .` / `ruff format` を追記し、lint を必須手順として周知する（エージェント向けの `AGENTS.md` では、CI で Ruff が必須であることを明文化する）。
+- 初回 Ruff 実行で検出される違反を修正（必要に応じて `# noqa`/`# pragma: no cover` を最小限追加）。
 
 ## 完了条件
 - `pyproject.toml` に Ruff の依存と設定が追加され、`uv lock` が更新されている。

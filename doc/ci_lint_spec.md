@@ -22,7 +22,7 @@
    [tool.ruff]
    target-version = "py310"
    line-length = 100
-   src = ["src", "tests", "app.py", "chat_logic.py"]
+   src = ["src"]
 
    [tool.ruff.lint]
    select = ["E", "F", "B", "I"]
@@ -30,9 +30,10 @@
        "E203", # スライス周りの Black 互換
        "E501", # 100 文字制約内であれば `ruff format` が調整
    ]
+   extend-include = ["tests/**", "app.py", "chat_logic.py"]
    ```
-   - `src`/`tests` に加えてルート直下のエントリポイント (`app.py`, `chat_logic.py`) も対象にする。
-   - 今後 `core.py` などが追加された場合は `src` 配下に置く想定なので追加設定不要。
+   - `src` は import 解決用のルートのみを指定し、チェック対象は `extend-include` と `ruff check .` の呼び出し側でカバーする。
+   - 今後ルート直下に別エントリポイントが増えても `extend-include` に列挙すればよい。
 3. **ローカルコマンド**
    - `uv run ruff check .`
    - `uv run ruff format .`（修正時）
@@ -100,4 +101,3 @@
 - Lint による静的バグ検出とスタイル統一が PR ベースで自動化される。
 - `pytest` が常に CI で走るため、CLI 回りの退行を早期検知できる。
 - テスト拡張タスクの優先度と到達目標が明文化され、開発者間で解釈がぶれない。
-
