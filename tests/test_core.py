@@ -1,6 +1,4 @@
-from unittest.mock import Mock, patch
-
-import pytest
+from unittest.mock import patch
 
 import multi_llm_chat.core as core
 
@@ -35,9 +33,9 @@ def test_prepare_request_openai_adds_system_prompt():
         {"role": "assistant", "content": "Hi there"},
     ]
     system_prompt = "You are a helpful assistant."
-    
+
     result = core.prepare_request(history, system_prompt, "gpt-4o")
-    
+
     assert len(result) == 3
     assert result[0]["role"] == "system"
     assert result[0]["content"] == system_prompt
@@ -49,9 +47,9 @@ def test_prepare_request_gemini_returns_tuple():
     """prepare_request should return (system_prompt, history) tuple for Gemini"""
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
-    
+
     result = core.prepare_request(history, system_prompt, "gemini-2.0-flash-exp")
-    
+
     assert isinstance(result, tuple)
     assert len(result) == 2
     assert result[0] == system_prompt
@@ -61,18 +59,18 @@ def test_prepare_request_gemini_returns_tuple():
 def test_prepare_request_empty_system_prompt_openai():
     """prepare_request should not add system message when system_prompt is empty for OpenAI"""
     history = [{"role": "user", "content": "Hello"}]
-    
+
     result = core.prepare_request(history, "", "gpt-4o")
-    
+
     assert result == history
 
 
 def test_prepare_request_empty_system_prompt_gemini():
     """prepare_request should return (None, history) when system_prompt is empty for Gemini"""
     history = [{"role": "user", "content": "Hello"}]
-    
+
     result = core.prepare_request(history, "", "gemini-2.0-flash-exp")
-    
+
     assert isinstance(result, tuple)
     assert result[0] is None
     assert result[1] == history
@@ -91,9 +89,9 @@ def test_format_history_for_gemini():
         {"role": "user", "content": "Hello"},
         {"role": "gemini", "content": "Hi there"},
     ]
-    
+
     result = core.format_history_for_gemini(history)
-    
+
     assert len(result) == 2
     assert result[0]["role"] == "user"
     assert result[0]["parts"] == ["Hello"]
@@ -107,9 +105,9 @@ def test_format_history_for_chatgpt():
         {"role": "user", "content": "Hello"},
         {"role": "chatgpt", "content": "Hi there"},
     ]
-    
+
     result = core.format_history_for_chatgpt(history)
-    
+
     assert len(result) == 2
     assert result[0]["role"] == "user"
     assert result[0]["content"] == "Hello"

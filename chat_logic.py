@@ -1,4 +1,4 @@
-from multi_llm_chat.chat_logic import main
+from multi_llm_chat.cli import main
 
 if __name__ == "__main__":
     main()

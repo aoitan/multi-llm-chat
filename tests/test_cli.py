@@ -1,6 +1,4 @@
-from unittest.mock import Mock, patch
-
-import pytest
+from unittest.mock import patch
 
 import multi_llm_chat.cli as cli
 
@@ -33,12 +31,12 @@ def test_system_command_set():
         "hello",
         "exit",
     ]
-    
+
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.cli.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
                 history, system_prompt = cli.main()
-                
+
     assert system_prompt == "You are a helpful assistant."
     # Verify confirmation message was printed
     assert any("システムプロンプト" in str(call) for call in mock_print.call_args_list)
@@ -51,11 +49,11 @@ def test_system_command_display():
         "/system",
         "exit",
     ]
-    
+
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
             cli.main()
-    
+
     # Check that current system prompt was displayed
     assert any("You are helpful." in str(call) for call in mock_print.call_args_list)
 
@@ -68,11 +66,11 @@ def test_system_command_clear():
         "/system",
         "exit",
     ]
-    
+
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
             history, system_prompt = cli.main()
-    
+
     assert system_prompt == ""
     # Verify clear message was printed
     assert any("クリア" in str(call) for call in mock_print.call_args_list)
@@ -81,12 +79,12 @@ def test_system_command_clear():
 def test_system_command_token_limit_exceeded():
     """CLI /system should reject prompt exceeding token limit"""
     long_prompt = "test " * 300000  # Very long prompt
-    
+
     test_inputs = [
         f"/system {long_prompt}",
         "exit",
     ]
-    
+
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
             with patch("multi_llm_chat.core.get_token_info") as mock_token_info:
@@ -96,7 +94,7 @@ def test_system_command_token_limit_exceeded():
                     "is_estimated": False,
                 }
                 history, system_prompt = cli.main()
-    
+
     # System prompt should not be set
     assert system_prompt == ""
     # Warning message should be printed
@@ -109,8 +107,8 @@ def test_history_management_user_input():
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.cli.call_gemini_api", side_effect=_gemini_stream):
-                with patch("multi_llm_chat.cli.call_chatgpt_api", side_effect=_chatgpt_stream):
+            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+                with patch("multi_llm_chat.core.call_chatgpt_api", side_effect=_chatgpt_stream):
                     history, _ = cli.main()
 
     assert len(history) == 4
@@ -124,8 +122,8 @@ def test_history_management_user_input():
     assert history[3]["content"] == "just a thought"
 
 
-@patch("multi_llm_chat.cli.call_gemini_api", side_effect=_gemini_stream)
-@patch("multi_llm_chat.cli.call_chatgpt_api", side_effect=_chatgpt_stream)
+@patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream)
+@patch("multi_llm_chat.core.call_chatgpt_api", side_effect=_chatgpt_stream)
 def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     """CLI should route mentions correctly to appropriate LLMs"""
     # Test @gemini
@@ -197,10 +195,12 @@ def test_unknown_command_error():
         "/unknown command",
         "exit",
     ]
-    
+
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
             cli.main()
-    
+
     # Error message should be printed
-    assert any("エラー" in str(call) and "/unknown" in str(call) for call in mock_print.call_args_list)
+    assert any(
+        "エラー" in str(call) and "/unknown" in str(call) for call in mock_print.call_args_list
+    )
