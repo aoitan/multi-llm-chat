@@ -40,7 +40,8 @@ gradio_utils.get_type = _safe_get_type
 def update_token_display(system_prompt, model_name=None):
     """Update token count display for system prompt"""
     if model_name is None:
-        model_name = core.GEMINI_MODEL
+        # Use smallest context length to be conservative
+        model_name = core.CHATGPT_MODEL
 
     if not system_prompt:
         return "Tokens: 0 / - (no system prompt)"
@@ -64,7 +65,8 @@ def update_token_display(system_prompt, model_name=None):
 def check_send_button_enabled(system_prompt, model_name=None):
     """Check if send button should be enabled based on token limit"""
     if model_name is None:
-        model_name = core.GEMINI_MODEL
+        # Use smallest context length to be conservative
+        model_name = core.CHATGPT_MODEL
 
     if not system_prompt:
         return True
@@ -86,7 +88,15 @@ def respond(user_message, display_history, logic_history, system_prompt):
                 if model_name == "gemini":
                     text = chunk.text
                 elif model_name == "chatgpt":
-                    text = chunk.choices[0].delta.content
+                    delta_content = chunk.choices[0].delta.content
+                    # Handle both string and list responses from OpenAI API
+                    if isinstance(delta_content, list):
+                        text = "".join(
+                            part.text if hasattr(part, "text") else str(part)
+                            for part in delta_content
+                        )
+                    elif delta_content is not None:
+                        text = delta_content
             except (AttributeError, IndexError, TypeError, ValueError):
                 if isinstance(chunk, str):
                     text = chunk

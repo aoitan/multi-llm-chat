@@ -17,7 +17,14 @@ def _process_response_stream(stream, model_name):
             if model_name == "gemini":
                 text = chunk.text
             elif model_name == "chatgpt":
-                text = chunk.choices[0].delta.content
+                delta_content = chunk.choices[0].delta.content
+                # Handle both string and list responses from OpenAI API
+                if isinstance(delta_content, list):
+                    text = "".join(
+                        part.text if hasattr(part, "text") else str(part) for part in delta_content
+                    )
+                elif delta_content is not None:
+                    text = delta_content
         except (AttributeError, IndexError, TypeError, ValueError):
             if isinstance(chunk, str):
                 text = chunk
@@ -40,7 +47,8 @@ def _process_response_stream(stream, model_name):
 def _handle_system_command(args, system_prompt, current_model=None):
     """Handle /system command"""
     if current_model is None:
-        current_model = core.GEMINI_MODEL
+        # Use smallest context length to be conservative
+        current_model = core.CHATGPT_MODEL
 
     if not args:
         # Display current system prompt

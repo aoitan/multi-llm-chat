@@ -68,10 +68,24 @@ def format_history_for_chatgpt(history):
     return chatgpt_history
 
 
-def get_token_info(text, model_name):
-    """Get token information for the given text and model"""
+def get_token_info(text, model_name, history=None):
+    """Get token information for the given text and model
+
+    Args:
+        text: System prompt text
+        model_name: Model to use for context length calculation
+        history: Optional conversation history to include in token count
+
+    Returns:
+        dict with token_count, max_context_length, and is_estimated
+    """
     # Simple estimation based on character count (4 chars ≈ 1 token)
     estimated_tokens = len(text) // 4
+
+    # Add history tokens if provided
+    if history:
+        history_text = "".join(entry.get("content", "") for entry in history)
+        estimated_tokens += len(history_text) // 4
 
     # Define max context length per model
     if "gemini" in model_name.lower():
