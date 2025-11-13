@@ -29,11 +29,11 @@ def test_history_management_user_input():
     with patch("builtins.input", side_effect=test_inputs + ["exit"]):
         with patch("builtins.print"):  # Mock print to avoid console output
             # Mock API calls to control history length
-            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
-                with patch(
-                    "multi_llm_chat.chat_logic.call_chatgpt_api", side_effect=_chatgpt_stream
-                ):
-                    history = chat_logic.main()
+            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+                with patch("multi_llm_chat.core.call_chatgpt_api", side_effect=_chatgpt_stream):
+                    result = chat_logic.main()
+                    # New CLI returns (history, system_prompt) tuple
+                    history = result[0] if isinstance(result, tuple) else result
 
             # Expected history: user, user, gemini, user
             assert len(history) == 4
@@ -48,13 +48,14 @@ def test_history_management_user_input():
 
 
 # Mock API calls for testing routing and API responses
-@patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream)
-@patch("multi_llm_chat.chat_logic.call_chatgpt_api", side_effect=_chatgpt_stream)
+@patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream)
+@patch("multi_llm_chat.core.call_chatgpt_api", side_effect=_chatgpt_stream)
 def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     # Test @gemini
     with patch("builtins.input", side_effect=["@gemini hello", "exit"]):
         with patch("builtins.print"):
-            history = chat_logic.main()
+            result = chat_logic.main()
+            history = result[0] if isinstance(result, tuple) else result
             assert mock_gemini_api.called
             assert not mock_chatgpt_api.called
             assert history[-1]["role"] == "gemini"
@@ -65,7 +66,8 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     # Test @chatgpt
     with patch("builtins.input", side_effect=["@chatgpt hello", "exit"]):
         with patch("builtins.print"):
-            history = chat_logic.main()
+            result = chat_logic.main()
+            history = result[0] if isinstance(result, tuple) else result
             assert not mock_gemini_api.called
             assert mock_chatgpt_api.called
             assert history[-1]["role"] == "chatgpt"
@@ -78,18 +80,19 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
         with patch("builtins.print"):
             history_snapshots = {}
 
-            def gemini_capture(history):
+            def gemini_capture(history, system_prompt=None):
                 history_snapshots["gemini"] = [entry.copy() for entry in history]
                 return iter(["Mocked Gemini Response"])
 
-            def chatgpt_capture(history):
+            def chatgpt_capture(history, system_prompt=None):
                 history_snapshots["chatgpt"] = [entry.copy() for entry in history]
                 return iter(["Mocked ChatGPT Response"])
 
             mock_gemini_api.side_effect = gemini_capture
             mock_chatgpt_api.side_effect = chatgpt_capture
 
-            history = chat_logic.main()
+            result = chat_logic.main()
+            history = result[0] if isinstance(result, tuple) else result
             assert mock_gemini_api.called
             assert mock_chatgpt_api.called
             # Check the last two entries for @all
@@ -108,7 +111,8 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     # Test no mention
     with patch("builtins.input", side_effect=["hello", "exit"]):
         with patch("builtins.print"):
-            history = chat_logic.main()
+            result = chat_logic.main()
+            history = result[0] if isinstance(result, tuple) else result
             assert not mock_gemini_api.called
             assert not mock_chatgpt_api.called
             assert history[-1]["role"] == "user"
