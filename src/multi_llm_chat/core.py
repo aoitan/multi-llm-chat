@@ -122,7 +122,17 @@ def list_gemini_models():
 
 def call_gemini_api(history, system_prompt=None):
     """Call Gemini API with optional system prompt"""
-    model = _get_gemini_model()
+    model = None
+    if system_prompt:
+        if not _configure_gemini():
+            yield (
+                "Gemini API Error: GOOGLE_API_KEY not found in environment variables or .env file."
+            )
+            return
+        model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_prompt)
+    else:
+        model = _get_gemini_model()
+
     if not model:
         yield "Gemini API Error: GOOGLE_API_KEY not found in environment variables or .env file."
         return
@@ -149,6 +159,9 @@ def call_chatgpt_api(history, system_prompt=None):
             return
 
         chatgpt_history = format_history_for_chatgpt(history)
+        if system_prompt:
+            chatgpt_history.insert(0, {"role": "system", "content": system_prompt})
+
         response_stream = client.chat.completions.create(
             model=CHATGPT_MODEL, messages=chatgpt_history, stream=True
         )

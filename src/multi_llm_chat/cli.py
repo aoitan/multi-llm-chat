@@ -37,8 +37,11 @@ def _process_response_stream(stream, model_name):
     return full_response
 
 
-def _handle_system_command(args, system_prompt, current_model="gemini-2.0-flash-exp"):
+def _handle_system_command(args, system_prompt, current_model=None):
     """Handle /system command"""
+    if current_model is None:
+        current_model = core.GEMINI_MODEL
+
     if not args:
         # Display current system prompt
         if system_prompt:

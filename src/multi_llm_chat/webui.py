@@ -37,8 +37,11 @@ gradio_utils._json_schema_to_python_type = _safe__json_schema_to_python_type
 gradio_utils.get_type = _safe_get_type
 
 
-def update_token_display(system_prompt, model_name="gemini-2.0-flash-exp"):
+def update_token_display(system_prompt, model_name=None):
     """Update token count display for system prompt"""
+    if model_name is None:
+        model_name = core.GEMINI_MODEL
+
     if not system_prompt:
         return "Tokens: 0 / - (no system prompt)"
 
@@ -58,8 +61,11 @@ def update_token_display(system_prompt, model_name="gemini-2.0-flash-exp"):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
-def check_send_button_enabled(system_prompt, model_name="gemini-2.0-flash-exp"):
+def check_send_button_enabled(system_prompt, model_name=None):
     """Check if send button should be enabled based on token limit"""
+    if model_name is None:
+        model_name = core.GEMINI_MODEL
+
     if not system_prompt:
         return True
 

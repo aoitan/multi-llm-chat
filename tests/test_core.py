@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import multi_llm_chat.core as core
 
@@ -113,3 +113,74 @@ def test_format_history_for_chatgpt():
     assert result[0]["content"] == "Hello"
     assert result[1]["role"] == "assistant"
     assert result[1]["content"] == "Hi there"
+
+
+def test_call_gemini_api_with_system_prompt():
+    """call_gemini_api should pass system_prompt to GenerativeModel"""
+    history = [{"role": "user", "content": "Hello"}]
+    system_prompt = "You are a helpful assistant."
+
+    with patch("multi_llm_chat.core.genai.GenerativeModel") as mock_model_class:
+        with patch("multi_llm_chat.core._configure_gemini", return_value=True):
+            mock_instance = Mock()
+            mock_instance.generate_content.return_value = iter([Mock(text="Response")])
+            mock_model_class.return_value = mock_instance
+
+            list(core.call_gemini_api(history, system_prompt))
+
+            mock_model_class.assert_called_once_with(
+                core.GEMINI_MODEL, system_instruction=system_prompt
+            )
+
+
+def test_call_gemini_api_without_system_prompt():
+    """call_gemini_api should use cached model when no system_prompt"""
+    history = [{"role": "user", "content": "Hello"}]
+
+    with patch("multi_llm_chat.core._get_gemini_model") as mock_get_model:
+        mock_model = Mock()
+        mock_model.generate_content.return_value = iter([Mock(text="Response")])
+        mock_get_model.return_value = mock_model
+
+        list(core.call_gemini_api(history))
+
+        mock_get_model.assert_called_once()
+
+
+def test_call_chatgpt_api_with_system_prompt():
+    """call_chatgpt_api should prepend system message to history"""
+    history = [{"role": "user", "content": "Hello"}]
+    system_prompt = "You are a helpful assistant."
+
+    with patch("multi_llm_chat.core._get_openai_client") as mock_get_client:
+        mock_client = Mock()
+        mock_stream = Mock()
+        mock_stream.model_dump.return_value = {}
+        mock_client.chat.completions.create.return_value = iter([mock_stream])
+        mock_get_client.return_value = mock_client
+
+        list(core.call_chatgpt_api(history, system_prompt))
+
+        call_args = mock_client.chat.completions.create.call_args
+        messages = call_args[1]["messages"]
+        assert messages[0]["role"] == "system"
+        assert messages[0]["content"] == system_prompt
+        assert messages[1]["role"] == "user"
+
+
+def test_call_chatgpt_api_without_system_prompt():
+    """call_chatgpt_api should not add system message when no system_prompt"""
+    history = [{"role": "user", "content": "Hello"}]
+
+    with patch("multi_llm_chat.core._get_openai_client") as mock_get_client:
+        mock_client = Mock()
+        mock_stream = Mock()
+        mock_client.chat.completions.create.return_value = iter([mock_stream])
+        mock_get_client.return_value = mock_client
+
+        list(core.call_chatgpt_api(history))
+
+        call_args = mock_client.chat.completions.create.call_args
+        messages = call_args[1]["messages"]
+        assert messages[0]["role"] == "user"
+        assert len(messages) == 1
