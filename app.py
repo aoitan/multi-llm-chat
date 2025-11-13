@@ -1,4 +1,4 @@
-from multi_llm_chat.app import demo, launch
+from multi_llm_chat.webui import demo, launch
 
 __all__ = ["demo", "launch"]
 

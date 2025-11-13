@@ -1,7 +1,38 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Root scripts separate the two user experiences: `app.py` hosts the Gradio UI (web), while `chat_logic.py` implements the CLI loop plus API adapters for Gemini and ChatGPT. These scripts now proxy into the `src/multi_llm_chat/` package, which contains the actual implementation. _Epic 003 (Core Refactor) renames these entry points to `webui.py` and `cli.py`; this guide reflects the current state and should be updated after the refactor ships._ Supporting assets live under `doc/` (feature specs) and `issues/` (planning notes). Tests reside in `tests/` and currently focus on CLI behavior via `tests/test_chat_logic.py`. Keep new modules colocated with their interface (e.g., future `core.py` next to the UI/CLI entry points) so both front-ends can import without circular dependencies.
+
+The project follows a 3-tier architecture with clear separation of concerns:
+
+```
+src/multi_llm_chat/
+├── core.py          # Core logic layer (API calls, history management, token calculation)
+├── cli.py           # CLI interface layer (REPL loop, command processing)
+├── webui.py         # Web UI layer (Gradio interface)
+├── app.py           # Backward compatibility layer (re-exports webui)
+└── chat_logic.py    # Backward compatibility layer (re-exports core + cli)
+```
+
+**Entry points** at the repository root:
+- `app.py` → Launches Web UI via `python app.py`
+- `chat_logic.py` → Launches CLI via `python chat_logic.py`
+
+**Supporting assets**:
+- `doc/` - Feature specifications and architecture documentation
+- `issues/` - Planning notes and task tickets
+- `tests/` - Test suite organized by module:
+  - `test_core.py` - Core logic tests (10 tests)
+  - `test_cli.py` - CLI interface tests (8 tests)
+  - `test_webui.py` - Web UI tests (6 tests)
+  - `test_chat_logic.py` - Backward compatibility tests (3 tests)
+
+**Design principles**:
+- Core layer is UI-agnostic (no `print()`/`input()` except for debugging utilities)
+- Both UI layers (`cli.py`, `webui.py`) import and use `core.py`
+- Backward compatibility layers (`app.py`, `chat_logic.py`) ensure existing code doesn't break
+- All modules are in `src/multi_llm_chat/` package to avoid circular dependencies
+
+See [Architecture Documentation](doc/architecture.md) for detailed design.
 
 ## Build, Test, and Development Commands
 Use `uv` for Python environment setup and dependency syncing:
@@ -10,7 +41,10 @@ uv venv .venv && source .venv/bin/activate
 uv sync --extra dev
 ```
 This installs everything defined in `pyproject.toml` / `uv.lock`, including the `dev` extra for tests and Ruff. When dependencies change, update `pyproject.toml`, refresh the lockfile via `uv lock`, and re-run `uv sync --extra dev`.
-Run the Web UI with `python app.py` (or `MLC_SERVER_NAME=0.0.0.0 python app.py` to share on a LAN). Launch the CLI with `python chat_logic.py`. _After Epic 003 lands, use `python webui.py` / `python cli.py` instead._ 
+
+**Running the applications**:
+- Web UI: `python app.py` (or `MLC_SERVER_NAME=0.0.0.0 python app.py` to share on a LAN)
+- CLI: `python chat_logic.py`
 
 **Linting and formatting**: The repository enforces Ruff checks in CI. Before committing, run:
 ```bash
@@ -21,7 +55,17 @@ uv run ruff format .      # Auto-format code
 **Testing**: Execute the regression suite via `uv run pytest` from the repo root; tests mock API calls, so no keys are needed. CI runs both lint and pytest on all PRs—ensure both pass locally first.
 
 ## Coding Style & Naming Conventions
-Follow PEP 8 with 4-space indentation, snake_case for functions, and UPPER_CASE for config constants such as `GEMINI_MODEL`. The project uses Ruff (configured in `pyproject.toml`) for linting (`select = ["E", "F", "B", "I"]`) and formatting (Black-compatible, 100-char line length). Keep streaming helpers pure where possible and prefer small, testable functions (e.g., `format_history_for_gemini`). UI patches that work around upstream bugs—like the runtime Gradio monkey patch in `webui.py` (currently `app.py`)—should include concise comments explaining the rationale and version. Type hints are welcome when they aid readability, but ergonomic generator code may remain unannotated.
+Follow PEP 8 with 4-space indentation, snake_case for functions, and UPPER_CASE for config constants such as `GEMINI_MODEL`. The project uses Ruff (configured in `pyproject.toml`) for linting (`select = ["E", "F", "B", "I"]`) and formatting (Black-compatible, 100-char line length). 
+
+**Code organization principles**:
+- Keep `core.py` UI-agnostic (no `print()`/`input()` except for debugging utilities like `list_gemini_models()`)
+- Prefer small, testable functions (e.g., `format_history_for_gemini()`)
+- Use generator patterns for streaming responses
+- Cache expensive resources (API clients) at module level
+
+**UI-specific patches**: Workarounds for upstream bugs (like the Gradio JSON Schema patch in `webui.py`) should include concise comments explaining the rationale and affected version.
+
+**Type hints**: Welcome when they aid readability, but ergonomic generator code may remain unannotated.
 
 ## Testing Guidelines
 
