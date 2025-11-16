@@ -27,6 +27,7 @@ def test_repl_exit_commands():
 def test_system_command_set():
     """CLI /system <prompt> should set system prompt"""
     test_inputs = [
+        "test-user",
         "/system You are a helpful assistant.",
         "hello",
         "exit",
@@ -45,6 +46,7 @@ def test_system_command_set():
 def test_system_command_display():
     """CLI /system without argument should display current system prompt"""
     test_inputs = [
+        "test-user",
         "/system You are helpful.",
         "/system",
         "exit",
@@ -61,6 +63,7 @@ def test_system_command_display():
 def test_system_command_clear():
     """CLI /system clear should clear system prompt"""
     test_inputs = [
+        "test-user",
         "/system You are helpful.",
         "/system clear",
         "/system",
@@ -81,6 +84,7 @@ def test_system_command_token_limit_exceeded():
     long_prompt = "test " * 300000  # Very long prompt
 
     test_inputs = [
+        "test-user",
         f"/system {long_prompt}",
         "exit",
     ]
@@ -127,7 +131,7 @@ def test_history_management_user_input():
 def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     """CLI should route mentions correctly to appropriate LLMs"""
     # Test @gemini
-    with patch("builtins.input", side_effect=["@gemini hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "@gemini hello", "exit"]):
         with patch("builtins.print"):
             history, _ = cli.main()
             assert mock_gemini_api.called
@@ -138,7 +142,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_chatgpt_api.reset_mock()
 
     # Test @chatgpt
-    with patch("builtins.input", side_effect=["@chatgpt hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "@chatgpt hello", "exit"]):
         with patch("builtins.print"):
             history, _ = cli.main()
             assert not mock_gemini_api.called
@@ -149,7 +153,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_chatgpt_api.reset_mock()
 
     # Test @all
-    with patch("builtins.input", side_effect=["@all hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "@all hello", "exit"]):
         with patch("builtins.print"):
             history_snapshots = {}
 
@@ -180,7 +184,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_chatgpt_api.reset_mock()
 
     # Test no mention
-    with patch("builtins.input", side_effect=["hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "hello", "exit"]):
         with patch("builtins.print"):
             history, _ = cli.main()
             assert not mock_gemini_api.called
@@ -204,6 +208,27 @@ def test_unknown_command_error():
     assert any(
         "エラー" in str(call) and "/unknown" in str(call) for call in mock_print.call_args_list
     )
+
+
+def test_history_commands_basic(tmp_path, monkeypatch):
+    """Ensure /history list/save/load/new commands run in CLI."""
+    monkeypatch.setenv("CHAT_HISTORY_DIR", str(tmp_path))
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    inputs = [
+        "/history list",
+        "hello",
+        "/history save run1",
+        "/history new",
+        "/history load run1",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=inputs):
+        with patch("builtins.print"):
+            history, system_prompt = cli.main()
+
+    assert system_prompt == ""
+    assert [entry["content"] for entry in history] == ["hello"]
 
 
 def test_system_command_uses_gemini_limit_for_large_prompt(monkeypatch):

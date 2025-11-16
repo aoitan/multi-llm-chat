@@ -88,6 +88,10 @@ OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 ```
 `GOOGLE_API_KEY`は必須です。`OPENAI_API_KEY`はChatGPTを使用する場合に設定してください。
 
+#### オプション環境変数
+- `CHAT_HISTORY_DIR`: 履歴ファイルの保存先（デフォルト: `XDG_DATA_HOME/multi_llm_chat/chat_histories` または `~/.multi_llm_chat/chat_histories`）
+- `CHAT_HISTORY_USER_ID`: CLI/非対話環境で利用するユーザーID（未設定時は起動時に入力を要求）
+
 ### 2. Web UI版の実行 (推奨)
 
 仮想環境がアクティベートされていることを確認し、以下のコマンドでWeb UIを起動します。
