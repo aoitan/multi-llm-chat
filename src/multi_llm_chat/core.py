@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 
 import google.generativeai as genai
 import openai
@@ -12,7 +13,8 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
 _gemini_model = None
-_gemini_models_cache = {}  # Cache models with different system prompts
+_gemini_models_cache = OrderedDict()  # LRU cache for models with system prompts
+_gemini_cache_max_size = 10  # Limit cache size to prevent memory leak
 _openai_client = None
 
 
@@ -38,7 +40,7 @@ def _get_gemini_model(system_prompt=None):
     Returns:
         GenerativeModel instance or None if API key not available
     """
-    global _gemini_model, _gemini_models_cache
+    global _gemini_model, _gemini_models_cache, _gemini_cache_max_size
 
     if not _configure_gemini():
         return None
@@ -49,13 +51,21 @@ def _get_gemini_model(system_prompt=None):
             _gemini_model = genai.GenerativeModel(GEMINI_MODEL)
         return _gemini_model
 
-    # For system prompts, use cache keyed by prompt content
-    if system_prompt not in _gemini_models_cache:
-        _gemini_models_cache[system_prompt] = genai.GenerativeModel(
-            GEMINI_MODEL, system_instruction=system_prompt
-        )
+    # For system prompts, use LRU cache
+    if system_prompt in _gemini_models_cache:
+        # Move to end (most recently used)
+        _gemini_models_cache.move_to_end(system_prompt)
+        return _gemini_models_cache[system_prompt]
 
-    return _gemini_models_cache[system_prompt]
+    # Create new model and add to cache
+    model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_prompt)
+    _gemini_models_cache[system_prompt] = model
+
+    # Evict oldest if cache is full
+    if len(_gemini_models_cache) > _gemini_cache_max_size:
+        _gemini_models_cache.popitem(last=False)
+
+    return model
 
 
 def _get_openai_client():
@@ -106,17 +116,24 @@ def get_token_info(text, model_name, history=None):
         history_text = "".join(entry.get("content", "") for entry in history)
         estimated_tokens += len(history_text) // 4
 
-    # Define max context length per model
-    if "gemini" in model_name.lower():
+    # Define max context length per model (updated for GPT-4 variants)
+    model_lower = model_name.lower()
+    if "gemini" in model_lower:
         max_context = 1048576
-    elif "gpt-4o" in model_name.lower():
+    elif "gpt-4o" in model_lower:
         max_context = 128000
-    elif "gpt-4" in model_name.lower():
+    elif "gpt-4-turbo" in model_lower or "gpt-4-1106" in model_lower:
+        max_context = 128000
+    elif "gpt-4" in model_lower:
+        # Default GPT-4 (non-turbo, non-1106) has 8K context
         max_context = 8192
-    elif "gpt-3.5" in model_name.lower():
+    elif "gpt-3.5-turbo-16k" in model_lower:
         max_context = 16385
+    elif "gpt-3.5" in model_lower:
+        max_context = 4096
     else:
-        max_context = 8192
+        # Conservative default
+        max_context = 4096
 
     return {
         "token_count": estimated_tokens,
