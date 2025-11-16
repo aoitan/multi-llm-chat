@@ -5,11 +5,9 @@ import multi_llm_chat.webui as webui
 
 def test_system_prompt_textbox_exists():
     """Web UI should have system prompt textbox component"""
-    # This test will verify that the UI component is created
-    with patch("gradio.Blocks"):
-        with patch("gradio.Textbox"):
-            # We'll test component creation when implementation exists
-            pass
+    # Verify that the demo has been built
+    assert webui.demo is not None
+    assert hasattr(webui.demo, "blocks")
 
 
 def test_token_count_display_updates():
@@ -53,9 +51,11 @@ def test_send_button_disabled_when_limit_exceeded():
             "is_estimated": False,
         }
 
-        is_enabled = webui.check_send_button_enabled("Very long prompt", "gemini-2.0-flash-exp")
+        result = webui.check_send_button_enabled("Very long prompt", "gemini-2.0-flash-exp")
 
-        assert is_enabled is False
+        # Result should be a gr.Button with interactive=False
+        assert hasattr(result, "interactive")
+        assert result.interactive is False
 
 
 def test_send_button_enabled_when_within_limit():
@@ -67,20 +67,34 @@ def test_send_button_enabled_when_within_limit():
             "is_estimated": True,
         }
 
-        is_enabled = webui.check_send_button_enabled("Normal prompt", "gemini-2.0-flash-exp")
+        result = webui.check_send_button_enabled("Normal prompt", "gemini-2.0-flash-exp")
 
-        assert is_enabled is True
+        # Result should be a gr.Button with interactive=True
+        assert hasattr(result, "interactive")
+        assert result.interactive is True
 
 
 def test_system_prompt_included_in_chat():
     """Chat function should include system prompt when calling LLM"""
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.core.prepare_request") as mock_prepare:
-        with patch("multi_llm_chat.core.call_gemini_api") as mock_api:
-            mock_prepare.return_value = (system_prompt, [{"role": "user", "content": "Hello"}])
-            mock_api.return_value = iter(["Response"])
+    with patch("multi_llm_chat.core.call_gemini_api") as mock_api:
+        mock_api.return_value = iter([type("Chunk", (), {"text": "Response"})()])
 
-            # Simulate chat function call
-            # Implementation will be tested when webui.py exists
+        # Simulate calling respond function
+        user_message = "@gemini Hello"
+        display_history = []
+        logic_history = []
+
+        # Call respond and consume the generator
+        result_gen = webui.respond(user_message, display_history, logic_history, system_prompt)
+        # Consume all yields
+        for _ in result_gen:
             pass
+
+        # Verify that call_gemini_api was called with system_prompt
+        mock_api.assert_called()
+        call_args = mock_api.call_args
+        # System prompt is passed as second positional argument
+        assert len(call_args.args) == 2
+        assert call_args.args[1] == system_prompt

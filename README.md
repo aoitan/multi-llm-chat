@@ -159,7 +159,7 @@ src/multi_llm_chat/
 ## 実装の優先順位と依存関係
 
 機能開発は、以下の順序で進めることを推奨します。これは各仕様書間の依存関係を考慮したものです。  
-並行度の違いで担当者を分ける場合は `issues/009-task-sequential-core-system-prompt.md`（フェーズ1: 並行不可）と `issues/010-task-parallel-context-history.md`（フェーズ2: 並行可能）を参照してください。
+並行度の違いで担当者を分ける場合は `issues/done/009-task-sequential-core-system-prompt.md`（フェーズ1: 完了）と `issues/010-task-parallel-context-history.md`（フェーズ2: 並行可能）を参照してください。
 
 1.  ✅ **全体リファクタリングとシステムプロンプト機能 (`system_prompt_feature_requirements.md`)** - 完了
     -   `core.py`, `webui.py`, `cli.py`へのファイル分割リファクタリング
@@ -190,7 +190,7 @@ src/multi_llm_chat/
 - [ ] Epic 005: 会話履歴の永続化と管理（`issues/005-epic-history-management.md`）
 - [ ] 設定ファイルの外部化
 
-これらのEpicを担当者単位に細分化する場合は、フェーズ1（並行不可）をまとめた`issues/009-task-sequential-core-system-prompt.md`と、フェーズ2（並行可能）を2タスクに整理した`issues/010-task-parallel-context-history.md`の補助タスク票を参照してください。
+これらのEpicを担当者単位に細分化する場合は、フェーズ1（完了済み）は`issues/done/009-task-sequential-core-system-prompt.md`を、フェーズ2（並行可能）は`issues/010-task-parallel-context-history.md`の補助タスク票を参照してください。
 
 ## ライセンス
 [LICENSE](LICENSE) (TBD)

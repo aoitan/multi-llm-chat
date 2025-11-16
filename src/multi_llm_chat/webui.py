@@ -69,10 +69,11 @@ def check_send_button_enabled(system_prompt, model_name=None):
         model_name = core.CHATGPT_MODEL
 
     if not system_prompt:
-        return True
+        return gr.Button(interactive=True)
 
     token_info = core.get_token_info(system_prompt, model_name)
-    return token_info["token_count"] <= token_info["max_context_length"]
+    is_enabled = token_info["token_count"] <= token_info["max_context_length"]
+    return gr.Button(interactive=is_enabled)
 
 
 def respond(user_message, display_history, logic_history, system_prompt):
@@ -175,25 +176,33 @@ with gr.Blocks() as demo:
 
     # UIコンポーネント
     chatbot_ui = gr.Chatbot(label="Conversation", height=600)
-    user_input = gr.Textbox(
-        show_label=False, placeholder="Enter text with @mention...", container=False
-    )
 
-    # Update token display when system prompt changes
+    with gr.Row():
+        user_input = gr.Textbox(
+            show_label=False,
+            placeholder="Enter text with @mention...",
+            container=False,
+            scale=4,
+        )
+        send_button = gr.Button("Send", variant="primary", scale=1)
+
+    # Update token display and button state when system prompt changes
     system_prompt_input.change(
-        update_token_display,
+        lambda prompt: (update_token_display(prompt), check_send_button_enabled(prompt)),
         [system_prompt_input],
-        [token_display],
+        [token_display, send_button],
     )
 
-    # イベントハンドラを定義
-    user_input.submit(
-        respond,
-        [user_input, display_history_state, logic_history_state, system_prompt_input],
-        [chatbot_ui, display_history_state, logic_history_state],
-    )
+    # イベントハンドラを定義（user_inputとsend_buttonの両方）
+    submit_inputs = [user_input, display_history_state, logic_history_state, system_prompt_input]
+    submit_outputs = [chatbot_ui, display_history_state, logic_history_state]
+
+    user_input.submit(respond, submit_inputs, submit_outputs)
+    send_button.click(respond, submit_inputs, submit_outputs)
+
     # 送信後、入力ボックスをクリアする
     user_input.submit(lambda: "", None, user_input)
+    send_button.click(lambda: "", None, user_input)
 
 
 def launch(server_name=None, debug=True):
