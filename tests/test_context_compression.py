@@ -84,8 +84,8 @@ def test_sliding_window_pruning_basic():
         {"role": "gemini", "content": "This is the third response with some content " * 10},
     ]
 
-    # Set a limit to force pruning
-    max_tokens = 200
+    # Set a limit to force pruning (allow 1-2 turns)
+    max_tokens = 500
 
     pruned = core.prune_history_sliding_window(
         history, max_tokens, model_name="gemini-1.5-pro", system_prompt=None
@@ -93,6 +93,7 @@ def test_sliding_window_pruning_basic():
 
     # Should keep only the most recent turns that fit
     assert len(pruned) < len(history)
+    assert len(pruned) >= 2  # At least one complete turn
     # Should keep the most recent message
     assert pruned[-1]["content"] == history[-1]["content"]
 
@@ -200,8 +201,65 @@ def test_invalid_env_var_logs_warning():
         with patch("logging.warning") as mock_warning:
             result = core.get_max_context_length("gemini-1.5-pro")
 
-            # Should fall back to default
-            assert result == 4096
+            # Should fall back to model default (not 4096)
+            assert result == 2097152  # gemini-1.5-pro default
             # Should log warning about invalid value
             mock_warning.assert_called_once()
             assert "GEMINI_MAX_CONTEXT_LENGTH" in str(mock_warning.call_args)
+
+
+def test_get_token_info_uses_env_based_max_context():
+    """get_token_info should use environment-based max context length"""
+    with patch.dict(os.environ, {"GEMINI_MAX_CONTEXT_LENGTH": "50000"}):
+        result = core.get_token_info("test prompt", "gemini-1.5-pro")
+
+        # Should use env-based max context, not built-in model default
+        assert result["max_context_length"] == 50000
+
+
+def test_pruning_preserves_turn_pairs():
+    """Pruning should preserve user-assistant turn pairs"""
+    # Create history where pruning would split a turn
+    history = [
+        {"role": "user", "content": "Q1 " * 50},
+        {"role": "gemini", "content": "A1 " * 50},
+        {"role": "user", "content": "Q2 " * 50},
+        {"role": "gemini", "content": "A2 " * 50},
+    ]
+
+    # Set limit that would include A2 but exclude Q2 if we don't preserve pairs
+    max_tokens = 150
+
+    pruned = core.prune_history_sliding_window(
+        history, max_tokens, model_name="gemini-1.5-pro", system_prompt=None
+    )
+
+    # Should not have orphaned assistant messages
+    for i, entry in enumerate(pruned):
+        if entry["role"] in ["gemini", "chatgpt"]:
+            # Assistant message must have preceding user message
+            assert i > 0, "Assistant message at start (orphaned)"
+            assert pruned[i - 1]["role"] == "user", "Assistant without preceding user message"
+
+
+def test_pruning_removes_orphaned_assistant_messages():
+    """Pruning should remove assistant messages if their user message doesn't fit"""
+    history = [
+        {"role": "user", "content": "Q1 " * 100},  # Large user message
+        {"role": "gemini", "content": "A1"},  # Small response
+        {"role": "user", "content": "Q2"},
+        {"role": "gemini", "content": "A2"},
+    ]
+
+    # Very small limit - only latest turn should fit
+    max_tokens = 20
+
+    pruned = core.prune_history_sliding_window(
+        history, max_tokens, model_name="gemini-1.5-pro", system_prompt=None
+    )
+
+    # Should only have latest turn (Q2 + A2)
+    assert len(pruned) == 2
+    assert pruned[0]["content"] == "Q2"
+    assert pruned[1]["content"] == "A2"
+    # A1 should be removed because Q1 doesn't fit

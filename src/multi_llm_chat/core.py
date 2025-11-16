@@ -21,12 +21,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
-# Context compression settings
-DEFAULT_MAX_CONTEXT_LENGTH = int(os.getenv("DEFAULT_MAX_CONTEXT_LENGTH", "4096"))
-GEMINI_MAX_CONTEXT_LENGTH = os.getenv("GEMINI_MAX_CONTEXT_LENGTH")
-CHATGPT_MAX_CONTEXT_LENGTH = os.getenv("CHATGPT_MAX_CONTEXT_LENGTH")
-TOKEN_ESTIMATION_BUFFER_FACTOR = float(os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "1.2"))
-
 _gemini_model = None
 _gemini_models_cache = OrderedDict()  # LRU cache: hash -> (prompt, model)
 _gemini_cache_max_size = 10  # Limit cache size to prevent memory leak
@@ -204,35 +198,9 @@ def get_token_info(text, model_name, history=None):
         history_text = "".join(entry.get("content", "") for entry in history)
         estimated_tokens += _estimate_tokens(history_text)
 
-    # Define max context length per model (updated for GPT-4 variants and Gemini models)
-    # Pattern matching is ordered from most specific to least specific
-    model_lower = model_name.lower()
-
-    # Model context patterns: (pattern, max_context)
-    # Order matters: more specific patterns must come first
-    MODEL_PATTERNS = [
-        # Gemini models - specific variants first
-        ("gemini-2.0-flash", 1048576),
-        ("gemini-exp-1206", 1048576),
-        ("gemini-1.5-pro", 2097152),
-        ("gemini-1.5-flash", 1048576),
-        ("gemini-pro", 32760),
-        ("gemini", 32760),  # Conservative default for unknown Gemini
-        # GPT models - specific variants first
-        ("gpt-4o", 128000),
-        ("gpt-4-turbo", 128000),
-        ("gpt-4-1106", 128000),
-        ("gpt-4", 8192),  # Base GPT-4
-        ("gpt-3.5-turbo-16k", 16385),
-        ("gpt-3.5", 4096),
-    ]
-
-    # Find first matching pattern
-    max_context = 4096  # Conservative default
-    for pattern, context_length in MODEL_PATTERNS:
-        if pattern in model_lower:
-            max_context = context_length
-            break
+    # Use environment-based max context length (from get_max_context_length)
+    # This ensures consistency with context compression logic
+    max_context = get_max_context_length(model_name)
 
     return {
         "token_count": estimated_tokens,
@@ -365,10 +333,10 @@ def extract_text_from_chunk(chunk, model_name):
 def get_max_context_length(model_name):
     """Get maximum context length for the specified model
 
-    Reads from environment variables with fallback to defaults:
+    Reads from environment variables with fallback to model defaults:
     1. Model-specific: GEMINI_MAX_CONTEXT_LENGTH, CHATGPT_MAX_CONTEXT_LENGTH
     2. Generic: DEFAULT_MAX_CONTEXT_LENGTH
-    3. Built-in: 4096
+    3. Model built-in defaults (based on model capabilities)
 
     Args:
         model_name: Model identifier
@@ -405,7 +373,31 @@ def get_max_context_length(model_name):
         except ValueError:
             logging.warning(f"Invalid DEFAULT_MAX_CONTEXT_LENGTH: {default_max}. Using default.")
 
-    # Built-in default
+    # Built-in model-specific defaults (based on model capabilities)
+    # Pattern matching is ordered from most specific to least specific
+    MODEL_DEFAULTS = [
+        # Gemini models - specific variants first
+        ("gemini-2.0-flash", 1048576),
+        ("gemini-exp-1206", 1048576),
+        ("gemini-1.5-pro", 2097152),
+        ("gemini-1.5-flash", 1048576),
+        ("gemini-pro", 32760),
+        ("gemini", 32760),  # Conservative default for unknown Gemini
+        # GPT models - specific variants first
+        ("gpt-4o", 128000),
+        ("gpt-4-turbo", 128000),
+        ("gpt-4-1106", 128000),
+        ("gpt-4", 8192),  # Base GPT-4
+        ("gpt-3.5-turbo-16k", 16385),
+        ("gpt-3.5", 4096),
+    ]
+
+    # Find first matching pattern
+    for pattern, context_length in MODEL_DEFAULTS:
+        if pattern in model_lower:
+            return context_length
+
+    # Final fallback
     return 4096
 
 
@@ -452,6 +444,7 @@ def prune_history_sliding_window(history, max_tokens, model_name, system_prompt=
 
     Removes oldest conversation turns to fit within max_tokens limit.
     Always preserves the most recent turns and accounts for system prompt.
+    Preserves user-assistant turn pairs to maintain conversation coherence.
 
     Args:
         history: Conversation history list
@@ -484,23 +477,40 @@ def prune_history_sliding_window(history, max_tokens, model_name, system_prompt=
     if total_tokens <= max_tokens:
         return history
 
-    # Prune from the beginning, preserving complete turns
-    # A turn is user message + assistant response
+    # Prune from the beginning, preserving complete user-assistant turns
     pruned_history = []
     accumulated_tokens = system_tokens
 
     # Start from the end and work backwards
-    for i in range(len(history) - 1, -1, -1):
+    i = len(history) - 1
+    while i >= 0:
         entry = history[i]
         tokens = entry_tokens[i]
 
-        # Check if adding this entry would exceed limit
-        if accumulated_tokens + tokens <= max_tokens:
-            pruned_history.insert(0, entry)
-            accumulated_tokens += tokens
+        # If this is an assistant message, check if we can include its user message too
+        if entry["role"] in ["gemini", "chatgpt"]:
+            # Need to include the preceding user message for a complete turn
+            if i > 0 and history[i - 1]["role"] == "user":
+                # Calculate cost of both messages
+                turn_tokens = tokens + entry_tokens[i - 1]
+                if accumulated_tokens + turn_tokens <= max_tokens:
+                    # Add both user and assistant messages (reverse order)
+                    pruned_history.insert(0, history[i])
+                    pruned_history.insert(0, history[i - 1])
+                    accumulated_tokens += turn_tokens
+                    i -= 2  # Skip both messages
+                else:
+                    # Turn doesn't fit, stop here
+                    break
+            else:
+                # Orphaned assistant message (no preceding user) - skip it
+                i -= 1
         else:
-            # Stop pruning - we've reached the limit
-            break
+            # User message - only add if there's room
+            if accumulated_tokens + tokens <= max_tokens:
+                pruned_history.insert(0, entry)
+                accumulated_tokens += tokens
+            i -= 1
 
     return pruned_history
 
