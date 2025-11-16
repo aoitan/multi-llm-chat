@@ -6,6 +6,8 @@
 
 # Repository Guidelines
 
+For the development workflow of this project, please refer to [Development Workflow (`doc/development_workflow.md`)](./doc/development_workflow.md).
+
 ## Project Structure & Module Organization
 
 The project follows a 3-tier architecture with clear separation of concerns:
