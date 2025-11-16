@@ -1,3 +1,9 @@
+# Agent Instructions
+
+**Primary Language**: Respond in Japanese. While technical discussions may involve English terms, the primary language for all interactions, explanations, and generated content should be Japanese.
+
+---
+
 # Repository Guidelines
 
 ## Project Structure & Module Organization
