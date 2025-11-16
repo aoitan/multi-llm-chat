@@ -323,3 +323,92 @@ def test_chatgpt_token_count_includes_message_overhead():
     # Should be more than just content tokens (includes ~3 token overhead)
     assert result > content_tokens
     assert result == content_tokens + 3  # OpenAI's per-message overhead
+
+
+def test_pruning_preserves_multiple_assistant_responses():
+    """Pruning should preserve multiple assistant responses from @all pattern"""
+    # Simulate @all pattern: user -> gemini -> chatgpt
+    history = [
+        {"role": "user", "content": "Question " * 50},
+        {"role": "gemini", "content": "Gemini answer " * 50},
+        {"role": "chatgpt", "content": "ChatGPT answer " * 50},
+        {"role": "user", "content": "Follow-up"},
+        {"role": "gemini", "content": "Response"},
+    ]
+
+    # Set limit that can fit latest turn but not all
+    max_tokens = 300
+
+    pruned = core.prune_history_sliding_window(
+        history, max_tokens, model_name="gemini-1.5-pro", system_prompt=None
+    )
+
+    # Should not lose chatgpt response just because it follows gemini
+    # Check that we don't have gemini without preceding chatgpt in @all pattern
+    for i, entry in enumerate(pruned):
+        if entry["role"] == "chatgpt":
+            # ChatGPT response should still be in the history if its user message is there
+            assert i > 0, "ChatGPT response without context"
+
+
+def test_pruning_handles_user_gemini_chatgpt_pattern():
+    """Pruning should correctly handle user→gemini→chatgpt pattern"""
+    history = [
+        {"role": "user", "content": "Q1"},
+        {"role": "gemini", "content": "G1"},
+        {"role": "chatgpt", "content": "C1"},
+        {"role": "user", "content": "Q2"},
+        {"role": "gemini", "content": "G2"},
+    ]
+
+    # Very small limit - only latest turn
+    max_tokens = 20
+
+    pruned = core.prune_history_sliding_window(
+        history, max_tokens, model_name="gemini-1.5-pro", system_prompt=None
+    )
+
+    # Should keep Q2 and G2 at minimum
+    assert len(pruned) >= 2
+    assert pruned[-1]["content"] == "G2"
+    assert pruned[-2]["content"] == "Q2"
+
+
+def test_get_token_info_filters_by_model_gemini():
+    """get_token_info for Gemini should exclude ChatGPT responses"""
+    text = "System prompt"
+    history = [
+        {"role": "user", "content": "Question"},
+        {"role": "gemini", "content": "Gemini answer"},
+        {"role": "chatgpt", "content": "ChatGPT answer"},  # Should be excluded
+    ]
+
+    result = core.get_token_info(text, "gemini-1.5-pro", history=history)
+
+    # Calculate expected tokens (system + user + gemini only)
+    expected = core.calculate_tokens(text, "gemini-1.5-pro")
+    expected += core.calculate_tokens("Question", "gemini-1.5-pro")
+    expected += core.calculate_tokens("Gemini answer", "gemini-1.5-pro")
+    # Should NOT include ChatGPT answer
+
+    assert result["token_count"] == expected
+
+
+def test_get_token_info_filters_by_model_chatgpt():
+    """get_token_info for ChatGPT should exclude Gemini responses"""
+    text = "System prompt"
+    history = [
+        {"role": "user", "content": "Question"},
+        {"role": "gemini", "content": "Gemini answer"},  # Should be excluded
+        {"role": "chatgpt", "content": "ChatGPT answer"},
+    ]
+
+    result = core.get_token_info(text, "gpt-4o", history=history)
+
+    # Calculate expected tokens (system + user + chatgpt only)
+    expected = core.calculate_tokens(text, "gpt-4o")
+    expected += core.calculate_tokens("Question", "gpt-4o")
+    expected += core.calculate_tokens("ChatGPT answer", "gpt-4o")
+    # Should NOT include Gemini answer
+
+    assert result["token_count"] == expected

@@ -193,18 +193,30 @@ def get_token_info(text, model_name, history=None):
     # Use calculate_tokens for accurate/buffered counting
     token_count = calculate_tokens(text, model_name)
 
-    # Add history tokens if provided
+    # Determine model type for filtering
+    model_lower = model_name.lower()
+
+    # Add history tokens if provided (filter by model)
     if history:
+        # Determine which roles to count based on model
+        if "gpt" in model_lower:
+            # For ChatGPT: count user and chatgpt messages only
+            relevant_roles = {"user", "chatgpt"}
+        else:
+            # For Gemini: count user and gemini messages only
+            relevant_roles = {"user", "gemini"}
+
         for entry in history:
-            content = entry.get("content", "")
-            token_count += calculate_tokens(content, model_name)
+            role = entry.get("role", "")
+            if role in relevant_roles:
+                content = entry.get("content", "")
+                token_count += calculate_tokens(content, model_name)
 
     # Use environment-based max context length (from get_max_context_length)
     # This ensures consistency with context compression logic
     max_context = get_max_context_length(model_name)
 
     # Check if using tiktoken (accurate) or estimation
-    model_lower = model_name.lower()
     is_estimated = "gpt" not in model_lower or not TIKTOKEN_AVAILABLE
 
     return {
