@@ -13,6 +13,8 @@ description: A CLI agent that responds in Japanese and follows the project's TDD
 
 ## TDD Workflow (Required)
 
+For the development workflow of this project, please refer to [Development Workflow (`doc/development_workflow.md`)](../../doc/development_workflow.md).
+
 This project requires Test-Driven Development (TDD). Follow the steps below:
 
 ### Before Implementation
