@@ -99,23 +99,41 @@ def _get_openai_client():
 
 
 def format_history_for_gemini(history):
-    """Convert history to Gemini API format"""
+    """Convert history to Gemini API format
+
+    Filters out responses from other LLMs (e.g., ChatGPT) to avoid
+    sending Gemini messages it didn't generate, which would create
+    a self-contradictory conversation.
+    """
     gemini_history = []
     for entry in history:
-        role = "user" if entry["role"] == "user" else "model"
-        gemini_history.append({"role": role, "parts": [entry["content"]]})
+        role = entry["role"]
+        # Only include user messages and Gemini's own responses
+        if role == "user":
+            gemini_history.append({"role": "user", "parts": [entry["content"]]})
+        elif role == "gemini":
+            gemini_history.append({"role": "model", "parts": [entry["content"]]})
+        # Skip chatgpt, system, and other roles - they shouldn't be sent to Gemini
     return gemini_history
 
 
 def format_history_for_chatgpt(history):
-    """Convert history to ChatGPT API format"""
+    """Convert history to ChatGPT API format
+
+    Filters out responses from other LLMs (e.g., Gemini) to avoid
+    sending ChatGPT messages it didn't generate, which would create
+    a self-contradictory conversation.
+    """
     chatgpt_history = []
     for entry in history:
-        if entry["role"] == "system":
+        role = entry["role"]
+        if role == "system":
             chatgpt_history.append({"role": "system", "content": entry["content"]})
-            continue
-        role = "user" if entry["role"] == "user" else "assistant"
-        chatgpt_history.append({"role": role, "content": entry["content"]})
+        elif role == "user":
+            chatgpt_history.append({"role": "user", "content": entry["content"]})
+        elif role == "chatgpt":
+            chatgpt_history.append({"role": "assistant", "content": entry["content"]})
+        # Skip gemini and other roles - they shouldn't be sent to ChatGPT
     return chatgpt_history
 
 

@@ -204,3 +204,26 @@ def test_unknown_command_error():
     assert any(
         "エラー" in str(call) and "/unknown" in str(call) for call in mock_print.call_args_list
     )
+
+
+def test_system_command_uses_gemini_limit_for_large_prompt(monkeypatch):
+    """System command should accept large prompts when Gemini's context is appropriate"""
+    # Create a ~50K character prompt (would exceed ChatGPT 4K but fit in Gemini 32K+)
+    large_prompt = "A" * 50000
+
+    # Mock get_token_info to return realistic values
+    def mock_get_token_info(text, model_name, history=None):
+        if "gemini" in model_name.lower():
+            return {"token_count": 12500, "max_context_length": 32760, "is_estimated": True}
+        else:  # ChatGPT
+            return {"token_count": 12500, "max_context_length": 4096, "is_estimated": True}
+
+    monkeypatch.setattr("multi_llm_chat.core.get_token_info", mock_get_token_info)
+
+    # With Gemini model, should accept the prompt
+    result = cli._handle_system_command(large_prompt, "", current_model="gemini-pro")
+    assert result == large_prompt
+
+    # With ChatGPT model, should reject the prompt
+    result = cli._handle_system_command(large_prompt, "old_prompt", current_model="gpt-4")
+    assert result == "old_prompt"  # Should keep old prompt, not accept new one

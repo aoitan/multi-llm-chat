@@ -330,3 +330,39 @@ def test_extract_text_from_chunk_fallback():
     chunk = type("Invalid", (), {})()
     result = core.extract_text_from_chunk(chunk, "gemini")
     assert result == ""
+
+
+def test_format_history_for_gemini_filters_chatgpt_responses():
+    """format_history_for_gemini should filter out ChatGPT responses to avoid confusion"""
+    history = [
+        {"role": "user", "content": "Hello"},
+        {"role": "chatgpt", "content": "Hi from ChatGPT"},
+        {"role": "user", "content": "Another question"},
+        {"role": "gemini", "content": "Answer from Gemini"},
+    ]
+
+    result = core.format_history_for_gemini(history)
+
+    # Should only include user messages and Gemini's own responses
+    assert len(result) == 3
+    assert result[0] == {"role": "user", "parts": ["Hello"]}
+    assert result[1] == {"role": "user", "parts": ["Another question"]}
+    assert result[2] == {"role": "model", "parts": ["Answer from Gemini"]}
+
+
+def test_format_history_for_chatgpt_filters_gemini_responses():
+    """format_history_for_chatgpt should filter out Gemini responses to avoid confusion"""
+    history = [
+        {"role": "user", "content": "Hello"},
+        {"role": "gemini", "content": "Hi from Gemini"},
+        {"role": "user", "content": "Another question"},
+        {"role": "chatgpt", "content": "Answer from ChatGPT"},
+    ]
+
+    result = core.format_history_for_chatgpt(history)
+
+    # Should only include user messages and ChatGPT's own responses
+    assert len(result) == 3
+    assert result[0] == {"role": "user", "content": "Hello"}
+    assert result[1] == {"role": "user", "content": "Another question"}
+    assert result[2] == {"role": "assistant", "content": "Answer from ChatGPT"}

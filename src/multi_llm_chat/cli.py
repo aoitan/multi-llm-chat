@@ -29,10 +29,16 @@ def _process_response_stream(stream, model_name):
 
 
 def _handle_system_command(args, system_prompt, current_model=None):
-    """Handle /system command"""
+    """Handle /system command
+
+    Uses the largest available context window across enabled models to avoid
+    unnecessarily rejecting prompts that would work with some models.
+    """
     if current_model is None:
-        # Use smallest context length to be conservative
-        current_model = core.CHATGPT_MODEL
+        # Use the largest context length across enabled models
+        # This allows users to set prompts for high-context models (Gemini)
+        # while still warning if they exceed all model limits
+        current_model = core.GEMINI_MODEL  # Gemini has the largest context
 
     if not args:
         # Display current system prompt
