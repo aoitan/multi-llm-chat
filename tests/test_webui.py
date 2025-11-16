@@ -20,11 +20,34 @@ def test_token_count_display_updates():
             "is_estimated": True,
         }
 
-        result = webui.update_token_display("Test system prompt", "gemini-2.0-flash-exp")
+        result = webui.update_token_display("Test system prompt", None, "gemini-2.0-flash-exp")
 
         assert "50" in result
         assert "1048576" in result
         assert "estimated" in result.lower()
+        # Verify history was passed (None in this case)
+        mock_token_info.assert_called_once_with("Test system prompt", "gemini-2.0-flash-exp", None)
+
+
+def test_token_count_includes_history():
+    """Token count should include both system prompt and history"""
+    history = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi there"},
+    ]
+
+    with patch("multi_llm_chat.core.get_token_info") as mock_token_info:
+        mock_token_info.return_value = {
+            "token_count": 150,
+            "max_context_length": 1048576,
+            "is_estimated": True,
+        }
+
+        result = webui.update_token_display("Test prompt", history, "gemini-2.0-flash-exp")
+
+        # Verify history was passed to get_token_info
+        mock_token_info.assert_called_once_with("Test prompt", "gemini-2.0-flash-exp", history)
+        assert "150" in result
 
 
 def test_token_limit_warning_display():
@@ -36,7 +59,7 @@ def test_token_limit_warning_display():
             "is_estimated": False,
         }
 
-        result = webui.update_token_display("Very long prompt", "gemini-2.0-flash-exp")
+        result = webui.update_token_display("Very long prompt", None, "gemini-2.0-flash-exp")
 
         # Should contain warning indication (e.g., red color or warning text)
         assert "警告" in result or "warning" in result.lower() or "2000000" in result
@@ -51,7 +74,7 @@ def test_send_button_disabled_when_limit_exceeded():
             "is_estimated": False,
         }
 
-        result = webui.check_send_button_enabled("Very long prompt", "gemini-2.0-flash-exp")
+        result = webui.check_send_button_enabled("Very long prompt", None, "gemini-2.0-flash-exp")
 
         # Result should be a gr.Button with interactive=False
         assert hasattr(result, "interactive")
@@ -67,7 +90,7 @@ def test_send_button_enabled_when_within_limit():
             "is_estimated": True,
         }
 
-        result = webui.check_send_button_enabled("Normal prompt", "gemini-2.0-flash-exp")
+        result = webui.check_send_button_enabled("Normal prompt", None, "gemini-2.0-flash-exp")
 
         # Result should be a gr.Button with interactive=True
         assert hasattr(result, "interactive")

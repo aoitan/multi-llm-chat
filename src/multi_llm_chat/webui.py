@@ -37,8 +37,17 @@ gradio_utils._json_schema_to_python_type = _safe__json_schema_to_python_type
 gradio_utils.get_type = _safe_get_type
 
 
-def update_token_display(system_prompt, model_name=None):
-    """Update token count display for system prompt"""
+def update_token_display(system_prompt, logic_history=None, model_name=None):
+    """Update token count display for system prompt and conversation history
+
+    Args:
+        system_prompt: System prompt text
+        logic_history: Current conversation history (optional)
+        model_name: Model name for context length calculation (optional)
+
+    Returns:
+        HTML string for token display
+    """
     if model_name is None:
         # Use smallest context length to be conservative
         model_name = core.CHATGPT_MODEL
@@ -46,7 +55,8 @@ def update_token_display(system_prompt, model_name=None):
     if not system_prompt:
         return "Tokens: 0 / - (no system prompt)"
 
-    token_info = core.get_token_info(system_prompt, model_name)
+    # Include history in token calculation
+    token_info = core.get_token_info(system_prompt, model_name, logic_history)
     token_count = token_info["token_count"]
     max_context = token_info["max_context_length"]
     is_estimated = token_info["is_estimated"]
@@ -62,8 +72,17 @@ def update_token_display(system_prompt, model_name=None):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
-def check_send_button_enabled(system_prompt, model_name=None):
-    """Check if send button should be enabled based on token limit"""
+def check_send_button_enabled(system_prompt, logic_history=None, model_name=None):
+    """Check if send button should be enabled based on token limit
+
+    Args:
+        system_prompt: System prompt text
+        logic_history: Current conversation history (optional)
+        model_name: Model name for context length calculation (optional)
+
+    Returns:
+        gr.Button with interactive state set
+    """
     if model_name is None:
         # Use smallest context length to be conservative
         model_name = core.CHATGPT_MODEL
@@ -71,7 +90,8 @@ def check_send_button_enabled(system_prompt, model_name=None):
     if not system_prompt:
         return gr.Button(interactive=True)
 
-    token_info = core.get_token_info(system_prompt, model_name)
+    # Include history in token calculation
+    token_info = core.get_token_info(system_prompt, model_name, logic_history)
     is_enabled = token_info["token_count"] <= token_info["max_context_length"]
     return gr.Button(interactive=is_enabled)
 
@@ -186,10 +206,13 @@ with gr.Blocks() as demo:
         )
         send_button = gr.Button("Send", variant="primary", scale=1)
 
-    # Update token display and button state when system prompt changes
+    # Update token display and button state when system prompt or history changes
     system_prompt_input.change(
-        lambda prompt: (update_token_display(prompt), check_send_button_enabled(prompt)),
-        [system_prompt_input],
+        lambda prompt, history: (
+            update_token_display(prompt, history),
+            check_send_button_enabled(prompt, history),
+        ),
+        [system_prompt_input, logic_history_state],
         [token_display, send_button],
     )
 
@@ -197,8 +220,32 @@ with gr.Blocks() as demo:
     submit_inputs = [user_input, display_history_state, logic_history_state, system_prompt_input]
     submit_outputs = [chatbot_ui, display_history_state, logic_history_state]
 
-    user_input.submit(respond, submit_inputs, submit_outputs)
-    send_button.click(respond, submit_inputs, submit_outputs)
+    # Update token display after each response (history changed)
+    def update_ui_after_response(chatbot, display_hist, logic_hist, system_prompt):
+        return (
+            chatbot,
+            display_hist,
+            logic_hist,
+            update_token_display(system_prompt, logic_hist),
+            check_send_button_enabled(system_prompt, logic_hist),
+        )
+
+    user_input.submit(respond, submit_inputs, submit_outputs).then(
+        lambda chat, disp, logic, sys: (
+            update_token_display(sys, logic),
+            check_send_button_enabled(sys, logic),
+        ),
+        [chatbot_ui, display_history_state, logic_history_state, system_prompt_input],
+        [token_display, send_button],
+    )
+    send_button.click(respond, submit_inputs, submit_outputs).then(
+        lambda chat, disp, logic, sys: (
+            update_token_display(sys, logic),
+            check_send_button_enabled(sys, logic),
+        ),
+        [chatbot_ui, display_history_state, logic_history_state, system_prompt_input],
+        [token_display, send_button],
+    )
 
     # 送信後、入力ボックスをクリアする
     user_input.submit(lambda: "", None, user_input)
