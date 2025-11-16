@@ -12,6 +12,7 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
 _gemini_model = None
+_gemini_models_cache = {}  # Cache models with different system prompts
 _openai_client = None
 
 
@@ -28,15 +29,33 @@ def _configure_gemini():
     return True
 
 
-def _get_gemini_model():
-    """Return a cached GenerativeModel instance if available."""
-    global _gemini_model
-    if _gemini_model is not None:
-        return _gemini_model
+def _get_gemini_model(system_prompt=None):
+    """Get or create a cached Gemini model instance
+
+    Args:
+        system_prompt: Optional system instruction for the model
+
+    Returns:
+        GenerativeModel instance or None if API key not available
+    """
+    global _gemini_model, _gemini_models_cache
+
     if not _configure_gemini():
         return None
-    _gemini_model = genai.GenerativeModel(GEMINI_MODEL)
-    return _gemini_model
+
+    # If no system prompt, use the default cached model
+    if system_prompt is None:
+        if _gemini_model is None:
+            _gemini_model = genai.GenerativeModel(GEMINI_MODEL)
+        return _gemini_model
+
+    # For system prompts, use cache keyed by prompt content
+    if system_prompt not in _gemini_models_cache:
+        _gemini_models_cache[system_prompt] = genai.GenerativeModel(
+            GEMINI_MODEL, system_instruction=system_prompt
+        )
+
+    return _gemini_models_cache[system_prompt]
 
 
 def _get_openai_client():
@@ -136,19 +155,11 @@ def list_gemini_models():
 
 def call_gemini_api(history, system_prompt=None):
     """Call Gemini API with optional system prompt"""
-    model = None
-    if system_prompt:
-        if not _configure_gemini():
-            yield (
-                "Gemini API Error: GOOGLE_API_KEY not found in environment variables or .env file."
-            )
-            return
-        model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_prompt)
-    else:
-        model = _get_gemini_model()
+    # Use cached model with system prompt
+    model = _get_gemini_model(system_prompt)
 
     if not model:
-        yield "Gemini API Error: GOOGLE_API_KEY not found in environment variables or .env file."
+        yield ("Gemini API Error: GOOGLE_API_KEY not found in environment variables or .env file.")
         return
 
     try:
@@ -172,12 +183,13 @@ def call_chatgpt_api(history, system_prompt=None):
             yield "ChatGPT API Error: OPENAI_API_KEYが設定されていません。"
             return
 
-        chatgpt_history = format_history_for_chatgpt(history)
+        # Use prepare_request to format history with system prompt
+        formatted_history = format_history_for_chatgpt(history)
         if system_prompt:
-            chatgpt_history.insert(0, {"role": "system", "content": system_prompt})
+            formatted_history = [{"role": "system", "content": system_prompt}] + formatted_history
 
         response_stream = client.chat.completions.create(
-            model=CHATGPT_MODEL, messages=chatgpt_history, stream=True
+            model=CHATGPT_MODEL, messages=formatted_history, stream=True
         )
         for chunk in response_stream:
             yield chunk

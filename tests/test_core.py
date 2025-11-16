@@ -116,21 +116,18 @@ def test_format_history_for_chatgpt():
 
 
 def test_call_gemini_api_with_system_prompt():
-    """call_gemini_api should pass system_prompt to GenerativeModel"""
+    """call_gemini_api should pass system_prompt to cached model"""
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.core.genai.GenerativeModel") as mock_model_class:
-        with patch("multi_llm_chat.core._configure_gemini", return_value=True):
-            mock_instance = Mock()
-            mock_instance.generate_content.return_value = iter([Mock(text="Response")])
-            mock_model_class.return_value = mock_instance
+    with patch("multi_llm_chat.core._get_gemini_model") as mock_get_model:
+        mock_instance = Mock()
+        mock_instance.generate_content.return_value = iter([Mock(text="Response")])
+        mock_get_model.return_value = mock_instance
 
-            list(core.call_gemini_api(history, system_prompt))
+        list(core.call_gemini_api(history, system_prompt))
 
-            mock_model_class.assert_called_once_with(
-                core.GEMINI_MODEL, system_instruction=system_prompt
-            )
+        mock_get_model.assert_called_once_with(system_prompt)
 
 
 def test_call_gemini_api_without_system_prompt():
@@ -144,7 +141,7 @@ def test_call_gemini_api_without_system_prompt():
 
         list(core.call_gemini_api(history))
 
-        mock_get_model.assert_called_once()
+        mock_get_model.assert_called_once_with(None)
 
 
 def test_call_chatgpt_api_with_system_prompt():
