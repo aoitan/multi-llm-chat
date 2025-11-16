@@ -23,11 +23,7 @@ def _default_base_dir() -> Path:
 def sanitize_name(name: str) -> str:
     """Sanitize user-provided identifiers for filesystem safety."""
     raw = (name or "").strip()
-    if (
-        raw in {"", ".", ".."}
-        or os.path.sep in raw
-        or (os.path.altsep and os.path.altsep in raw)
-    ):
+    if raw in {"", ".", ".."} or os.path.sep in raw or (os.path.altsep and os.path.altsep in raw):
         raise ValueError("Invalid name")
 
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", raw)

@@ -102,8 +102,7 @@ def _prompt_user_id():
             return user_id
         except ValueError:
             print(
-                "エラー: 無効な名前です。許可される文字は"
-                "英数字、ハイフン、アンダースコアのみです。"
+                "エラー: 無効な名前です。許可される文字は英数字、ハイフン、アンダースコアのみです。"
             )
 
 
@@ -208,9 +207,7 @@ def _handle_history_command(
     new_history, new_system_prompt, new_is_dirty = None, None, None
 
     if action == "list":
-        new_history, new_system_prompt, new_is_dirty = _handle_history_list(
-            user_id, store
-        )
+        new_history, new_system_prompt, new_is_dirty = _handle_history_list(user_id, store)
     elif action == "new":
         new_history, new_system_prompt, new_is_dirty = _handle_history_new(is_dirty)
     elif action == "save":
