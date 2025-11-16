@@ -3,6 +3,8 @@
 import os
 from unittest.mock import patch
 
+import pytest
+
 import multi_llm_chat.core as core
 
 
@@ -412,3 +414,75 @@ def test_get_token_info_filters_by_model_chatgpt():
     # Should NOT include Gemini answer
 
     assert result["token_count"] == expected
+
+
+def test_pruning_keeps_all_responses_in_multi_model_turn():
+    """Pruning should keep all assistant responses in @all pattern"""
+    # Simulate @all: user -> gemini -> chatgpt (single turn with 2 responses)
+    history = [
+        {"role": "user", "content": "Old question " * 100},
+        {"role": "gemini", "content": "Old gemini " * 100},
+        {"role": "user", "content": "What is AI?"},
+        {"role": "gemini", "content": "Gemini says: AI is..."},
+        {"role": "chatgpt", "content": "ChatGPT says: AI is..."},
+    ]
+
+    # Limit that can fit last turn (user + 2 assistants) but not all
+    max_tokens = 100
+
+    pruned = core.prune_history_sliding_window(
+        history, max_tokens, model_name="gemini-1.5-pro", system_prompt=None
+    )
+
+    # Should keep the entire last turn: user + gemini + chatgpt
+    assert len(pruned) >= 3
+    assert pruned[-3]["content"] == "What is AI?"
+    assert pruned[-2]["content"] == "Gemini says: AI is..."
+    assert pruned[-1]["content"] == "ChatGPT says: AI is..."
+
+
+def test_validate_context_multi_assistant_turn():
+    """validate_context_length should check entire latest turn including multiple assistants"""
+    # Large user message + 2 assistant responses
+    history = [
+        {"role": "user", "content": "Very long question " * 200},
+        {"role": "gemini", "content": "Gemini answer"},
+        {"role": "chatgpt", "content": "ChatGPT answer"},
+    ]
+
+    # Use environment variable to set a small limit
+    with patch.dict(os.environ, {"GEMINI_MAX_CONTEXT_LENGTH": "500"}):
+        result = core.validate_context_length(history, None, "gemini-1.5-pro")
+
+        # Should detect that the turn is too long
+        assert result["valid"] is False
+        assert "too long" in result["error"].lower()
+
+
+def test_get_pruning_info_performance():
+    """get_pruning_info should not redundantly calculate tokens"""
+    pytest.skip(
+        "Performance optimization: tracked in issues/016-future-refactoring-context-compression.md"
+    )
+
+    history = [
+        {"role": "user", "content": "Q1"},
+        {"role": "gemini", "content": "A1"},
+        {"role": "user", "content": "Q2"},
+        {"role": "gemini", "content": "A2"},
+    ]
+
+    # Patch calculate_tokens to count calls
+    original_calculate = core.calculate_tokens
+    call_count = {"count": 0}
+
+    def counting_calculate_tokens(text, model):
+        call_count["count"] += 1
+        return original_calculate(text, model)
+
+    with patch.object(core, "calculate_tokens", side_effect=counting_calculate_tokens):
+        core.get_pruning_info(history, 1000, model_name="gemini-1.5-pro", system_prompt=None)
+
+        # Should calculate each entry at most once
+        # 4 history entries = max 4 calls (no redundant recalculation)
+        assert call_count["count"] <= 4, f"Too many token calculations: {call_count['count']}"

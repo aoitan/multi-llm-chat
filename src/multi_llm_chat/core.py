@@ -511,6 +511,7 @@ def prune_history_sliding_window(history, max_tokens, model_name, system_prompt=
         return history
 
     # Prune from the beginning, preserving complete user-assistant turns
+    # A turn can have multiple assistant responses (@all pattern)
     pruned_history = []
     accumulated_tokens = system_tokens
 
@@ -518,31 +519,46 @@ def prune_history_sliding_window(history, max_tokens, model_name, system_prompt=
     i = len(history) - 1
     while i >= 0:
         entry = history[i]
-        tokens = entry_tokens[i]
+        role = entry["role"]
 
-        # If this is an assistant message, check if we can include its user message too
-        if entry["role"] in ["gemini", "chatgpt"]:
-            # Need to include the preceding user message for a complete turn
-            if i > 0 and history[i - 1]["role"] == "user":
-                # Calculate cost of both messages
-                turn_tokens = tokens + entry_tokens[i - 1]
+        if role in ["gemini", "chatgpt"]:
+            # Collect all consecutive assistant messages (for @all pattern)
+            assistant_messages = []
+            assistant_tokens = 0
+            j = i
+
+            while j >= 0 and history[j]["role"] in ["gemini", "chatgpt"]:
+                assistant_messages.insert(0, history[j])
+                assistant_tokens += entry_tokens[j]
+                j -= 1
+
+            # Check if there's a user message before the assistants
+            if j >= 0 and history[j]["role"] == "user":
+                # Calculate cost of entire turn (user + all assistants)
+                turn_tokens = entry_tokens[j] + assistant_tokens
+
                 if accumulated_tokens + turn_tokens <= max_tokens:
-                    # Add both user and assistant messages (reverse order)
-                    pruned_history.insert(0, history[i])
-                    pruned_history.insert(0, history[i - 1])
+                    # Add entire turn (user + all assistants)
+                    pruned_history.insert(0, history[j])  # User message
+                    for msg in assistant_messages:
+                        # Append assistants in order
+                        pruned_history.insert(len(pruned_history), msg)
                     accumulated_tokens += turn_tokens
-                    i -= 2  # Skip both messages
+                    i = j - 1  # Skip to before user message
                 else:
                     # Turn doesn't fit, stop here
                     break
             else:
-                # Orphaned assistant message (no preceding user) - skip it
-                i -= 1
-        else:
-            # User message - only add if there's room
-            if accumulated_tokens + tokens <= max_tokens:
+                # Orphaned assistant messages (no preceding user) - skip them
+                i = j
+        elif role == "user":
+            # Standalone user message (no assistant response yet)
+            if accumulated_tokens + entry_tokens[i] <= max_tokens:
                 pruned_history.insert(0, entry)
-                accumulated_tokens += tokens
+                accumulated_tokens += entry_tokens[i]
+            i -= 1
+        else:
+            # Unknown role - skip
             i -= 1
 
     return pruned_history
@@ -607,11 +623,21 @@ def validate_context_length(history, system_prompt, model_name):
             }
         return {"valid": True}
 
-    # Calculate tokens for latest message(s)
+    # Calculate tokens for latest turn (user + all assistant responses)
     latest_tokens = 0
-    for entry in history[-2:]:  # Check last 1-2 entries (latest turn)
-        content = entry.get("content", "")
-        latest_tokens += calculate_tokens(content, model_name)
+    if history:
+        # Find the last user message
+        i = len(history) - 1
+        while i >= 0 and history[i]["role"] in ["gemini", "chatgpt"]:
+            # Add assistant message tokens
+            content = history[i].get("content", "")
+            latest_tokens += calculate_tokens(content, model_name)
+            i -= 1
+
+        # Add user message if found
+        if i >= 0 and history[i]["role"] == "user":
+            content = history[i].get("content", "")
+            latest_tokens += calculate_tokens(content, model_name)
 
     total_tokens = system_tokens + latest_tokens
 

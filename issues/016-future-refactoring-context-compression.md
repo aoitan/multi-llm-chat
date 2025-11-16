@@ -20,19 +20,22 @@
 
 ---
 
-### 課題2: トークン計算の重複除去
+### 課題2: トークン計算の重複除去（高優先度 - Task B前に対応必須）
 
 **現状**:
 - `get_pruning_info()`が`prune_history_sliding_window()`を内部で呼び出し
-- 同じ履歴に対してトークン計算が2回実行される（O(n)の無駄）
+- 同じ履歴に対してトークン計算が2-3回実行される（O(n)の無駄）
+- **4エントリの履歴で12回の計算 = 3倍の重複**（test_get_pruning_info_performance で確認）
 
 **推奨される改善**:
 - トークン計算結果をキャッシュ
 - または`prune_history_sliding_window()`から計算済みトークン情報を返す設計に変更
+- `prune_history_sliding_window()` の戻り値を拡張: `(pruned_history, entry_tokens, total_tokens)`
 
-**優先度**: 低（パフォーマンス最適化。MVP段階では影響小）
+**優先度**: **高（Task B着手前に修正必須）**  
+**理由**: UI/CLI統合時、毎回この関数を呼ぶとパフォーマンス悪化。長い会話履歴(100ターン以上)でレスポンス遅延の可能性。
 
-**参考**: Copilot レビューコメント（2025-11-16）
+**参考**: Copilot レビューコメント（2025-11-16）、test_get_pruning_info_performance（skipped）
 
 ---
 
