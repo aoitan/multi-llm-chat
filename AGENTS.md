@@ -27,9 +27,11 @@ src/multi_llm_chat/
 - `doc/` - Feature specifications and architecture documentation
 - `issues/` - Planning notes and task tickets
 - `tests/` - Test suite organized by module:
-  - `test_core.py` - Core logic tests (10 tests)
-  - `test_cli.py` - CLI interface tests (8 tests)
-  - `test_webui.py` - Web UI tests (6 tests)
+  - `test_core.py` - Core logic tests (21 tests)
+  - `test_cli.py` - CLI interface tests (9 tests)
+  - `test_webui.py` - Web UI tests (7 tests)
+  - `test_context_compression.py` - Context compression tests (26 tests)
+  - `test_history_store.py` - History management tests (8 tests)
   - `test_chat_logic.py` - Backward compatibility tests (3 tests)
 
 **Design principles**:

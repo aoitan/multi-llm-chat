@@ -12,12 +12,12 @@ def _chatgpt_stream(*_args, **_kwargs):
 
 
 def test_repl_exit_commands():
-    with patch("builtins.input", side_effect=["hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "hello", "exit"]):
         with patch("builtins.print"):
             chat_logic.main()
             assert True
 
-    with patch("builtins.input", side_effect=["hello", "quit"]):
+    with patch("builtins.input", side_effect=["test-user", "hello", "quit"]):
         with patch("builtins.print"):
             chat_logic.main()
             assert True
@@ -50,7 +50,7 @@ def test_history_management_user_input():
 @patch("multi_llm_chat.core.call_chatgpt_api", side_effect=_chatgpt_stream)
 def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     # Test @gemini
-    with patch("builtins.input", side_effect=["@gemini hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "@gemini hello", "exit"]):
         with patch("builtins.print"):
             history = chat_logic.main()
             assert mock_gemini_api.called
@@ -61,7 +61,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_chatgpt_api.reset_mock()
 
     # Test @chatgpt
-    with patch("builtins.input", side_effect=["@chatgpt hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "@chatgpt hello", "exit"]):
         with patch("builtins.print"):
             history = chat_logic.main()
             assert not mock_gemini_api.called
@@ -72,7 +72,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_chatgpt_api.reset_mock()
 
     # Test @all
-    with patch("builtins.input", side_effect=["@all hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "@all hello", "exit"]):
         with patch("builtins.print"):
             history_snapshots = {}
 
@@ -104,7 +104,7 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             mock_chatgpt_api.reset_mock()
 
     # Test no mention
-    with patch("builtins.input", side_effect=["hello", "exit"]):
+    with patch("builtins.input", side_effect=["test-user", "hello", "exit"]):
         with patch("builtins.print"):
             history = chat_logic.main()
             assert not mock_gemini_api.called
