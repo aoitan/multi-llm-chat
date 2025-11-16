@@ -16,8 +16,25 @@ def test_get_token_info_returns_proper_structure():
 
 def test_get_token_info_gemini_model():
     """get_token_info should return correct max context for Gemini models"""
+    # Gemini 2.0 Flash (1M)
     result = core.get_token_info("test", "gemini-2.0-flash-exp")
     assert result["max_context_length"] == 1048576
+
+    # Gemini 1.5 Pro (2M)
+    result = core.get_token_info("test", "gemini-1.5-pro")
+    assert result["max_context_length"] == 2097152
+
+    # Gemini 1.5 Flash (1M)
+    result = core.get_token_info("test", "gemini-1.5-flash")
+    assert result["max_context_length"] == 1048576
+
+    # Gemini Pro (32K)
+    result = core.get_token_info("test", "models/gemini-pro-latest")
+    assert result["max_context_length"] == 32760
+
+    # Unknown Gemini variant (conservative default)
+    result = core.get_token_info("test", "gemini-unknown")
+    assert result["max_context_length"] == 32760
 
 
 def test_get_token_info_chatgpt_model():
@@ -183,8 +200,8 @@ def test_call_chatgpt_api_without_system_prompt():
         assert len(messages) == 1
 
 
-def test_format_history_for_chatgpt_with_system_role():
-    """format_history_for_chatgpt should handle 'system' role correctly, but currently fails"""
+def test_format_history_for_chatgpt_preserves_system_role():
+    """format_history_for_chatgpt should preserve the 'system' role."""
     history = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Hello"},
@@ -192,8 +209,6 @@ def test_format_history_for_chatgpt_with_system_role():
 
     result = core.format_history_for_chatgpt(history)
 
-    # This is the buggy behavior: 'system' becomes 'assistant'
-    # The test will fail until the function is fixed.
     assert len(result) == 2
     assert result[0]["role"] == "system", "The 'system' role should be preserved"
     assert result[0]["content"] == "You are a helpful assistant."

@@ -119,10 +119,22 @@ def get_token_info(text, model_name, history=None):
         history_text = "".join(entry.get("content", "") for entry in history)
         estimated_tokens += len(history_text) // 4
 
-    # Define max context length per model (updated for GPT-4 variants)
+    # Define max context length per model (updated for GPT-4 variants and Gemini models)
     model_lower = model_name.lower()
-    if "gemini" in model_lower:
-        max_context = 1048576
+
+    # Gemini models - use specific model variants
+    if "gemini-2.0-flash" in model_lower or "gemini-exp-1206" in model_lower:
+        max_context = 1048576  # 1M tokens
+    elif "gemini-1.5-pro" in model_lower:
+        max_context = 2097152  # 2M tokens
+    elif "gemini-1.5-flash" in model_lower:
+        max_context = 1048576  # 1M tokens
+    elif "gemini-pro" in model_lower:
+        max_context = 32760  # Gemini Pro has ~32K context
+    elif "gemini" in model_lower:
+        # Conservative default for unknown Gemini variants
+        max_context = 32760
+    # GPT models
     elif "gpt-4o" in model_lower:
         max_context = 128000
     elif "gpt-4-turbo" in model_lower or "gpt-4-1106" in model_lower:
@@ -190,9 +202,14 @@ def call_gemini_api(history, system_prompt=None):
     except genai.types.BlockedPromptException as e:
         yield f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
     except Exception as e:
-        print(f"Gemini API Error: An unexpected error occurred: {e}")
-        list_gemini_models()
-        yield f"Gemini API Error: An unexpected error occurred: {e}"
+        error_msg = f"Gemini API Error: An unexpected error occurred: {e}"
+        print(error_msg)
+        # Try to list available models (may also fail if auth/network issue)
+        try:
+            list_gemini_models()
+        except Exception:
+            pass  # Suppress secondary errors to avoid crash
+        yield error_msg
 
 
 def call_chatgpt_api(history, system_prompt=None):
