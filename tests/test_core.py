@@ -285,3 +285,48 @@ def test_get_gemini_model_cache_with_hash():
             model2 = core._get_gemini_model(long_prompt)
             assert model1 == model2
             assert len(core._gemini_models_cache) == 1
+
+
+def test_extract_text_from_chunk_gemini():
+    """extract_text_from_chunk should extract text from Gemini chunk"""
+    # Create a mock Gemini chunk
+    chunk = type("Chunk", (), {"text": "Hello from Gemini"})()
+    result = core.extract_text_from_chunk(chunk, "gemini")
+    assert result == "Hello from Gemini"
+
+
+def test_extract_text_from_chunk_chatgpt_string():
+    """extract_text_from_chunk should extract text from ChatGPT string content"""
+    # Create a mock ChatGPT chunk with string content
+    delta = type("Delta", (), {"content": "Hello from ChatGPT"})()
+    choice = type("Choice", (), {"delta": delta})()
+    chunk = type("Chunk", (), {"choices": [choice]})()
+
+    result = core.extract_text_from_chunk(chunk, "chatgpt")
+    assert result == "Hello from ChatGPT"
+
+
+def test_extract_text_from_chunk_chatgpt_list():
+    """extract_text_from_chunk should extract text from ChatGPT list content"""
+    # Create a mock ChatGPT chunk with list content
+    part1 = type("Part", (), {"text": "Hello "})()
+    part2 = type("Part", (), {"text": "from ChatGPT"})()
+    delta = type("Delta", (), {"content": [part1, part2]})()
+    choice = type("Choice", (), {"delta": delta})()
+    chunk = type("Chunk", (), {"choices": [choice]})()
+
+    result = core.extract_text_from_chunk(chunk, "chatgpt")
+    assert result == "Hello from ChatGPT"
+
+
+def test_extract_text_from_chunk_fallback():
+    """extract_text_from_chunk should fall back to string representation"""
+    # Test with plain string
+    chunk = "Plain string chunk"
+    result = core.extract_text_from_chunk(chunk, "gemini")
+    assert result == "Plain string chunk"
+
+    # Test with invalid chunk (should return empty string)
+    chunk = type("Invalid", (), {})()
+    result = core.extract_text_from_chunk(chunk, "gemini")
+    assert result == ""

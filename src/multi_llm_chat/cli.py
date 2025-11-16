@@ -12,23 +12,7 @@ def _process_response_stream(stream, model_name):
     print(f"[{model_name.capitalize()}]: ", end="", flush=True)
 
     for chunk in stream:
-        text = ""
-        try:
-            if model_name == "gemini":
-                text = chunk.text
-            elif model_name == "chatgpt":
-                delta_content = chunk.choices[0].delta.content
-                # Handle both string and list responses from OpenAI API
-                if isinstance(delta_content, list):
-                    text = "".join(
-                        part.text if hasattr(part, "text") else str(part) for part in delta_content
-                    )
-                elif delta_content is not None:
-                    text = delta_content
-        except (AttributeError, IndexError, TypeError, ValueError):
-            if isinstance(chunk, str):
-                text = chunk
-
+        text = core.extract_text_from_chunk(chunk, model_name)
         if text:
             print(text, end="", flush=True)
             full_response += text

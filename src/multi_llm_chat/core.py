@@ -173,35 +173,34 @@ def get_token_info(text, model_name, history=None):
         estimated_tokens += _estimate_tokens(history_text)
 
     # Define max context length per model (updated for GPT-4 variants and Gemini models)
+    # Pattern matching is ordered from most specific to least specific
     model_lower = model_name.lower()
 
-    # Gemini models - use specific model variants
-    if "gemini-2.0-flash" in model_lower or "gemini-exp-1206" in model_lower:
-        max_context = 1048576  # 1M tokens
-    elif "gemini-1.5-pro" in model_lower:
-        max_context = 2097152  # 2M tokens
-    elif "gemini-1.5-flash" in model_lower:
-        max_context = 1048576  # 1M tokens
-    elif "gemini-pro" in model_lower:
-        max_context = 32760  # Gemini Pro has ~32K context
-    elif "gemini" in model_lower:
-        # Conservative default for unknown Gemini variants
-        max_context = 32760
-    # GPT models
-    elif "gpt-4o" in model_lower:
-        max_context = 128000
-    elif "gpt-4-turbo" in model_lower or "gpt-4-1106" in model_lower:
-        max_context = 128000
-    elif "gpt-4" in model_lower:
-        # Default GPT-4 (non-turbo, non-1106) has 8K context
-        max_context = 8192
-    elif "gpt-3.5-turbo-16k" in model_lower:
-        max_context = 16385
-    elif "gpt-3.5" in model_lower:
-        max_context = 4096
-    else:
-        # Conservative default
-        max_context = 4096
+    # Model context patterns: (pattern, max_context)
+    # Order matters: more specific patterns must come first
+    MODEL_PATTERNS = [
+        # Gemini models - specific variants first
+        ("gemini-2.0-flash", 1048576),
+        ("gemini-exp-1206", 1048576),
+        ("gemini-1.5-pro", 2097152),
+        ("gemini-1.5-flash", 1048576),
+        ("gemini-pro", 32760),
+        ("gemini", 32760),  # Conservative default for unknown Gemini
+        # GPT models - specific variants first
+        ("gpt-4o", 128000),
+        ("gpt-4-turbo", 128000),
+        ("gpt-4-1106", 128000),
+        ("gpt-4", 8192),  # Base GPT-4
+        ("gpt-3.5-turbo-16k", 16385),
+        ("gpt-3.5", 4096),
+    ]
+
+    # Find first matching pattern
+    max_context = 4096  # Conservative default
+    for pattern, context_length in MODEL_PATTERNS:
+        if pattern in model_lower:
+            max_context = context_length
+            break
 
     return {
         "token_count": estimated_tokens,
@@ -291,3 +290,36 @@ def call_chatgpt_api(history, system_prompt=None):
         yield f"ChatGPT API Error: APIへの接続に失敗しました: {e}"
     except Exception as e:
         yield f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
+
+
+def extract_text_from_chunk(chunk, model_name):
+    """Extract text content from API response chunk
+
+    Handles different response formats from Gemini and ChatGPT APIs.
+
+    Args:
+        chunk: Response chunk from LLM API
+        model_name: Model identifier ("gemini" or "chatgpt")
+
+    Returns:
+        Extracted text string, or empty string if extraction fails
+    """
+    text = ""
+    try:
+        if model_name == "gemini":
+            text = chunk.text
+        elif model_name == "chatgpt":
+            delta_content = chunk.choices[0].delta.content
+            # Handle both string and list responses from OpenAI API
+            if isinstance(delta_content, list):
+                text = "".join(
+                    part.text if hasattr(part, "text") else str(part) for part in delta_content
+                )
+            elif delta_content is not None:
+                text = delta_content
+    except (AttributeError, IndexError, TypeError, ValueError):
+        # Fallback: treat chunk as string if extraction fails
+        if isinstance(chunk, str):
+            text = chunk
+
+    return text
