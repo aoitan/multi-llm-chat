@@ -88,9 +88,28 @@ OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 ```
 `GOOGLE_API_KEY`は必須です。`OPENAI_API_KEY`はChatGPTを使用する場合に設定してください。
 
-#### オプション環境変数
+#### 履歴保存設定（オプション）
 - `CHAT_HISTORY_DIR`: 履歴ファイルの保存先（デフォルト: `XDG_DATA_HOME/multi_llm_chat/chat_histories` または `~/.multi_llm_chat/chat_histories`）
 - `CHAT_HISTORY_USER_ID`: CLI/非対話環境で利用するユーザーID（未設定時は起動時に入力を要求）
+
+#### コンテキスト圧縮設定（オプション）
+
+会話履歴が長くなった際のトークン数管理のため、以下の環境変数を設定できます。
+
+```
+# モデル別の最大コンテキスト長（トークン数）
+GEMINI_MAX_CONTEXT_LENGTH=100000
+CHATGPT_MAX_CONTEXT_LENGTH=50000
+
+# デフォルトの最大コンテキスト長（未設定時: 4096）
+DEFAULT_MAX_CONTEXT_LENGTH=4096
+
+# トークン推定バッファファクター（未設定時: 1.2）
+# 非OpenAIモデルの概算トークン数に適用される安全マージン
+TOKEN_ESTIMATION_BUFFER_FACTOR=1.2
+```
+
+詳細は `.env.example` を参照してください。
 
 ### 2. Web UI版の実行 (推奨)
 
@@ -173,10 +192,12 @@ src/multi_llm_chat/
 
 2.  **コンテキスト圧縮機能 と 会話履歴機能**
     -   以下の2つの機能は、システムプロンプト機能の実装後に並行して開発可能です。
-    -   **コンテキスト圧縮機能 (`context_compression_requirements.md`)**
-        -   `core.py`のコンテキスト圧縮インターフェースを実装します。システムプロンプトを圧縮対象から除外するロジックを含むため、システムプロンプト機能に依存します。
-    -   **会話履歴の保存・管理機能 (`history_feature_requirements.md`)**
-        -   `core.py`に履歴管理ロジックを実装します。システムプロンプトを履歴の一部として保存・復元するため、システムプロンプト機能に依存します。
+    -   🚧 **コンテキスト圧縮機能 (`context_compression_requirements.md`)** - 実装中（Task A完了）
+        -   ✅ Task A: トークンガードレール（モデル別最大コンテキスト長、トークン計算、スライディングウィンドウ枝刈り）
+        -   ⬜ Task B: UI/CLI統合（警告表示、自動枝刈り適用）
+    -   ⬜ **会話履歴の保存・管理機能 (`history_feature_requirements.md`)**
+        -   履歴の保存・読み込み機能
+        -   Web UIとCLIでの履歴管理
     -   **統合テスト**: 3つの新機能は相互に影響するため、各機能の実装完了後、結合して動作を確認する統合テストを実施することが重要です。
 
 ## 開発ロードマップ
@@ -191,6 +212,8 @@ src/multi_llm_chat/
   - トークンカウント表示と上限チェック
   - 後方互換性レイヤーの実装
 - [ ] Epic 004: コンテキスト圧縮とトークンガードレール（`issues/004-epic-context-compression.md`）
+  - [x] Task A: コアロジック実装（トークン計算、スライディングウィンドウ枝刈り）
+  - [ ] Task B: UI/CLI統合
 - [ ] Epic 005: 会話履歴の永続化と管理（`issues/005-epic-history-management.md`）
 - [ ] 設定ファイルの外部化
 
