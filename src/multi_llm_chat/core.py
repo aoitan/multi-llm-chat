@@ -59,7 +59,7 @@ def _get_gemini_model(system_prompt=None):
         return None
 
     # If no system prompt, use the default cached model
-    if system_prompt is None:
+    if not system_prompt or not system_prompt.strip():
         if _gemini_model is None:
             _gemini_model = genai.GenerativeModel(GEMINI_MODEL)
         return _gemini_model
@@ -237,7 +237,8 @@ def prepare_request(history, system_prompt, model_name):
             return (None, history)
     else:
         # For OpenAI-compatible models, add system message to history
-        if system_prompt:
+        # Only add system message if prompt is not empty
+        if system_prompt and system_prompt.strip():
             return [{"role": "system", "content": system_prompt}] + history
         else:
             return history

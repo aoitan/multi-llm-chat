@@ -213,20 +213,24 @@ with gr.Blocks() as demo:
             check_send_button_enabled(system_prompt, logic_hist),
         )
 
-    user_input.submit(respond, submit_inputs, submit_outputs).then(
-        lambda chat, disp, logic, sys: (
+    user_input.submit(
+        respond, submit_inputs, submit_outputs
+    ).success(
+        lambda logic, sys: (
             update_token_display(sys, logic),
             check_send_button_enabled(sys, logic),
         ),
-        [chatbot_ui, display_history_state, logic_history_state, system_prompt_input],
+        [logic_history_state, system_prompt_input],
         [token_display, send_button],
     )
-    send_button.click(respond, submit_inputs, submit_outputs).then(
-        lambda chat, disp, logic, sys: (
+    send_button.click(
+        respond, submit_inputs, submit_outputs
+    ).success(
+        lambda logic, sys: (
             update_token_display(sys, logic),
             check_send_button_enabled(sys, logic),
         ),
-        [chatbot_ui, display_history_state, logic_history_state, system_prompt_input],
+        [logic_history_state, system_prompt_input],
         [token_display, send_button],
     )
 
