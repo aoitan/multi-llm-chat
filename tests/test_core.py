@@ -213,3 +213,75 @@ def test_format_history_for_chatgpt_preserves_system_role():
     assert result[0]["role"] == "system", "The 'system' role should be preserved"
     assert result[0]["content"] == "You are a helpful assistant."
     assert result[1]["role"] == "user"
+
+
+def test_estimate_tokens_english():
+    """Token estimation should handle English text"""
+    # "Hello world" = 11 chars / 4 ≈ 2.75 → 2 tokens
+    result = core._estimate_tokens("Hello world")
+    assert result == 2
+
+
+def test_estimate_tokens_japanese():
+    """Token estimation should handle Japanese text more accurately"""
+    # "こんにちは" = 5 chars / 1.5 ≈ 3.33 → 3 tokens
+    result = core._estimate_tokens("こんにちは")
+    assert result >= 3
+
+    # "日本語テスト" = 6 chars / 1.5 ≈ 4 → 4 tokens
+    result = core._estimate_tokens("日本語テスト")
+    assert result >= 4
+
+
+def test_estimate_tokens_mixed():
+    """Token estimation should handle mixed English/Japanese text"""
+    # "Hello こんにちは" = 5 ASCII + 5 Japanese
+    # = (5/4) + (5/1.5) ≈ 1.25 + 3.33 ≈ 4.58 → 4 tokens
+    result = core._estimate_tokens("Hello こんにちは")
+    assert result >= 4
+
+
+def test_hash_prompt():
+    """Prompt hashing should be consistent and collision-resistant"""
+    prompt1 = "You are a helpful assistant."
+    prompt2 = "You are a helpful assistant."
+    prompt3 = "You are a different assistant."
+
+    hash1 = core._hash_prompt(prompt1)
+    hash2 = core._hash_prompt(prompt2)
+    hash3 = core._hash_prompt(prompt3)
+
+    # Same prompts should have same hash
+    assert hash1 == hash2
+
+    # Different prompts should have different hash
+    assert hash1 != hash3
+
+    # Hash should be hex string
+    assert len(hash1) == 64  # SHA256 = 64 hex chars
+    assert all(c in "0123456789abcdef" for c in hash1)
+
+
+def test_get_gemini_model_cache_with_hash():
+    """Gemini model cache should use hash keys to prevent memory leak"""
+    with patch("multi_llm_chat.core._configure_gemini", return_value=True):
+        with patch("multi_llm_chat.core.genai.GenerativeModel"):
+            # Clear cache
+            core._gemini_models_cache.clear()
+
+            # Create model with very long system prompt
+            long_prompt = "A" * 10000  # 10K characters
+            model1 = core._get_gemini_model(long_prompt)
+
+            # Cache should contain hash, not full prompt
+            assert len(core._gemini_models_cache) == 1
+            cache_key = list(core._gemini_models_cache.keys())[0]
+
+            # Key should be hash (64 hex chars), not the long prompt
+            assert len(cache_key) == 64
+            assert cache_key != long_prompt
+
+            # Same prompt should hit cache
+            model2 = core._get_gemini_model(long_prompt)
+            assert model1 == model2
+            assert len(core._gemini_models_cache) == 1

@@ -1,3 +1,4 @@
+import hashlib
 import os
 from collections import OrderedDict
 
@@ -13,7 +14,7 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
 _gemini_model = None
-_gemini_models_cache = OrderedDict()  # LRU cache for models with system prompts
+_gemini_models_cache = OrderedDict()  # LRU cache: hash -> (prompt, model)
 _gemini_cache_max_size = 10  # Limit cache size to prevent memory leak
 _openai_client = None
 
@@ -29,6 +30,18 @@ def _configure_gemini():
         return False
     genai.configure(api_key=GOOGLE_API_KEY)
     return True
+
+
+def _hash_prompt(prompt):
+    """Generate SHA256 hash for a prompt to use as cache key
+
+    Args:
+        prompt: System prompt text
+
+    Returns:
+        Hexadecimal hash string
+    """
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
 
 def _get_gemini_model(system_prompt=None):
@@ -51,15 +64,21 @@ def _get_gemini_model(system_prompt=None):
             _gemini_model = genai.GenerativeModel(GEMINI_MODEL)
         return _gemini_model
 
-    # For system prompts, use LRU cache
-    if system_prompt in _gemini_models_cache:
-        # Move to end (most recently used)
-        _gemini_models_cache.move_to_end(system_prompt)
-        return _gemini_models_cache[system_prompt]
+    # For system prompts, use LRU cache with hash key
+    prompt_hash = _hash_prompt(system_prompt)
+
+    if prompt_hash in _gemini_models_cache:
+        # Verify prompt hasn't changed (hash collision check)
+        cached_prompt, cached_model = _gemini_models_cache[prompt_hash]
+        if cached_prompt == system_prompt:
+            # Move to end (most recently used)
+            _gemini_models_cache.move_to_end(prompt_hash)
+            return cached_model
+        # Hash collision - evict and recreate
 
     # Create new model and add to cache
     model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_prompt)
-    _gemini_models_cache[system_prompt] = model
+    _gemini_models_cache[prompt_hash] = (system_prompt, model)
 
     # Evict oldest if cache is full
     if len(_gemini_models_cache) > _gemini_cache_max_size:
@@ -100,6 +119,40 @@ def format_history_for_chatgpt(history):
     return chatgpt_history
 
 
+def _estimate_tokens(text):
+    """Estimate token count for mixed English/Japanese text
+
+    More accurate estimation that accounts for Japanese characters:
+    - ASCII/Latin: ~4 chars = 1 token
+    - Japanese (hiragana/katakana/kanji): ~1.5 chars = 1 token
+
+    Args:
+        text: Text to estimate
+
+    Returns:
+        Estimated token count
+    """
+    if not text:
+        return 0
+
+    # Count Japanese characters (Unicode ranges for CJK)
+    japanese_chars = sum(
+        1
+        for char in text
+        if "\u3040" <= char <= "\u309f"  # Hiragana
+        or "\u30a0" <= char <= "\u30ff"  # Katakana
+        or "\u4e00" <= char <= "\u9fff"  # Kanji
+        or "\uff00" <= char <= "\uffef"  # Full-width characters
+    )
+
+    ascii_chars = len(text) - japanese_chars
+
+    # Japanese: 1.5 chars ≈ 1 token, ASCII: 4 chars ≈ 1 token
+    estimated = (japanese_chars / 1.5) + (ascii_chars / 4.0)
+
+    return int(estimated)
+
+
 def get_token_info(text, model_name, history=None):
     """Get token information for the given text and model
 
@@ -111,13 +164,13 @@ def get_token_info(text, model_name, history=None):
     Returns:
         dict with token_count, max_context_length, and is_estimated
     """
-    # Simple estimation based on character count (4 chars ≈ 1 token)
-    estimated_tokens = len(text) // 4
+    # Improved estimation with Japanese support
+    estimated_tokens = _estimate_tokens(text)
 
     # Add history tokens if provided
     if history:
         history_text = "".join(entry.get("content", "") for entry in history)
-        estimated_tokens += len(history_text) // 4
+        estimated_tokens += _estimate_tokens(history_text)
 
     # Define max context length per model (updated for GPT-4 variants and Gemini models)
     model_lower = model_name.lower()
