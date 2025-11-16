@@ -263,3 +263,43 @@ def test_pruning_removes_orphaned_assistant_messages():
     assert pruned[0]["content"] == "Q2"
     assert pruned[1]["content"] == "A2"
     # A1 should be removed because Q1 doesn't fit
+
+
+def test_get_token_info_uses_tiktoken_for_openai():
+    """get_token_info should use tiktoken for OpenAI models (accurate counting)"""
+    text = "Hello, world! This is a test message."
+
+    result = core.get_token_info(text, "gpt-4o")
+
+    # Should use tiktoken, not estimation
+    assert result["token_count"] > 0
+    # is_estimated should be False for OpenAI with tiktoken
+    assert result["is_estimated"] is False
+
+
+def test_get_token_info_applies_buffer_for_gemini():
+    """get_token_info should apply buffer factor for non-OpenAI models"""
+    text = "テストメッセージです"
+
+    with patch.dict(os.environ, {"TOKEN_ESTIMATION_BUFFER_FACTOR": "1.3"}):
+        result = core.get_token_info(text, "gemini-1.5-pro")
+
+        # Should apply buffer factor to estimation
+        base_estimate = core._estimate_tokens(text)
+        expected = int(base_estimate * 1.3)
+        assert result["token_count"] == expected
+
+
+def test_calculate_tokens_invalid_buffer_factor():
+    """calculate_tokens should handle invalid buffer factor gracefully"""
+    text = "Test message"
+
+    with patch.dict(os.environ, {"TOKEN_ESTIMATION_BUFFER_FACTOR": "invalid"}):
+        with patch("logging.warning") as mock_warning:
+            # Should not crash, should use default 1.2
+            result = core.calculate_tokens(text, "gemini-1.5-pro")
+
+            assert result > 0
+            # Should log warning
+            mock_warning.assert_called_once()
+            assert "TOKEN_ESTIMATION_BUFFER_FACTOR" in str(mock_warning.call_args)
