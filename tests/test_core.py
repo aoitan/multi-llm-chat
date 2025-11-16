@@ -181,3 +181,20 @@ def test_call_chatgpt_api_without_system_prompt():
         messages = call_args[1]["messages"]
         assert messages[0]["role"] == "user"
         assert len(messages) == 1
+
+
+def test_format_history_for_chatgpt_with_system_role():
+    """format_history_for_chatgpt should handle 'system' role correctly, but currently fails"""
+    history = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello"},
+    ]
+
+    result = core.format_history_for_chatgpt(history)
+
+    # This is the buggy behavior: 'system' becomes 'assistant'
+    # The test will fail until the function is fixed.
+    assert len(result) == 2
+    assert result[0]["role"] == "system", "The 'system' role should be preserved"
+    assert result[0]["content"] == "You are a helpful assistant."
+    assert result[1]["role"] == "user"

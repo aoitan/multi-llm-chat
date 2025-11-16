@@ -92,6 +92,9 @@ def format_history_for_chatgpt(history):
     """Convert history to ChatGPT API format"""
     chatgpt_history = []
     for entry in history:
+        if entry["role"] == "system":
+            chatgpt_history.append({"role": "system", "content": entry["content"]})
+            continue
         role = "user" if entry["role"] == "user" else "assistant"
         chatgpt_history.append({"role": role, "content": entry["content"]})
     return chatgpt_history
@@ -200,10 +203,10 @@ def call_chatgpt_api(history, system_prompt=None):
             yield "ChatGPT API Error: OPENAI_API_KEYが設定されていません。"
             return
 
-        # Use prepare_request to format history with system prompt
-        formatted_history = format_history_for_chatgpt(history)
-        if system_prompt:
-            formatted_history = [{"role": "system", "content": system_prompt}] + formatted_history
+        # Use prepare_request to create the base history
+        prepared_history = prepare_request(history, system_prompt, "chatgpt")
+        # Format the entire history for the API
+        formatted_history = format_history_for_chatgpt(prepared_history)
 
         response_stream = client.chat.completions.create(
             model=CHATGPT_MODEL, messages=formatted_history, stream=True
