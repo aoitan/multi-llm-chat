@@ -437,12 +437,14 @@ def calculate_tokens(text, model_name):
     if "gpt" in model_lower and TIKTOKEN_AVAILABLE:
         try:
             # Map model name to tiktoken encoding
-            if "gpt-4" in model_lower:
+            if "gpt-4o" in model_lower or "gpt-4-turbo" in model_lower:
+                encoding = tiktoken.get_encoding("o200k_base")
+            elif "gpt-4" in model_lower:
                 encoding = tiktoken.encoding_for_model("gpt-4")
             elif "gpt-3.5" in model_lower:
                 encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
             else:
-                # Fallback to cl100k_base (used by gpt-4, gpt-3.5-turbo)
+                # Fallback to cl100k_base (used by legacy gpt-4, gpt-3.5-turbo)
                 encoding = tiktoken.get_encoding("cl100k_base")
 
             content_tokens = len(encoding.encode(text))

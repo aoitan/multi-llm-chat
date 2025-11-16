@@ -88,6 +88,10 @@ OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 ```
 `GOOGLE_API_KEY`は必須です。`OPENAI_API_KEY`はChatGPTを使用する場合に設定してください。
 
+#### 履歴保存設定（オプション）
+- `CHAT_HISTORY_DIR`: 履歴ファイルの保存先（デフォルト: `XDG_DATA_HOME/multi_llm_chat/chat_histories` または `~/.multi_llm_chat/chat_histories`）
+- `CHAT_HISTORY_USER_ID`: CLI/非対話環境で利用するユーザーID（未設定時は起動時に入力を要求）
+
 #### コンテキスト圧縮設定（オプション）
 
 会話履歴が長くなった際のトークン数管理のため、以下の環境変数を設定できます。
