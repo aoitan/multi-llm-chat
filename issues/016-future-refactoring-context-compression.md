@@ -1,6 +1,6 @@
 # 将来のリファクタリング課題
 
-## Epic 10 Task A - コンテキスト圧縮機能
+## Epic 16 - コンテキスト圧縮機能
 
 ### 課題1: `prune_history_sliding_window`の堅牢性向上
 
