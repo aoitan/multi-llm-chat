@@ -192,12 +192,12 @@ src/multi_llm_chat/
 
 2.  **コンテキスト圧縮機能 と 会話履歴機能**
     -   以下の2つの機能は、システムプロンプト機能の実装後に並行して開発可能です。
-    -   🚧 **コンテキスト圧縮機能 (`context_compression_requirements.md`)** - 実装中（Task A完了）
+    -   ✅ **コンテキスト圧縮機能 (`context_compression_requirements.md`)** - 実装完了（Epic 10）
         -   ✅ Task A: トークンガードレール（モデル別最大コンテキスト長、トークン計算、スライディングウィンドウ枝刈り）
-        -   ⬜ Task B: UI/CLI統合（警告表示、自動枝刈り適用）
-    -   ⬜ **会話履歴の保存・管理機能 (`history_feature_requirements.md`)**
-        -   履歴の保存・読み込み機能
-        -   Web UIとCLIでの履歴管理
+        -   ✅ Task B: UI/CLI統合（警告表示、自動枝刈り適用）
+    -   ✅ **会話履歴の保存・管理機能 (`history_feature_requirements.md`)** - CLI実装完了（Epic 10）
+        -   ✅ CLI: `/history list`, `/history save`, `/history load`, `/history new` 実装済み
+        -   ⬜ Web UI: 未実装
     -   **統合テスト**: 3つの新機能は相互に影響するため、各機能の実装完了後、結合して動作を確認する統合テストを実施することが重要です。
 
 ## 開発ロードマップ

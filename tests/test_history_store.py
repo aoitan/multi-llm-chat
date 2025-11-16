@@ -71,7 +71,8 @@ def test_cli_history_save_and_load(tmp_path, monkeypatch):
             history, system_prompt = cli.main()
 
     assert system_prompt == ""
-    # After load, it should restore the saved history (only "hello" and Gemini call was never made)
+    # After load, it should restore the history as it was when saved—containing only "hello"—
+    # because the save happened before "more" was entered. "more" is not present after restore.
     assert [entry["content"] for entry in history] == ["hello"]
 
 
