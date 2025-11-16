@@ -462,7 +462,7 @@ def test_validate_context_multi_assistant_turn():
 def test_get_pruning_info_performance():
     """get_pruning_info should not redundantly calculate tokens"""
     pytest.skip(
-        "Performance optimization: tracked in issues/016-future-refactoring-context-compression.md"
+        "Performance optimization: tracked in issues/epic-016-future-refactoring-context-compression.md"
     )
 
     history = [
