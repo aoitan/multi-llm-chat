@@ -19,9 +19,9 @@
 
 - **概要 (Description):** 達成しようとする目標や作業内容の簡潔な説明。
 - **完了条件 (Acceptance Criteria):** タスクが「完了」と見なされるための具体的な条件。テスト可能な形式で記述します。
-- **親子関係 (Parent/Children):
+- **親子関係 (Parent/Children):**
     - `Parent:` このタスク票の親となるタスク票へのリンクを記載します。（例: `Parent: ./epic-003-core-refactor.md`）
-    - `Children:` このタスク票の子となるタスク票のリストを記載します。
+    - `Children:` このタスク票の子となるタスク票のリストを記載します。（例: `Children: - ./task-005-a-1-parallel-context-history.md`）
 
 ### 2.2. 種類ごとの記載事項
 
@@ -39,14 +39,16 @@
 
 タスク票のファイル名は、そのタスクの階層と識別子がわかるように、以下の規則で命名します。
 
-- **エピック:** `epic-[epic_id]-[short_description].md`
-- **ストーリー:** `story-[epic_id]-[story_id]-[short_description].md`
-- **タスク:** `task-[epic_id]-[story_id]-[task_id]-[short_description].md`
+- **エピック:** `epic-[epic_id]-[description].md`
+- **ストーリー:** `story-[epic_id]-[story_id]-[description].md`
+- **タスク (ストーリーに属する場合):** `task-[epic_id]-[story_id]-[task_id]-[description].md`
+- **タスク (スタンドアロン):** `task-[task_id]-[description].md`
 
 **例:**
 - `epic-003-core-refactor.md`
 - `story-003-a-prompt-template.md`
 - `task-003-a-1-implement-jinja2.md`
+- `task-006-update-deps.md` (スタンドアロンタスクの例)
 
 ### 3.2. ディレクトリによるステータス管理
 

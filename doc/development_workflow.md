@@ -27,25 +27,29 @@
 
 タスク票のファイル名は、そのタスクの階層と識別子がわかるように、以下の規則で命名します。
 
-- **エピック:** `epic-[epic_id]-[short_description].md`
-- **ストーリー:** `story-[epic_id]-[story_id]-[short_description].md`
-- **タスク:** `task-[epic_id]-[story_id]-[task_id]-[short_description].md`
+- **エピック:** `epic-[epic_id]-[description].md`
+- **ストーリー:** `story-[epic_id]-[story_id]-[description].md`
+- **タスク (ストーリーに属する場合):** `task-[epic_id]-[story_id]-[task_id]-[description].md`
+- **タスク (スタンドアロン):** `task-[task_id]-[description].md`
 
 **例:**
 - `epic-003-core-refactor.md`
 - `story-003-a-prompt-template.md`
 - `task-003-a-1-implement-jinja2.md`
+- `task-006-update-deps.md` (スタンドアロンタスクの例)
 
-`[epic_id]` は `issues` ディレクトリ内で一意な番号、`[story_id]` はエピック内で一意な英文字、`[task_id]` はストーリー内で一意な番号を表します。
+`[epic_id]` は `issues` ディレクトリ内で一意な番号、`[story_id]` はエピック内で一意な英文字、`[task_id]` はストーリー内またはスタンドアロンとして一意な番号を表します。
+
+依存関係のない小規模なタスクは、スタンドアロンタスクとして扱うことができます。
 
 ## 3. ブランチ戦略
 
 ブランチは、タスク階層を反映した親子関係を持ちます。
 
 - **`main`:** プロダクションコード。常にデプロイ可能な状態を保ちます。
-- **`epic/{epic_id}-{description}`:** `main` ブランチから作成します。
-- **`story/{epic_id}-{story_id}-{description}`:** 対応する `epic/...` ブランチから作成します。
-- **`task/{epic_id}-{story_id}-{task_id}-{description}`:** 対応する `story/...` ブランチから作成します。
+- **`epic/{epic_id}-[description]`:** `main` ブランチから作成します。
+- **`story/{epic_id}-{story_id}-[description]`:** 対応する `epic/...` ブランチから作成します。
+- **`task/{epic_id}-{story_id}-{task_id}-[description]`:** 対応する `story/...` ブランチから作成します。
 
 ## 4. プルリクエスト (PR) の流れ
 
