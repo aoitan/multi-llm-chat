@@ -389,9 +389,10 @@ def test_prepare_request_whitespace_only_system_prompt_gemini():
 
 
 @patch("multi_llm_chat.core.genai")
-def test_get_gemini_model_with_empty_system_prompt(mock_genai):
+@patch("multi_llm_chat.core._configure_gemini")
+def test_get_gemini_model_with_empty_system_prompt(mock_configure, mock_genai):
     """_get_gemini_model should use default model for empty system prompt"""
-    mock_genai.configure.return_value = None
+    mock_configure.return_value = True
     mock_model = Mock()
     mock_genai.GenerativeModel.return_value = mock_model
 
@@ -406,9 +407,10 @@ def test_get_gemini_model_with_empty_system_prompt(mock_genai):
 
 
 @patch("multi_llm_chat.core.genai")
-def test_get_gemini_model_with_whitespace_system_prompt(mock_genai):
+@patch("multi_llm_chat.core._configure_gemini")
+def test_get_gemini_model_with_whitespace_system_prompt(mock_configure, mock_genai):
     """_get_gemini_model should use default model for whitespace-only system prompt"""
-    mock_genai.configure.return_value = None
+    mock_configure.return_value = True
     mock_model = Mock()
     mock_genai.GenerativeModel.return_value = mock_model
 
