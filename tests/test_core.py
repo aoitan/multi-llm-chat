@@ -366,3 +366,57 @@ def test_format_history_for_chatgpt_filters_gemini_responses():
     assert result[0] == {"role": "user", "content": "Hello"}
     assert result[1] == {"role": "user", "content": "Another question"}
     assert result[2] == {"role": "assistant", "content": "Answer from ChatGPT"}
+
+
+def test_prepare_request_whitespace_only_system_prompt_openai():
+    """prepare_request should not add system message for whitespace-only prompt (OpenAI)"""
+    history = [{"role": "user", "content": "Hello"}]
+
+    result = core.prepare_request(history, "   ", "gpt-4o")
+
+    assert result == history
+
+
+def test_prepare_request_whitespace_only_system_prompt_gemini():
+    """prepare_request should return (None, history) for whitespace-only prompt (Gemini)"""
+    history = [{"role": "user", "content": "Hello"}]
+
+    result = core.prepare_request(history, "  \t\n  ", "gemini-2.0-flash-exp")
+
+    assert isinstance(result, tuple)
+    assert result[0] is None
+    assert result[1] == history
+
+
+@patch("multi_llm_chat.core.genai")
+def test_get_gemini_model_with_empty_system_prompt(mock_genai):
+    """_get_gemini_model should use default model for empty system prompt"""
+    mock_genai.configure.return_value = None
+    mock_model = Mock()
+    mock_genai.GenerativeModel.return_value = mock_model
+
+    # Reset cached model
+    core._gemini_model = None
+
+    result = core._get_gemini_model("")
+
+    # Should create model without system_instruction
+    mock_genai.GenerativeModel.assert_called_once_with(core.GEMINI_MODEL)
+    assert result == mock_model
+
+
+@patch("multi_llm_chat.core.genai")
+def test_get_gemini_model_with_whitespace_system_prompt(mock_genai):
+    """_get_gemini_model should use default model for whitespace-only system prompt"""
+    mock_genai.configure.return_value = None
+    mock_model = Mock()
+    mock_genai.GenerativeModel.return_value = mock_model
+
+    # Reset cached model
+    core._gemini_model = None
+
+    result = core._get_gemini_model("  \t\n  ")
+
+    # Should create model without system_instruction
+    mock_genai.GenerativeModel.assert_called_once_with(core.GEMINI_MODEL)
+    assert result == mock_model

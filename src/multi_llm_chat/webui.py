@@ -213,23 +213,20 @@ with gr.Blocks() as demo:
             check_send_button_enabled(system_prompt, logic_hist),
         )
 
-    user_input.submit(
-        respond, submit_inputs, submit_outputs
-    ).success(
-        lambda logic, sys: (
+    def update_token_and_button(logic, sys):
+        """Update token display and button state after response (success or error)"""
+        return (
             update_token_display(sys, logic),
             check_send_button_enabled(sys, logic),
-        ),
+        )
+
+    user_input.submit(respond, submit_inputs, submit_outputs).then(
+        update_token_and_button,
         [logic_history_state, system_prompt_input],
         [token_display, send_button],
     )
-    send_button.click(
-        respond, submit_inputs, submit_outputs
-    ).success(
-        lambda logic, sys: (
-            update_token_display(sys, logic),
-            check_send_button_enabled(sys, logic),
-        ),
+    send_button.click(respond, submit_inputs, submit_outputs).then(
+        update_token_and_button,
         [logic_history_state, system_prompt_input],
         [token_display, send_button],
     )
