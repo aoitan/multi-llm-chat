@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 from collections import OrderedDict
 
@@ -6,12 +7,25 @@ import google.generativeai as genai
 import openai
 from dotenv import load_dotenv
 
+try:
+    import tiktoken
+
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
 load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
+
+# Context compression settings
+DEFAULT_MAX_CONTEXT_LENGTH = int(os.getenv("DEFAULT_MAX_CONTEXT_LENGTH", "4096"))
+GEMINI_MAX_CONTEXT_LENGTH = os.getenv("GEMINI_MAX_CONTEXT_LENGTH")
+CHATGPT_MAX_CONTEXT_LENGTH = os.getenv("CHATGPT_MAX_CONTEXT_LENGTH")
+TOKEN_ESTIMATION_BUFFER_FACTOR = float(os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "1.2"))
 
 _gemini_model = None
 _gemini_models_cache = OrderedDict()  # LRU cache: hash -> (prompt, model)
@@ -343,3 +357,274 @@ def extract_text_from_chunk(chunk, model_name):
             text = chunk
 
     return text
+
+
+# Context compression and token guard rail functions
+
+
+def get_max_context_length(model_name):
+    """Get maximum context length for the specified model
+
+    Reads from environment variables with fallback to defaults:
+    1. Model-specific: GEMINI_MAX_CONTEXT_LENGTH, CHATGPT_MAX_CONTEXT_LENGTH
+    2. Generic: DEFAULT_MAX_CONTEXT_LENGTH
+    3. Built-in: 4096
+
+    Args:
+        model_name: Model identifier
+
+    Returns:
+        Maximum context length in tokens
+    """
+    model_lower = model_name.lower()
+
+    # Check for model-specific environment variable (read dynamically)
+    if "gemini" in model_lower:
+        gemini_max = os.getenv("GEMINI_MAX_CONTEXT_LENGTH")
+        if gemini_max:
+            try:
+                return int(gemini_max)
+            except ValueError:
+                logging.warning(f"Invalid GEMINI_MAX_CONTEXT_LENGTH: {gemini_max}. Using default.")
+
+    if "gpt" in model_lower:
+        chatgpt_max = os.getenv("CHATGPT_MAX_CONTEXT_LENGTH")
+        if chatgpt_max:
+            try:
+                return int(chatgpt_max)
+            except ValueError:
+                logging.warning(
+                    f"Invalid CHATGPT_MAX_CONTEXT_LENGTH: {chatgpt_max}. Using default."
+                )
+
+    # Fall back to default (also read dynamically)
+    default_max = os.getenv("DEFAULT_MAX_CONTEXT_LENGTH")
+    if default_max:
+        try:
+            return int(default_max)
+        except ValueError:
+            logging.warning(f"Invalid DEFAULT_MAX_CONTEXT_LENGTH: {default_max}. Using default.")
+
+    # Built-in default
+    return 4096
+
+
+def calculate_tokens(text, model_name):
+    """Calculate token count for text using model-appropriate method
+
+    - OpenAI models: Use tiktoken for accurate counting
+    - Other models: Use estimation with buffer factor
+
+    Args:
+        text: Text to tokenize
+        model_name: Model identifier
+
+    Returns:
+        Token count (int)
+    """
+    model_lower = model_name.lower()
+
+    # Use tiktoken for OpenAI models if available
+    if "gpt" in model_lower and TIKTOKEN_AVAILABLE:
+        try:
+            # Map model name to tiktoken encoding
+            if "gpt-4" in model_lower:
+                encoding = tiktoken.encoding_for_model("gpt-4")
+            elif "gpt-3.5" in model_lower:
+                encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            else:
+                # Fallback to cl100k_base (used by gpt-4, gpt-3.5-turbo)
+                encoding = tiktoken.get_encoding("cl100k_base")
+
+            return len(encoding.encode(text))
+        except Exception:
+            # Fall back to estimation if tiktoken fails
+            pass
+
+    # Use estimation with buffer factor for other models
+    buffer_factor = float(os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "1.2"))
+    base_estimate = _estimate_tokens(text)
+    return int(base_estimate * buffer_factor)
+
+
+def prune_history_sliding_window(history, max_tokens, model_name, system_prompt=None):
+    """Prune conversation history using sliding window approach
+
+    Removes oldest conversation turns to fit within max_tokens limit.
+    Always preserves the most recent turns and accounts for system prompt.
+
+    Args:
+        history: Conversation history list
+        max_tokens: Maximum tokens allowed
+        model_name: Model identifier
+        system_prompt: Optional system prompt (not included in history)
+
+    Returns:
+        Pruned history list
+    """
+    if not history:
+        return history
+
+    # Calculate system prompt tokens
+    system_tokens = 0
+    if system_prompt:
+        system_tokens = calculate_tokens(system_prompt, model_name)
+
+    # Calculate tokens for each entry
+    entry_tokens = []
+    for entry in history:
+        content = entry.get("content", "")
+        tokens = calculate_tokens(content, model_name)
+        entry_tokens.append(tokens)
+
+    # Calculate total tokens
+    total_tokens = system_tokens + sum(entry_tokens)
+
+    # If within limit, return as-is
+    if total_tokens <= max_tokens:
+        return history
+
+    # Prune from the beginning, preserving complete turns
+    # A turn is user message + assistant response
+    pruned_history = []
+    accumulated_tokens = system_tokens
+
+    # Start from the end and work backwards
+    for i in range(len(history) - 1, -1, -1):
+        entry = history[i]
+        tokens = entry_tokens[i]
+
+        # Check if adding this entry would exceed limit
+        if accumulated_tokens + tokens <= max_tokens:
+            pruned_history.insert(0, entry)
+            accumulated_tokens += tokens
+        else:
+            # Stop pruning - we've reached the limit
+            break
+
+    return pruned_history
+
+
+def validate_system_prompt_length(system_prompt, model_name):
+    """Validate that system prompt doesn't exceed model's max context
+
+    Args:
+        system_prompt: System prompt text
+        model_name: Model identifier
+
+    Returns:
+        dict with 'valid' (bool) and optional 'error' (str)
+    """
+    if not system_prompt:
+        return {"valid": True}
+
+    max_length = get_max_context_length(model_name)
+    prompt_tokens = calculate_tokens(system_prompt, model_name)
+
+    if prompt_tokens > max_length:
+        return {
+            "valid": False,
+            "error": (
+                f"System prompt ({prompt_tokens} tokens) exceeds "
+                f"max context length ({max_length} tokens)"
+            ),
+        }
+
+    return {"valid": True}
+
+
+def validate_context_length(history, system_prompt, model_name):
+    """Validate that system prompt + latest turn doesn't exceed max context
+
+    Args:
+        history: Conversation history
+        system_prompt: System prompt text
+        model_name: Model identifier
+
+    Returns:
+        dict with 'valid' (bool) and optional 'error' (str)
+    """
+    max_length = get_max_context_length(model_name)
+
+    # Calculate system prompt tokens
+    system_tokens = 0
+    if system_prompt:
+        system_tokens = calculate_tokens(system_prompt, model_name)
+
+    # Get latest turn (may be just user message, or user + assistant)
+    if not history:
+        # Only system prompt
+        if system_tokens > max_length:
+            return {
+                "valid": False,
+                "error": (
+                    f"System prompt alone ({system_tokens} tokens) exceeds "
+                    f"max context ({max_length} tokens)"
+                ),
+            }
+        return {"valid": True}
+
+    # Calculate tokens for latest message(s)
+    latest_tokens = 0
+    for entry in history[-2:]:  # Check last 1-2 entries (latest turn)
+        content = entry.get("content", "")
+        latest_tokens += calculate_tokens(content, model_name)
+
+    total_tokens = system_tokens + latest_tokens
+
+    if total_tokens > max_length:
+        return {
+            "valid": False,
+            "error": (
+                f"Single turn too long: {total_tokens} tokens exceeds "
+                f"max context ({max_length} tokens)"
+            ),
+        }
+
+    return {"valid": True}
+
+
+def get_pruning_info(history, max_tokens, model_name, system_prompt=None):
+    """Get information about how history would be pruned
+
+    Args:
+        history: Conversation history
+        max_tokens: Maximum tokens allowed
+        model_name: Model identifier
+        system_prompt: Optional system prompt
+
+    Returns:
+        dict with pruning statistics
+    """
+    if not history:
+        return {
+            "turns_to_remove": 0,
+            "original_length": 0,
+            "pruned_length": 0,
+        }
+
+    # Calculate current total
+    system_tokens = 0
+    if system_prompt:
+        system_tokens = calculate_tokens(system_prompt, model_name)
+
+    original_tokens = system_tokens
+    for entry in history:
+        content = entry.get("content", "")
+        original_tokens += calculate_tokens(content, model_name)
+
+    # Get pruned version
+    pruned = prune_history_sliding_window(history, max_tokens, model_name, system_prompt)
+
+    pruned_tokens = system_tokens
+    for entry in pruned:
+        content = entry.get("content", "")
+        pruned_tokens += calculate_tokens(content, model_name)
+
+    turns_removed = len(history) - len(pruned)
+
+    return {
+        "turns_to_remove": turns_removed,
+        "original_length": original_tokens,
+        "pruned_length": pruned_tokens,
+    }
