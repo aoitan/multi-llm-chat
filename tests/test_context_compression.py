@@ -303,3 +303,23 @@ def test_calculate_tokens_invalid_buffer_factor():
             # Should log warning
             mock_warning.assert_called_once()
             assert "TOKEN_ESTIMATION_BUFFER_FACTOR" in str(mock_warning.call_args)
+
+
+def test_chatgpt_token_count_includes_message_overhead():
+    """ChatGPT token counting should include message formatting overhead"""
+    # OpenAI's official guidance: each message has ~3 tokens overhead
+    # (role name, separators, etc.)
+    text = "Hello"  # Simple text
+
+    # Get raw tiktoken count (content only)
+    import tiktoken
+
+    encoding = tiktoken.encoding_for_model("gpt-4")
+    content_tokens = len(encoding.encode(text))
+
+    # calculate_tokens should add overhead for message formatting
+    result = core.calculate_tokens(text, "gpt-4o")
+
+    # Should be more than just content tokens (includes ~3 token overhead)
+    assert result > content_tokens
+    assert result == content_tokens + 3  # OpenAI's per-message overhead

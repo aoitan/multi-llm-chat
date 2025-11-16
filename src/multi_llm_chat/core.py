@@ -409,7 +409,7 @@ def get_max_context_length(model_name):
 def calculate_tokens(text, model_name):
     """Calculate token count for text using model-appropriate method
 
-    - OpenAI models: Use tiktoken for accurate counting
+    - OpenAI models: Use tiktoken for accurate counting (includes message overhead)
     - Other models: Use estimation with buffer factor
 
     Args:
@@ -433,7 +433,14 @@ def calculate_tokens(text, model_name):
                 # Fallback to cl100k_base (used by gpt-4, gpt-3.5-turbo)
                 encoding = tiktoken.get_encoding("cl100k_base")
 
-            return len(encoding.encode(text))
+            content_tokens = len(encoding.encode(text))
+
+            # Add per-message overhead for Chat Completions format
+            # OpenAI guidance: ~3 tokens per message for role, separators, etc.
+            # https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
+            message_overhead = 3
+
+            return content_tokens + message_overhead
         except Exception:
             # Fall back to estimation if tiktoken fails
             pass
