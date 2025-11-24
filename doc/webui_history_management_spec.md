@@ -42,7 +42,7 @@ WebUI上でユーザーIDに紐づく会話履歴を保存・一覧・読み込�
 ## 5. データ仕様
 - 既存 `HistoryStore` のJSONスキーマ（`display_name`, `system_prompt`, `turns`, `metadata`）を利用。
 - ファイル配置: `chat_histories/<sanitized_user>/<sanitized_name>.json`。
-- サニタイズと検証はCLIと共通ルールを使用。
+- サニタイズと検証はCLIと共通のルールを使用する。
 
 ## 6. 非機能要件
 - I/Oエラーや無効な名前はユーザー向けメッセージを表示し、例外はログへ記録。
