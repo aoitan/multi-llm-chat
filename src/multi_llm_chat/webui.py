@@ -96,10 +96,23 @@ def check_send_button_enabled(system_prompt, logic_history=None, model_name=None
     return gr.Button(interactive=is_enabled)
 
 
-def respond(user_message, display_history, logic_history, system_prompt):
+def respond(user_message, display_history, logic_history, system_prompt, user_id=None):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
+
+    Args:
+        user_message: User's input message
+        display_history: Display history for chatbot UI
+        logic_history: Internal logic history
+        system_prompt: System prompt text
+        user_id: User ID (required for history management)
     """
+    # Validate user_id before processing
+    if not user_id or not user_id.strip():
+        # Return error message without calling LLM
+        display_history.append([user_message, "[System: ユーザーIDを入力してください]"])
+        yield display_history, display_history, logic_history
+        return
 
     def _stream_response(model_name, stream):
         full_response = ""
@@ -297,19 +310,16 @@ with gr.Blocks() as demo:
     )
 
     # イベントハンドラを定義（user_inputとsend_buttonの両方）
-    submit_inputs = [user_input, display_history_state, logic_history_state, system_prompt_input]
+    submit_inputs = [
+        user_input,
+        display_history_state,
+        logic_history_state,
+        system_prompt_input,
+        user_id_input,
+    ]
     submit_outputs = [chatbot_ui, display_history_state, logic_history_state]
 
-    # Update token display after each response (history changed)
-    def update_ui_after_response(chatbot, display_hist, logic_hist, system_prompt):
-        return (
-            chatbot,
-            display_hist,
-            logic_hist,
-            update_token_display(system_prompt, logic_hist),
-            check_send_button_enabled(system_prompt, logic_hist),
-        )
-
+    # Remove unused function (dead code)
     def update_token_and_button(user_id, logic, sys):
         """Update token display and button state after response (success or error)"""
         return (

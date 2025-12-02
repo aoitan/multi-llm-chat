@@ -109,8 +109,10 @@ def test_system_prompt_included_in_chat():
         display_history = []
         logic_history = []
 
-        # Call respond and consume the generator
-        result_gen = webui.respond(user_message, display_history, logic_history, system_prompt)
+        # Call respond with user_id
+        result_gen = webui.respond(
+            user_message, display_history, logic_history, system_prompt, user_id="test_user"
+        )
         # Consume all yields
         for _ in result_gen:
             pass
@@ -238,3 +240,47 @@ def test_send_button_enabled_when_user_id_and_token_ok():
             "test_user", "Normal prompt", None, "gemini-2.0-flash-exp"
         )
         assert result["interactive"] is True
+
+
+def test_respond_rejects_empty_user_id():
+    """respond() should reject requests when user_id is empty"""
+    user_message = "@gemini Hello"
+    display_history = []
+    logic_history = []
+    system_prompt = "Test"
+
+    # Call respond with empty user_id
+    result_gen = webui.respond(
+        user_message, display_history, logic_history, system_prompt, user_id=""
+    )
+    # Consume all yields
+    results = list(result_gen)
+
+    # Should return error message without calling LLM
+    assert len(results) == 1
+    final_display = results[0][0]
+    assert len(final_display) == 1
+    assert "ユーザーIDを入力してください" in final_display[0][1]
+
+
+def test_respond_rejects_whitespace_user_id():
+    """respond() should reject requests when user_id is only whitespace"""
+    with patch("multi_llm_chat.core.call_gemini_api") as mock_api:
+        user_message = "@gemini Hello"
+        display_history = []
+        logic_history = []
+        system_prompt = "Test"
+
+        # Call respond with whitespace user_id
+        result_gen = webui.respond(
+            user_message, display_history, logic_history, system_prompt, user_id="   "
+        )
+        results = list(result_gen)
+
+        # Should return error message
+        assert len(results) == 1
+        final_display = results[0][0]
+        assert "ユーザーIDを入力してください" in final_display[0][1]
+
+        # LLM should NOT be called
+        mock_api.assert_not_called()
