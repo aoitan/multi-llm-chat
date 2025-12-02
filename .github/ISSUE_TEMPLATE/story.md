@@ -15,7 +15,7 @@ labels: 'story'
 
 ## 仕様書 (Specifications)
 
-- [関連仕様書へのリンク](../doc/[spec_file].md)
+- [関連仕様書へのリンク](../../doc/[spec_file].md)
 
 ## 受け入れ基準 (Acceptance Criteria)
 
