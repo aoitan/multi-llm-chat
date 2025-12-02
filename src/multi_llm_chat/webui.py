@@ -72,34 +72,23 @@ def update_token_display(system_prompt, logic_history=None, model_name=None):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
-def check_send_button_enabled(system_prompt, logic_history=None, model_name=None):
-    """Check if send button should be enabled based on token limit
-
-    Args:
-        system_prompt: System prompt text
-        logic_history: Current conversation history (optional)
-        model_name: Model name for context length calculation (optional)
-
-    Returns:
-        gr.Button with interactive state set
-    """
-    if model_name is None:
-        # Use smallest context length to be conservative
-        model_name = core.CHATGPT_MODEL
-
-    if not system_prompt:
-        return gr.Button(interactive=True)
-
-    # Include history in token calculation
-    token_info = core.get_token_info(system_prompt, model_name, logic_history)
-    is_enabled = token_info["token_count"] <= token_info["max_context_length"]
-    return gr.Button(interactive=is_enabled)
-
-
-def respond(user_message, display_history, logic_history, system_prompt):
+def respond(user_message, display_history, logic_history, system_prompt, user_id):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
+
+    Args:
+        user_message: User's input message
+        display_history: Display history for chatbot UI
+        logic_history: Internal logic history
+        system_prompt: System prompt text
+        user_id: User ID (required - must not be empty)
     """
+    # Validate user_id before processing
+    if not user_id or not user_id.strip():
+        # Return error message without calling LLM
+        display_history.append([user_message, "[System: ユーザーIDを入力してください]"])
+        yield display_history, display_history, logic_history
+        return
 
     def _stream_response(model_name, stream):
         full_response = ""
@@ -158,9 +147,66 @@ def respond(user_message, display_history, logic_history, system_prompt):
         yield display_history, display_history, logic_history
 
 
+def check_history_buttons_enabled(user_id):
+    """Check if history buttons should be enabled based on user_id
+
+    Args:
+        user_id: User ID string
+
+    Returns:
+        dict with button states using gr.update()
+    """
+    enabled = bool(user_id and user_id.strip())
+    return {
+        "save_btn": gr.update(interactive=enabled),
+        "load_btn": gr.update(interactive=enabled),
+        "new_btn": gr.update(interactive=enabled),
+    }
+
+
+def check_send_button_with_user_id(user_id, system_prompt, logic_history=None, model_name=None):
+    """Check if send button should be enabled based on user_id AND token limit
+
+    Args:
+        user_id: User ID string (must not be empty)
+        system_prompt: System prompt text
+        logic_history: Current conversation history (optional)
+        model_name: Model name for context length calculation (optional)
+
+    Returns:
+        gr.update() with interactive state
+    """
+    # First check user_id
+    if not user_id or not user_id.strip():
+        return gr.update(interactive=False)
+
+    # Then check token limit
+    if model_name is None:
+        model_name = core.CHATGPT_MODEL
+
+    if not system_prompt:
+        return gr.update(interactive=True)
+
+    token_info = core.get_token_info(system_prompt, model_name, logic_history)
+    is_enabled = token_info["token_count"] <= token_info["max_context_length"]
+    return gr.update(interactive=is_enabled)
+
+
 # --- Gradio UIの構築 ---
 with gr.Blocks() as demo:
     gr.Markdown("# Multi-LLM Chat")
+
+    # User ID input with warning
+    with gr.Row():
+        user_id_input = gr.Textbox(
+            label="User ID",
+            placeholder="Enter your user ID...",
+            elem_id="user_id_input",
+        )
+    gr.Markdown(
+        "⚠️ **注意**: これは認証ではありません。他人のIDを使わないでください。",
+        elem_id="user_id_warning",
+    )
 
     # System prompt input
     with gr.Row():
@@ -172,6 +218,30 @@ with gr.Blocks() as demo:
 
     # Token count display
     token_display = gr.Markdown("Tokens: 0 / - (no system prompt)")
+
+    # History management panel
+    with gr.Accordion("履歴管理", open=False):
+        with gr.Row():
+            history_dropdown = gr.Dropdown(
+                label="保存済み履歴",
+                choices=[],
+                elem_id="history_dropdown",
+            )
+        with gr.Row():
+            save_name_input = gr.Textbox(
+                label="保存名",
+                placeholder="履歴の名前を入力...",
+                elem_id="save_name_input",
+            )
+        with gr.Row():
+            save_history_btn = gr.Button(
+                "現在の会話を保存", elem_id="save_history_btn", interactive=False
+            )
+            load_history_btn = gr.Button(
+                "選択した会話を読み込む", elem_id="load_history_btn", interactive=False
+            )
+            new_chat_btn = gr.Button("新しい会話を開始", elem_id="new_chat_btn", interactive=False)
+        history_status = gr.Markdown("", elem_id="history_status")
 
     # 履歴を管理するための非表示Stateコンポーネント
     display_history_state = gr.State([])
@@ -187,47 +257,60 @@ with gr.Blocks() as demo:
             container=False,
             scale=4,
         )
-        send_button = gr.Button("Send", variant="primary", scale=1)
+        send_button = gr.Button("Send", variant="primary", scale=1, interactive=False)
+
+    # Update button states when user ID changes
+    def update_buttons_on_user_id(user_id, system_prompt, logic_history):
+        enabled = bool(user_id and user_id.strip())
+        return (
+            gr.update(interactive=enabled),  # save_history_btn
+            gr.update(interactive=enabled),  # load_history_btn
+            gr.update(interactive=enabled),  # new_chat_btn
+            check_send_button_with_user_id(user_id, system_prompt, logic_history),  # send_button
+        )
+
+    user_id_input.change(
+        update_buttons_on_user_id,
+        [user_id_input, system_prompt_input, logic_history_state],
+        [save_history_btn, load_history_btn, new_chat_btn, send_button],
+    )
 
     # Update token display and button state when system prompt or history changes
     system_prompt_input.change(
-        lambda prompt, history: (
+        lambda user_id, prompt, history: (
             update_token_display(prompt, history),
-            check_send_button_enabled(prompt, history),
+            check_send_button_with_user_id(user_id, prompt, history),
         ),
-        [system_prompt_input, logic_history_state],
+        [user_id_input, system_prompt_input, logic_history_state],
         [token_display, send_button],
     )
 
     # イベントハンドラを定義（user_inputとsend_buttonの両方）
-    submit_inputs = [user_input, display_history_state, logic_history_state, system_prompt_input]
+    submit_inputs = [
+        user_input,
+        display_history_state,
+        logic_history_state,
+        system_prompt_input,
+        user_id_input,
+    ]
     submit_outputs = [chatbot_ui, display_history_state, logic_history_state]
 
-    # Update token display after each response (history changed)
-    def update_ui_after_response(chatbot, display_hist, logic_hist, system_prompt):
-        return (
-            chatbot,
-            display_hist,
-            logic_hist,
-            update_token_display(system_prompt, logic_hist),
-            check_send_button_enabled(system_prompt, logic_hist),
-        )
-
-    def update_token_and_button(logic, sys):
+    # Remove unused function (dead code)
+    def update_token_and_button(user_id, logic, sys):
         """Update token display and button state after response (success or error)"""
         return (
             update_token_display(sys, logic),
-            check_send_button_enabled(sys, logic),
+            check_send_button_with_user_id(user_id, sys, logic),
         )
 
     user_input.submit(respond, submit_inputs, submit_outputs).then(
         update_token_and_button,
-        [logic_history_state, system_prompt_input],
+        [user_id_input, logic_history_state, system_prompt_input],
         [token_display, send_button],
     )
     send_button.click(respond, submit_inputs, submit_outputs).then(
         update_token_and_button,
-        [logic_history_state, system_prompt_input],
+        [user_id_input, logic_history_state, system_prompt_input],
         [token_display, send_button],
     )
 

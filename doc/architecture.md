@@ -81,17 +81,21 @@ graph TB
 
 | コンポーネント | 関数/変数 | 説明 |
 |-------------|----------|------|
-| **UI関数** | `update_token_display(system_prompt, model_name)` | トークン数表示を更新 |
-| | `check_send_button_enabled(system_prompt, model_name)` | 送信ボタンの有効/無効を判定 |
-| | `respond(user_message, display_history, logic_history, system_prompt)` | チャット応答の中心関数 |
+| **UI関数** | `update_token_display(system_prompt, logic_history, model_name)` | トークン数表示を更新 |
+| | `check_send_button_with_user_id(user_id, system_prompt, logic_history, model_name)` | 送信ボタンの有効/無効を判定（user_idとトークン制限を両方チェック） |
+| | `check_history_buttons_enabled(user_id)` | 履歴管理ボタンの有効/無効を判定（戻り値: dict of `gr.update()`） |
+| | `respond(user_message, display_history, logic_history, system_prompt, user_id)` | チャット応答の中心関数（user_id必須） |
 | **起動関数** | `launch(server_name=None, debug=True)` | Gradioアプリを起動 |
 | **UI要素** | `demo` | Gradio Blocksインスタンス |
+| | `user_id_input` | ユーザーID入力欄（履歴管理用） |
 | | `system_prompt_input` | システムプロンプト入力欄 |
 | | `token_display` | トークンカウント表示 |
 | | `chatbot_ui` | チャット表示エリア |
+| | `save_history_btn`, `load_history_btn`, `new_chat_btn` | 履歴管理ボタン |
 
 ##### 特殊処理
 - **Gradioバグ回避**: JSON Schema内のbool型処理のためのモンキーパッチ適用
+- **user_id検証**: `respond()`関数内でuser_idの空チェックを実施し、未入力時はエラーメッセージを返す
 
 #### 2.2 CLI: `src/multi_llm_chat/cli.py`
 
@@ -206,7 +210,7 @@ sequenceDiagram
 |-------------|-------------|---------|
 | `tests/test_core.py` | `src/multi_llm_chat/core.py` | 10 |
 | `tests/test_cli.py` | `src/multi_llm_chat/cli.py` | 8 |
-| `tests/test_webui.py` | `src/multi_llm_chat/webui.py` | 6 |
+| `tests/test_webui.py` | `src/multi_llm_chat/webui.py` | 20 |
 | `tests/test_chat_logic.py` | 互換性レイヤー | 3 |
 
 ### テスト方針
