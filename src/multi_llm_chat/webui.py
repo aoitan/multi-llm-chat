@@ -159,21 +159,48 @@ def respond(user_message, display_history, logic_history, system_prompt):
 
 
 def check_history_buttons_enabled(user_id):
-    """Check if history buttons and send button should be enabled based on user_id
+    """Check if history buttons should be enabled based on user_id
 
     Args:
         user_id: User ID string
 
     Returns:
-        dict with button states
+        dict with button states using gr.update()
     """
     enabled = bool(user_id and user_id.strip())
     return {
-        "save_btn": gr.Button(interactive=enabled),
-        "load_btn": gr.Button(interactive=enabled),
-        "new_btn": gr.Button(interactive=enabled),
-        "send_btn": gr.Button(interactive=enabled),
+        "save_btn": gr.update(interactive=enabled),
+        "load_btn": gr.update(interactive=enabled),
+        "new_btn": gr.update(interactive=enabled),
     }
+
+
+def check_send_button_with_user_id(user_id, system_prompt, logic_history=None, model_name=None):
+    """Check if send button should be enabled based on user_id AND token limit
+
+    Args:
+        user_id: User ID string (must not be empty)
+        system_prompt: System prompt text
+        logic_history: Current conversation history (optional)
+        model_name: Model name for context length calculation (optional)
+
+    Returns:
+        gr.update() with interactive state
+    """
+    # First check user_id
+    if not user_id or not user_id.strip():
+        return gr.update(interactive=False)
+
+    # Then check token limit
+    if model_name is None:
+        model_name = core.CHATGPT_MODEL
+
+    if not system_prompt:
+        return gr.update(interactive=True)
+
+    token_info = core.get_token_info(system_prompt, model_name, logic_history)
+    is_enabled = token_info["token_count"] <= token_info["max_context_length"]
+    return gr.update(interactive=is_enabled)
 
 
 # --- Gradio UIの構築 ---
@@ -218,9 +245,13 @@ with gr.Blocks() as demo:
                 elem_id="save_name_input",
             )
         with gr.Row():
-            save_history_btn = gr.Button("現在の会話を保存", elem_id="save_history_btn")
-            load_history_btn = gr.Button("選択した会話を読み込む", elem_id="load_history_btn")
-            new_chat_btn = gr.Button("新しい会話を開始", elem_id="new_chat_btn")
+            save_history_btn = gr.Button(
+                "現在の会話を保存", elem_id="save_history_btn", interactive=False
+            )
+            load_history_btn = gr.Button(
+                "選択した会話を読み込む", elem_id="load_history_btn", interactive=False
+            )
+            new_chat_btn = gr.Button("新しい会話を開始", elem_id="new_chat_btn", interactive=False)
         history_status = gr.Markdown("", elem_id="history_status")
 
     # 履歴を管理するための非表示Stateコンポーネント
@@ -240,28 +271,28 @@ with gr.Blocks() as demo:
         send_button = gr.Button("Send", variant="primary", scale=1, interactive=False)
 
     # Update button states when user ID changes
-    def update_buttons_on_user_id(user_id):
+    def update_buttons_on_user_id(user_id, system_prompt, logic_history):
         enabled = bool(user_id and user_id.strip())
         return (
-            gr.Button(interactive=enabled),  # save_history_btn
-            gr.Button(interactive=enabled),  # load_history_btn
-            gr.Button(interactive=enabled),  # new_chat_btn
-            gr.Button(interactive=enabled),  # send_button
+            gr.update(interactive=enabled),  # save_history_btn
+            gr.update(interactive=enabled),  # load_history_btn
+            gr.update(interactive=enabled),  # new_chat_btn
+            check_send_button_with_user_id(user_id, system_prompt, logic_history),  # send_button
         )
 
     user_id_input.change(
         update_buttons_on_user_id,
-        [user_id_input],
+        [user_id_input, system_prompt_input, logic_history_state],
         [save_history_btn, load_history_btn, new_chat_btn, send_button],
     )
 
     # Update token display and button state when system prompt or history changes
     system_prompt_input.change(
-        lambda prompt, history: (
+        lambda user_id, prompt, history: (
             update_token_display(prompt, history),
-            check_send_button_enabled(prompt, history),
+            check_send_button_with_user_id(user_id, prompt, history),
         ),
-        [system_prompt_input, logic_history_state],
+        [user_id_input, system_prompt_input, logic_history_state],
         [token_display, send_button],
     )
 
@@ -279,21 +310,21 @@ with gr.Blocks() as demo:
             check_send_button_enabled(system_prompt, logic_hist),
         )
 
-    def update_token_and_button(logic, sys):
+    def update_token_and_button(user_id, logic, sys):
         """Update token display and button state after response (success or error)"""
         return (
             update_token_display(sys, logic),
-            check_send_button_enabled(sys, logic),
+            check_send_button_with_user_id(user_id, sys, logic),
         )
 
     user_input.submit(respond, submit_inputs, submit_outputs).then(
         update_token_and_button,
-        [logic_history_state, system_prompt_input],
+        [user_id_input, logic_history_state, system_prompt_input],
         [token_display, send_button],
     )
     send_button.click(respond, submit_inputs, submit_outputs).then(
         update_token_and_button,
-        [logic_history_state, system_prompt_input],
+        [user_id_input, logic_history_state, system_prompt_input],
         [token_display, send_button],
     )
 

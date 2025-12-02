@@ -140,8 +140,16 @@ def test_user_id_warning_text_exists():
     """WebUI should display warning text about user ID"""
     # Verify warning text is in the demo
     assert webui.demo is not None
-    # This will be checked by verifying a Markdown component with specific text
-    # Will fail until we add the warning text
+    # Check that a Markdown component with warning text exists
+    components = {
+        block.elem_id: block for block in webui.demo.blocks.values() if hasattr(block, "elem_id")
+    }
+    assert "user_id_warning" in components
+    # Verify the warning markdown contains expected text
+    warning_block = components["user_id_warning"]
+    assert hasattr(warning_block, "value")
+    assert "認証ではありません" in warning_block.value
+    assert "他人のID" in warning_block.value
 
 
 def test_history_dropdown_exists():
@@ -183,20 +191,50 @@ def test_history_status_display_exists():
 
 
 def test_buttons_disabled_when_user_id_empty():
-    """History buttons and send button should be disabled when user ID is empty"""
-    # Test the function that controls button states based on user_id
-    # This will fail until we implement the control logic
+    """History buttons should be disabled when user ID is empty"""
     result = webui.check_history_buttons_enabled("")
-    assert result["save_btn"].interactive is False
-    assert result["load_btn"].interactive is False
-    assert result["new_btn"].interactive is False
-    assert result["send_btn"].interactive is False
+    assert result["save_btn"]["interactive"] is False
+    assert result["load_btn"]["interactive"] is False
+    assert result["new_btn"]["interactive"] is False
 
 
 def test_buttons_enabled_when_user_id_provided():
-    """History buttons and send button should be enabled when user ID is provided"""
+    """History buttons should be enabled when user ID is provided"""
     result = webui.check_history_buttons_enabled("test_user")
-    assert result["save_btn"].interactive is True
-    assert result["load_btn"].interactive is True
-    assert result["new_btn"].interactive is True
-    assert result["send_btn"].interactive is True
+    assert result["save_btn"]["interactive"] is True
+    assert result["load_btn"]["interactive"] is True
+    assert result["new_btn"]["interactive"] is True
+
+
+def test_send_button_disabled_when_user_id_empty():
+    """Send button should be disabled when user ID is empty"""
+    result = webui.check_send_button_with_user_id("", "test prompt")
+    assert result["interactive"] is False
+
+
+def test_send_button_disabled_when_token_limit_exceeded():
+    """Send button should be disabled when token limit is exceeded even with valid user_id"""
+    with patch("multi_llm_chat.core.get_token_info") as mock_token_info:
+        mock_token_info.return_value = {
+            "token_count": 2000000,
+            "max_context_length": 1048576,
+            "is_estimated": False,
+        }
+        result = webui.check_send_button_with_user_id(
+            "test_user", "Very long prompt", None, "gemini-2.0-flash-exp"
+        )
+        assert result["interactive"] is False
+
+
+def test_send_button_enabled_when_user_id_and_token_ok():
+    """Send button should be enabled when user ID is valid AND token count is within limit"""
+    with patch("multi_llm_chat.core.get_token_info") as mock_token_info:
+        mock_token_info.return_value = {
+            "token_count": 100,
+            "max_context_length": 1048576,
+            "is_estimated": True,
+        }
+        result = webui.check_send_button_with_user_id(
+            "test_user", "Normal prompt", None, "gemini-2.0-flash-exp"
+        )
+        assert result["interactive"] is True
