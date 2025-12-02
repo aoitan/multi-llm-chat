@@ -74,11 +74,12 @@ def test_send_button_disabled_when_limit_exceeded():
             "is_estimated": False,
         }
 
-        result = webui.check_send_button_enabled("Very long prompt", None, "gemini-2.0-flash-exp")
+        result = webui.check_send_button_with_user_id(
+            "test_user", "Very long prompt", None, "gemini-2.0-flash-exp"
+        )
 
-        # Result should be a gr.Button with interactive=False
-        assert hasattr(result, "interactive")
-        assert result.interactive is False
+        # Result should be gr.update() with interactive=False
+        assert result["interactive"] is False
 
 
 def test_send_button_enabled_when_within_limit():
@@ -90,11 +91,12 @@ def test_send_button_enabled_when_within_limit():
             "is_estimated": True,
         }
 
-        result = webui.check_send_button_enabled("Normal prompt", None, "gemini-2.0-flash-exp")
+        result = webui.check_send_button_with_user_id(
+            "test_user", "Normal prompt", None, "gemini-2.0-flash-exp"
+        )
 
-        # Result should be a gr.Button with interactive=True
-        assert hasattr(result, "interactive")
-        assert result.interactive is True
+        # Result should be gr.update() with interactive=True
+        assert result["interactive"] is True
 
 
 def test_system_prompt_included_in_chat():

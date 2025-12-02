@@ -72,30 +72,6 @@ def update_token_display(system_prompt, logic_history=None, model_name=None):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
-def check_send_button_enabled(system_prompt, logic_history=None, model_name=None):
-    """Check if send button should be enabled based on token limit
-
-    Args:
-        system_prompt: System prompt text
-        logic_history: Current conversation history (optional)
-        model_name: Model name for context length calculation (optional)
-
-    Returns:
-        gr.Button with interactive state set
-    """
-    if model_name is None:
-        # Use smallest context length to be conservative
-        model_name = core.CHATGPT_MODEL
-
-    if not system_prompt:
-        return gr.Button(interactive=True)
-
-    # Include history in token calculation
-    token_info = core.get_token_info(system_prompt, model_name, logic_history)
-    is_enabled = token_info["token_count"] <= token_info["max_context_length"]
-    return gr.Button(interactive=is_enabled)
-
-
 def respond(user_message, display_history, logic_history, system_prompt, user_id=None):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
