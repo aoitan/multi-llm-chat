@@ -210,7 +210,7 @@ sequenceDiagram
 |-------------|-------------|---------|
 | `tests/test_core.py` | `src/multi_llm_chat/core.py` | 10 |
 | `tests/test_cli.py` | `src/multi_llm_chat/cli.py` | 8 |
-| `tests/test_webui.py` | `src/multi_llm_chat/webui.py` | 6 |
+| `tests/test_webui.py` | `src/multi_llm_chat/webui.py` | 20 |
 | `tests/test_chat_logic.py` | 互換性レイヤー | 3 |
 
 ### テスト方針

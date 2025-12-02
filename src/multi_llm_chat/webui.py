@@ -72,7 +72,7 @@ def update_token_display(system_prompt, logic_history=None, model_name=None):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
-def respond(user_message, display_history, logic_history, system_prompt, user_id=None):
+def respond(user_message, display_history, logic_history, system_prompt, user_id):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
 
@@ -81,7 +81,7 @@ def respond(user_message, display_history, logic_history, system_prompt, user_id
         display_history: Display history for chatbot UI
         logic_history: Internal logic history
         system_prompt: System prompt text
-        user_id: User ID (required for history management)
+        user_id: User ID (required - must not be empty)
     """
     # Validate user_id before processing
     if not user_id or not user_id.strip():
