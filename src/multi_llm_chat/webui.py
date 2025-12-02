@@ -158,9 +158,39 @@ def respond(user_message, display_history, logic_history, system_prompt):
         yield display_history, display_history, logic_history
 
 
+def check_history_buttons_enabled(user_id):
+    """Check if history buttons and send button should be enabled based on user_id
+
+    Args:
+        user_id: User ID string
+
+    Returns:
+        dict with button states
+    """
+    enabled = bool(user_id and user_id.strip())
+    return {
+        "save_btn": gr.Button(interactive=enabled),
+        "load_btn": gr.Button(interactive=enabled),
+        "new_btn": gr.Button(interactive=enabled),
+        "send_btn": gr.Button(interactive=enabled),
+    }
+
+
 # --- Gradio UIの構築 ---
 with gr.Blocks() as demo:
     gr.Markdown("# Multi-LLM Chat")
+
+    # User ID input with warning
+    with gr.Row():
+        user_id_input = gr.Textbox(
+            label="User ID",
+            placeholder="Enter your user ID...",
+            elem_id="user_id_input",
+        )
+    gr.Markdown(
+        "⚠️ **注意**: これは認証ではありません。他人のIDを使わないでください。",
+        elem_id="user_id_warning",
+    )
 
     # System prompt input
     with gr.Row():
@@ -172,6 +202,26 @@ with gr.Blocks() as demo:
 
     # Token count display
     token_display = gr.Markdown("Tokens: 0 / - (no system prompt)")
+
+    # History management panel
+    with gr.Accordion("履歴管理", open=False):
+        with gr.Row():
+            history_dropdown = gr.Dropdown(
+                label="保存済み履歴",
+                choices=[],
+                elem_id="history_dropdown",
+            )
+        with gr.Row():
+            save_name_input = gr.Textbox(
+                label="保存名",
+                placeholder="履歴の名前を入力...",
+                elem_id="save_name_input",
+            )
+        with gr.Row():
+            save_history_btn = gr.Button("現在の会話を保存", elem_id="save_history_btn")
+            load_history_btn = gr.Button("選択した会話を読み込む", elem_id="load_history_btn")
+            new_chat_btn = gr.Button("新しい会話を開始", elem_id="new_chat_btn")
+        history_status = gr.Markdown("", elem_id="history_status")
 
     # 履歴を管理するための非表示Stateコンポーネント
     display_history_state = gr.State([])
@@ -187,7 +237,23 @@ with gr.Blocks() as demo:
             container=False,
             scale=4,
         )
-        send_button = gr.Button("Send", variant="primary", scale=1)
+        send_button = gr.Button("Send", variant="primary", scale=1, interactive=False)
+
+    # Update button states when user ID changes
+    def update_buttons_on_user_id(user_id):
+        enabled = bool(user_id and user_id.strip())
+        return (
+            gr.Button(interactive=enabled),  # save_history_btn
+            gr.Button(interactive=enabled),  # load_history_btn
+            gr.Button(interactive=enabled),  # new_chat_btn
+            gr.Button(interactive=enabled),  # send_button
+        )
+
+    user_id_input.change(
+        update_buttons_on_user_id,
+        [user_id_input],
+        [save_history_btn, load_history_btn, new_chat_btn, send_button],
+    )
 
     # Update token display and button state when system prompt or history changes
     system_prompt_input.change(

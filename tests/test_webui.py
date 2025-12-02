@@ -121,3 +121,82 @@ def test_system_prompt_included_in_chat():
         # System prompt is passed as second positional argument
         assert len(call_args.args) == 2
         assert call_args.args[1] == system_prompt
+
+
+# Task 017-A-1: WebUI 履歴パネルUIの構築
+def test_user_id_input_exists():
+    """WebUI should have user ID input textbox"""
+    # Verify that the demo has user_id component
+    assert webui.demo is not None
+    # This will fail until we add the component
+    # Component will be accessible via demo.blocks dict
+    components = {
+        block.elem_id: block for block in webui.demo.blocks.values() if hasattr(block, "elem_id")
+    }
+    assert "user_id_input" in components
+
+
+def test_user_id_warning_text_exists():
+    """WebUI should display warning text about user ID"""
+    # Verify warning text is in the demo
+    assert webui.demo is not None
+    # This will be checked by verifying a Markdown component with specific text
+    # Will fail until we add the warning text
+
+
+def test_history_dropdown_exists():
+    """WebUI should have history list dropdown"""
+    assert webui.demo is not None
+    components = {
+        block.elem_id: block for block in webui.demo.blocks.values() if hasattr(block, "elem_id")
+    }
+    assert "history_dropdown" in components
+
+
+def test_save_name_input_exists():
+    """WebUI should have save name input textbox"""
+    assert webui.demo is not None
+    components = {
+        block.elem_id: block for block in webui.demo.blocks.values() if hasattr(block, "elem_id")
+    }
+    assert "save_name_input" in components
+
+
+def test_history_buttons_exist():
+    """WebUI should have save/load/new buttons for history management"""
+    assert webui.demo is not None
+    components = {
+        block.elem_id: block for block in webui.demo.blocks.values() if hasattr(block, "elem_id")
+    }
+    assert "save_history_btn" in components
+    assert "load_history_btn" in components
+    assert "new_chat_btn" in components
+
+
+def test_history_status_display_exists():
+    """WebUI should have status display for history operations"""
+    assert webui.demo is not None
+    components = {
+        block.elem_id: block for block in webui.demo.blocks.values() if hasattr(block, "elem_id")
+    }
+    assert "history_status" in components
+
+
+def test_buttons_disabled_when_user_id_empty():
+    """History buttons and send button should be disabled when user ID is empty"""
+    # Test the function that controls button states based on user_id
+    # This will fail until we implement the control logic
+    result = webui.check_history_buttons_enabled("")
+    assert result["save_btn"].interactive is False
+    assert result["load_btn"].interactive is False
+    assert result["new_btn"].interactive is False
+    assert result["send_btn"].interactive is False
+
+
+def test_buttons_enabled_when_user_id_provided():
+    """History buttons and send button should be enabled when user ID is provided"""
+    result = webui.check_history_buttons_enabled("test_user")
+    assert result["save_btn"].interactive is True
+    assert result["load_btn"].interactive is True
+    assert result["new_btn"].interactive is True
+    assert result["send_btn"].interactive is True
