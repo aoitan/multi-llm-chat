@@ -243,6 +243,19 @@ with gr.Blocks() as demo:
             new_chat_btn = gr.Button("新しい会話を開始", elem_id="new_chat_btn", interactive=False)
         history_status = gr.Markdown("", elem_id="history_status")
 
+    # Confirmation dialog (modal-like UI)
+    with gr.Row(visible=False, elem_id="confirmation_dialog") as confirmation_dialog:
+        with gr.Column():
+            confirmation_message = gr.Markdown("", elem_id="confirmation_message")
+            with gr.Row():
+                confirmation_yes_btn = gr.Button("Yes", elem_id="confirmation_yes_btn", size="sm")
+                confirmation_no_btn = gr.Button("No", elem_id="confirmation_no_btn", size="sm")
+
+    # Confirmation state management
+    confirmation_state = gr.State(
+        {"pending_action": None, "pending_data": None}
+    )  # Stores pending action and data
+
     # 履歴を管理するための非表示Stateコンポーネント
     display_history_state = gr.State([])
     logic_history_state = gr.State([])

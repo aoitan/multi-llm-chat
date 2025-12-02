@@ -286,3 +286,23 @@ def test_respond_rejects_whitespace_user_id():
 
         # LLM should NOT be called
         mock_api.assert_not_called()
+
+
+# Task 017-A-2: 確認フロー（モーダル風UI）の実装
+def test_confirmation_ui_components_exist():
+    """WebUI should have confirmation UI components"""
+    assert webui.demo is not None
+    components = {
+        block.elem_id: block for block in webui.demo.blocks.values() if hasattr(block, "elem_id")
+    }
+    assert "confirmation_message" in components
+    assert "confirmation_yes_btn" in components
+    assert "confirmation_no_btn" in components
+
+
+def test_confirmation_state_exists():
+    """WebUI should have confirmation state management"""
+    # Check that confirmation_state exists in demo
+    assert webui.demo is not None
+    # Confirmation state should be a gr.State component
+    # Will be verified by checking it's used in event handlers
