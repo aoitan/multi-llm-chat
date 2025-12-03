@@ -275,7 +275,7 @@ def test_reset_command_clears_history_but_keeps_prompt(monkeypatch):
 
 
 def test_reset_command_calls_chat_logic(monkeypatch):
-    """CLI /reset should delegate to chat_logic.reset_history"""
+    """CLI /reset should delegate to cli.reset_history"""
     monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
     test_inputs = [
         "/reset",
@@ -284,7 +284,7 @@ def test_reset_command_calls_chat_logic(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.chat_logic.reset_history", return_value=[] ) as mock_reset:
+            with patch("multi_llm_chat.cli.reset_history", return_value=[]) as mock_reset:
                 cli.main()
 
     mock_reset.assert_called_once()

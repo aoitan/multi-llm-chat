@@ -231,6 +231,11 @@ def _handle_history_command(
     )
 
 
+def reset_history():
+    """Clear conversation history."""
+    return []
+
+
 def main():
     """Main CLI loop"""
     store = HistoryStore()
@@ -258,10 +263,8 @@ def main():
                     system_prompt = new_prompt
                     is_dirty = True
             elif command == "/reset":
-                from . import chat_logic
-
-                history = chat_logic.reset_history()
-                is_dirty = False
+                history = reset_history()
+                is_dirty = True  # treat reset as a new unsaved state
                 print("チャット履歴をリセットしました。")
             elif command == "/history":
                 history, system_prompt, is_dirty = _handle_history_command(

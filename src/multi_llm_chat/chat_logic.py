@@ -1,5 +1,6 @@
 # Backward compatibility layer - delegates to new core and cli modules
 from .cli import main as _cli_main
+from .cli import reset_history as _reset_history
 from .core import (
     CHATGPT_MODEL,
     GEMINI_MODEL,
@@ -20,8 +21,8 @@ def main():
 
 
 def reset_history():
-    """Clear conversation history"""
-    return []
+    """Clear conversation history (re-export for backward compatibility)."""
+    return _reset_history()
 
 
 __all__ = [
