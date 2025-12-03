@@ -19,8 +19,14 @@ def main():
     return history
 
 
+def reset_history():
+    """Clear conversation history"""
+    return []
+
+
 __all__ = [
     "main",
+    "reset_history",
     "call_gemini_api",
     "call_chatgpt_api",
     "format_history_for_gemini",

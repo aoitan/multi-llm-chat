@@ -257,6 +257,10 @@ def main():
                 if new_prompt != system_prompt:
                     system_prompt = new_prompt
                     is_dirty = True
+            elif command == "/reset":
+                history = []
+                is_dirty = False
+                print("チャット履歴をリセットしました。")
             elif command == "/history":
                 history, system_prompt, is_dirty = _handle_history_command(
                     args, user_id, store, history, system_prompt, is_dirty

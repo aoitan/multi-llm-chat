@@ -121,3 +121,28 @@ def test_system_prompt_included_in_chat():
         # System prompt is passed as second positional argument
         assert len(call_args.args) == 2
         assert call_args.args[1] == system_prompt
+
+
+def test_reset_clears_histories_and_keeps_prompt(monkeypatch):
+    """Reset handler should clear histories but keep system prompt for token calc"""
+    with patch("multi_llm_chat.core.get_token_info") as mock_token_info:
+        mock_token_info.return_value = {
+            "token_count": 10,
+            "max_context_length": 100,
+            "is_estimated": False,
+        }
+
+        chatbot, display_state, logic_state, token_html, send_button, user_input = (
+            webui.reset_conversation(
+                "stay",
+                [["u1", "a1"]],
+                [{"role": "user", "content": "before"}],
+            )
+        )
+
+    assert chatbot == []
+    assert display_state == []
+    assert logic_state == []
+    assert "10" in token_html  # system prompt remains for token count
+    assert hasattr(send_button, "interactive") and send_button.interactive is True
+    assert user_input == ""
