@@ -261,6 +261,7 @@ def test_reset_command_clears_history_but_keeps_prompt(monkeypatch):
         "/system base prompt",
         "first message",
         "/reset",
+        "y",
         "second message",
         "exit",
     ]
@@ -279,6 +280,7 @@ def test_reset_command_calls_chat_logic(monkeypatch):
     monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
     test_inputs = [
         "/reset",
+        # is_dirty=Falseなので確認は出ない
         "exit",
     ]
 

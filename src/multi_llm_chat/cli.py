@@ -258,8 +258,10 @@ def main():
                     system_prompt = new_prompt
                     is_dirty = True
             elif command == "/reset":
+                if is_dirty and not _confirm("現在の会話は保存されていません。リセットしますか？"):
+                    continue
                 history = reset_history()
-                is_dirty = True  # treat reset as a new unsaved state
+                is_dirty = bool(system_prompt)  # system promptのみの場合はdirty扱いを継続
                 print("チャット履歴をリセットしました。")
             elif command == "/history":
                 history, system_prompt, is_dirty = _handle_history_command(

@@ -257,6 +257,13 @@ with gr.Blocks() as demo:
             send_button,
             user_input,
         ],
+        js=(
+            "(s, _d, l) => { "
+            "const hasHistory = Array.isArray(l) && l.length > 0; "
+            "if (!hasHistory) return true; "
+            "return confirm('現在の会話は保存されていません。リセットしますか？'); "
+            "}"
+        ),
     )
 
     # 送信後、入力ボックスをクリアする

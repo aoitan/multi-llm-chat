@@ -120,6 +120,7 @@ def test_reset_command_clears_history(monkeypatch):
         "/system base prompt",
         "before reset",
         "/reset",
+        "y",
         "after reset",
         "exit",
     ]
