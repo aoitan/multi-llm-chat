@@ -545,6 +545,7 @@ with gr.Blocks() as demo:
         """Handle load history button click"""
         if not history_name:
             return (
+                gr.update(),  # Don't change chatbot_ui
                 gr.update(),  # Don't change display_history
                 gr.update(),  # Don't change logic_history
                 gr.update(),  # Don't change system_prompt
@@ -555,6 +556,7 @@ with gr.Blocks() as demo:
         # Check for unsaved session and show confirmation
         if has_unsaved_session(logic_hist):
             return (
+                gr.update(),  # Keep current chatbot_ui
                 gr.update(),  # Keep current display_history
                 gr.update(),  # Keep current logic_history
                 gr.update(),  # Keep current system_prompt
@@ -568,12 +570,13 @@ with gr.Blocks() as demo:
 
         # No unsaved content, load directly
         display_hist, logic_hist, sys_prompt, status = load_history_action(user_id, history_name)
-        return (display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
+        return (display_hist, display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
 
     load_history_btn.click(
         handle_load_history,
         inputs=[user_id_input, history_dropdown, logic_history_state],
         outputs=[
+            chatbot_ui,  # Update chatbot display
             display_history_state,
             logic_history_state,
             system_prompt_input,
@@ -589,6 +592,7 @@ with gr.Blocks() as demo:
         # Check for unsaved session and show confirmation
         if has_unsaved_session(logic_hist):
             return (
+                gr.update(),  # Keep current chatbot_ui
                 gr.update(),  # Keep current display_history
                 gr.update(),  # Keep current logic_history
                 gr.update(),  # Keep current system_prompt
@@ -600,12 +604,13 @@ with gr.Blocks() as demo:
 
         # No unsaved content, start new chat directly
         display_hist, logic_hist, sys_prompt, status = new_chat_action()
-        return (display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
+        return (display_hist, display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
 
     new_chat_btn.click(
         handle_new_chat,
         inputs=[logic_history_state],
         outputs=[
+            chatbot_ui,  # Update chatbot display
             display_history_state,
             logic_history_state,
             system_prompt_input,
