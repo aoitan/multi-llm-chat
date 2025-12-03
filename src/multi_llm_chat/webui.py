@@ -192,6 +192,37 @@ def check_send_button_with_user_id(user_id, system_prompt, logic_history=None, m
     return gr.update(interactive=is_enabled)
 
 
+def show_confirmation(message, action, data=None):
+    """Show confirmation dialog with message
+
+    Args:
+        message: Confirmation message to display
+        action: Action identifier (e.g., "save_overwrite", "load_unsaved")
+        data: Optional data to pass to the action
+
+    Returns:
+        tuple: (dialog_visibility, message_content, state)
+    """
+    return (
+        gr.update(visible=True),  # confirmation_dialog
+        message,  # confirmation_message
+        {"pending_action": action, "pending_data": data},  # confirmation_state
+    )
+
+
+def hide_confirmation():
+    """Hide confirmation dialog and clear state
+
+    Returns:
+        tuple: (dialog_visibility, message_content, state)
+    """
+    return (
+        gr.update(visible=False),  # confirmation_dialog
+        "",  # confirmation_message
+        {"pending_action": None, "pending_data": None},  # confirmation_state
+    )
+
+
 # --- Gradio UIの構築 ---
 with gr.Blocks() as demo:
     gr.Markdown("# Multi-LLM Chat")
@@ -286,6 +317,23 @@ with gr.Blocks() as demo:
         update_buttons_on_user_id,
         [user_id_input, system_prompt_input, logic_history_state],
         [save_history_btn, load_history_btn, new_chat_btn, send_button],
+    )
+
+    # Confirmation dialog event handlers
+    def handle_confirmation_no():
+        """Handle No button click - cancel pending action"""
+        return hide_confirmation()
+
+    confirmation_no_btn.click(
+        handle_confirmation_no,
+        outputs=[confirmation_dialog, confirmation_message, confirmation_state],
+    )
+
+    # Yes button handler will be implemented with actual actions (save/load/new)
+    # For now, just hide the dialog
+    confirmation_yes_btn.click(
+        hide_confirmation,
+        outputs=[confirmation_dialog, confirmation_message, confirmation_state],
     )
 
     # Update token display and button state when system prompt or history changes

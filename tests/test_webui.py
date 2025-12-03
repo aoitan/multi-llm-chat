@@ -306,3 +306,34 @@ def test_confirmation_state_exists():
     assert webui.demo is not None
     # Confirmation state should be a gr.State component
     # Will be verified by checking it's used in event handlers
+
+
+def test_show_confirmation_dialog():
+    """show_confirmation function should display dialog with message"""
+    if not hasattr(webui, "show_confirmation"):
+        import pytest
+
+        pytest.skip("show_confirmation not yet implemented")
+
+    message = "この操作を実行しますか？"
+    result = webui.show_confirmation(message, "test_action", {"key": "value"})
+
+    # Should return updates for visibility and message
+    assert result[0]["visible"] is True  # confirmation_dialog visible
+    assert message in result[1]  # confirmation_message content
+    assert result[2]["pending_action"] == "test_action"  # confirmation_state
+
+
+def test_hide_confirmation_dialog():
+    """hide_confirmation function should hide dialog"""
+    if not hasattr(webui, "hide_confirmation"):
+        import pytest
+
+        pytest.skip("hide_confirmation not yet implemented")
+
+    result = webui.hide_confirmation()
+
+    # Should return update to hide dialog
+    assert result[0]["visible"] is False  # confirmation_dialog hidden
+    assert result[1] == ""  # confirmation_message cleared
+    assert result[2]["pending_action"] is None  # confirmation_state cleared
