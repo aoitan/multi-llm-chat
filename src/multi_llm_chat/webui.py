@@ -158,6 +158,20 @@ def respond(user_message, display_history, logic_history, system_prompt):
         yield display_history, display_history, logic_history
 
 
+def reset_conversation(system_prompt, _display_history=None, _logic_history=None):
+    """Clear chat histories while keeping the current system prompt."""
+    cleared_display = []
+    cleared_logic = []
+    return (
+        cleared_display,
+        cleared_display,
+        cleared_logic,
+        update_token_display(system_prompt, cleared_logic),
+        check_send_button_enabled(system_prompt, cleared_logic),
+        "",
+    )
+
+
 # --- Gradio UIの構築 ---
 with gr.Blocks() as demo:
     gr.Markdown("# Multi-LLM Chat")
@@ -188,6 +202,7 @@ with gr.Blocks() as demo:
             scale=4,
         )
         send_button = gr.Button("Send", variant="primary", scale=1)
+        reset_button = gr.Button("新しいチャット", variant="secondary", scale=1)
 
     # Update token display and button state when system prompt or history changes
     system_prompt_input.change(
@@ -229,6 +244,26 @@ with gr.Blocks() as demo:
         update_token_and_button,
         [logic_history_state, system_prompt_input],
         [token_display, send_button],
+    )
+
+    reset_button.click(
+        reset_conversation,
+        [system_prompt_input, display_history_state, logic_history_state],
+        [
+            chatbot_ui,
+            display_history_state,
+            logic_history_state,
+            token_display,
+            send_button,
+            user_input,
+        ],
+        js=(
+            "(s, _d, l) => { "
+            "const hasHistory = Array.isArray(l) && l.length > 0; "
+            "if (!hasHistory) return true; "
+            "return confirm('現在の会話は保存されていません。リセットしますか？'); "
+            "}"
+        ),
     )
 
     # 送信後、入力ボックスをクリアする

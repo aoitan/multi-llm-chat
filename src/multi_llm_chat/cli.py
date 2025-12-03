@@ -2,7 +2,7 @@ import os
 import sys
 
 from . import core
-from .history import HistoryStore, sanitize_name
+from .history import HistoryStore, reset_history, sanitize_name
 
 
 def _clone_history(history):
@@ -257,6 +257,12 @@ def main():
                 if new_prompt != system_prompt:
                     system_prompt = new_prompt
                     is_dirty = True
+            elif command == "/reset":
+                if is_dirty and not _confirm("現在の会話は保存されていません。リセットしますか？"):
+                    continue
+                history = reset_history()
+                is_dirty = bool(system_prompt)  # system promptのみの場合はdirty扱いを継続
+                print("チャット履歴をリセットしました。")
             elif command == "/history":
                 history, system_prompt, is_dirty = _handle_history_command(
                     args, user_id, store, history, system_prompt, is_dirty

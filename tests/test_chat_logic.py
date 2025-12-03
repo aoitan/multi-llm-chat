@@ -111,3 +111,22 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             assert not mock_chatgpt_api.called
             assert history[-1]["role"] == "user"
             assert history[-1]["content"] == "hello"
+
+
+def test_reset_command_clears_history(monkeypatch):
+    """chat_logic.main should honor /reset and return only post-reset messages"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "/system base prompt",
+        "before reset",
+        "/reset",
+        "y",
+        "after reset",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print"):
+            history = chat_logic.main()
+
+    assert [entry["content"] for entry in history] == ["after reset"]

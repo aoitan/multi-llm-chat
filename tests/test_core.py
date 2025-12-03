@@ -1,3 +1,4 @@
+import os
 from unittest.mock import Mock, patch
 
 import multi_llm_chat.core as core
@@ -16,31 +17,33 @@ def test_get_token_info_returns_proper_structure():
 
 def test_get_token_info_gemini_model():
     """get_token_info should return correct max context for Gemini models"""
-    # Gemini 2.0 Flash (1M)
-    result = core.get_token_info("test", "gemini-2.0-flash-exp")
-    assert result["max_context_length"] == 1048576
+    with patch.dict(os.environ, {}, clear=True):
+        # Gemini 2.0 Flash (1M)
+        result = core.get_token_info("test", "gemini-2.0-flash-exp")
+        assert result["max_context_length"] == 1048576
 
-    # Gemini 1.5 Pro (2M)
-    result = core.get_token_info("test", "gemini-1.5-pro")
-    assert result["max_context_length"] == 2097152
+        # Gemini 1.5 Pro (2M)
+        result = core.get_token_info("test", "gemini-1.5-pro")
+        assert result["max_context_length"] == 2097152
 
-    # Gemini 1.5 Flash (1M)
-    result = core.get_token_info("test", "gemini-1.5-flash")
-    assert result["max_context_length"] == 1048576
+        # Gemini 1.5 Flash (1M)
+        result = core.get_token_info("test", "gemini-1.5-flash")
+        assert result["max_context_length"] == 1048576
 
-    # Gemini Pro (32K)
-    result = core.get_token_info("test", "models/gemini-pro-latest")
-    assert result["max_context_length"] == 32760
+        # Gemini Pro (32K)
+        result = core.get_token_info("test", "models/gemini-pro-latest")
+        assert result["max_context_length"] == 32760
 
-    # Unknown Gemini variant (conservative default)
-    result = core.get_token_info("test", "gemini-unknown")
-    assert result["max_context_length"] == 32760
+        # Unknown Gemini variant (conservative default)
+        result = core.get_token_info("test", "gemini-unknown")
+        assert result["max_context_length"] == 32760
 
 
 def test_get_token_info_chatgpt_model():
     """get_token_info should return correct max context for ChatGPT models"""
-    result = core.get_token_info("test", "gpt-4o")
-    assert result["max_context_length"] == 128000
+    with patch.dict(os.environ, {}, clear=True):
+        result = core.get_token_info("test", "gpt-4o")
+        assert result["max_context_length"] == 128000
 
 
 def test_prepare_request_openai_adds_system_prompt():

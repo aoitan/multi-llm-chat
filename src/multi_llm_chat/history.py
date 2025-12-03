@@ -32,6 +32,11 @@ def sanitize_name(name: str) -> str:
     return sanitized
 
 
+def reset_history():
+    """Return an empty conversation history."""
+    return []
+
+
 class HistoryStore:
     """Filesystem-backed store for chat histories."""
 

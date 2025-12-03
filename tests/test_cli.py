@@ -252,3 +252,41 @@ def test_system_command_uses_gemini_limit_for_large_prompt(monkeypatch):
     # With ChatGPT model, should reject the prompt
     result = cli._handle_system_command(large_prompt, "old_prompt", current_model="gpt-4")
     assert result == "old_prompt"  # Should keep old prompt, not accept new one
+
+
+def test_reset_command_clears_history_but_keeps_prompt(monkeypatch):
+    """CLI /reset should clear history without clearing system prompt"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "/system base prompt",
+        "first message",
+        "/reset",
+        "y",
+        "second message",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print"):
+            history, system_prompt = cli.main()
+
+    # After reset, only messages after the command should remain
+    assert [entry["content"] for entry in history] == ["second message"]
+    assert system_prompt == "base prompt"
+
+
+def test_reset_command_calls_chat_logic(monkeypatch):
+    """CLI /reset should delegate to cli.reset_history"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "/reset",
+        # is_dirty=Falseなので確認は出ない
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print"):
+            with patch("multi_llm_chat.cli.reset_history", return_value=[]) as mock_reset:
+                cli.main()
+
+    mock_reset.assert_called_once()
