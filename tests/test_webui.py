@@ -337,3 +337,20 @@ def test_hide_confirmation_dialog():
     assert result[0]["visible"] is False  # confirmation_dialog hidden
     assert result[1] == ""  # confirmation_message cleared
     assert result[2]["pending_action"] is None  # confirmation_state cleared
+
+
+def test_has_unsaved_session_empty():
+    """has_unsaved_session should return False for empty history"""
+    assert webui.has_unsaved_session([]) is False
+
+
+def test_has_unsaved_session_with_content():
+    """has_unsaved_session should return True when history exists"""
+    history = [{"role": "user", "content": "Hello"}]
+    assert webui.has_unsaved_session(history) is True
+
+
+def test_check_history_name_exists():
+    """check_history_name_exists placeholder should return False"""
+    # Currently returns False (placeholder)
+    assert webui.check_history_name_exists("test_user", "test_name") is False
