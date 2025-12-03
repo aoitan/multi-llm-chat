@@ -2,7 +2,7 @@ import os
 import sys
 
 from . import core
-from .history import HistoryStore, sanitize_name
+from .history import HistoryStore, reset_history, sanitize_name
 
 
 def _clone_history(history):
@@ -229,11 +229,6 @@ def _handle_history_command(
         new_system_prompt if new_system_prompt is not None else system_prompt,
         new_is_dirty if new_is_dirty is not None else is_dirty,
     )
-
-
-def reset_history():
-    """Clear conversation history."""
-    return []
 
 
 def main():
