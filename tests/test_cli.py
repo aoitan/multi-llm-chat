@@ -266,9 +266,25 @@ def test_reset_command_clears_history_but_keeps_prompt(monkeypatch):
     ]
 
     with patch("builtins.input", side_effect=test_inputs):
-        with patch("builtins.print"):
-            history, system_prompt = cli.main()
+            with patch("builtins.print"):
+                history, system_prompt = cli.main()
 
     # After reset, only messages after the command should remain
     assert [entry["content"] for entry in history] == ["second message"]
     assert system_prompt == "base prompt"
+
+
+def test_reset_command_calls_chat_logic(monkeypatch):
+    """CLI /reset should delegate to chat_logic.reset_history"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "/reset",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print"):
+            with patch("multi_llm_chat.chat_logic.reset_history", return_value=[] ) as mock_reset:
+                cli.main()
+
+    mock_reset.assert_called_once()

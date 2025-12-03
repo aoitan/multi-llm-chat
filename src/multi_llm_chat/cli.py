@@ -258,7 +258,9 @@ def main():
                     system_prompt = new_prompt
                     is_dirty = True
             elif command == "/reset":
-                history = []
+                from . import chat_logic
+
+                history = chat_logic.reset_history()
                 is_dirty = False
                 print("チャット履歴をリセットしました。")
             elif command == "/history":
