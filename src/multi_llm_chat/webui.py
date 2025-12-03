@@ -411,7 +411,15 @@ with gr.Blocks() as demo:
             data["logic_hist"],
             data["sys_prompt"],
         )
-        return (status, gr.update(choices=choices), [], [], "", *hide_confirmation())
+        return (
+            status,
+            gr.update(choices=choices),
+            gr.update(),  # Don't change chatbot_ui
+            gr.update(),  # Keep current display_history
+            gr.update(),  # Keep current logic_history
+            gr.update(),  # Keep current system_prompt
+            *hide_confirmation(),
+        )
 
     def _execute_load_unsaved(data):
         """Helper to execute load action"""
@@ -421,9 +429,10 @@ with gr.Blocks() as demo:
         return (
             status,
             gr.update(),
-            display_hist,
-            logic_hist,
-            sys_prompt,
+            display_hist,  # Update chatbot_ui
+            display_hist,  # Update display_history_state
+            logic_hist,  # Update logic_history_state
+            sys_prompt,  # Update system_prompt_input
             *hide_confirmation(),
         )
 
@@ -433,9 +442,10 @@ with gr.Blocks() as demo:
         return (
             status,
             gr.update(),
-            display_hist,
-            logic_hist,
-            sys_prompt,
+            display_hist,  # Update chatbot_ui
+            display_hist,  # Update display_history_state
+            logic_hist,  # Update logic_history_state
+            sys_prompt,  # Update system_prompt_input
             *hide_confirmation(),
         )
 
@@ -455,7 +465,15 @@ with gr.Blocks() as demo:
             return handler(data)
 
         # Unknown action, just hide dialog
-        return ("", gr.update(), [], [], "", *hide_confirmation())
+        return (
+            "",
+            gr.update(),
+            gr.update(),  # Don't change chatbot_ui
+            gr.update(),  # Don't change display_history
+            gr.update(),  # Don't change logic_history
+            gr.update(),  # Don't change system_prompt
+            *hide_confirmation(),
+        )
 
     confirmation_yes_btn.click(
         handle_confirmation_yes,
@@ -463,6 +481,7 @@ with gr.Blocks() as demo:
         outputs=[
             history_status,
             history_dropdown,
+            chatbot_ui,  # Add chatbot_ui to outputs
             display_history_state,
             logic_history_state,
             system_prompt_input,
