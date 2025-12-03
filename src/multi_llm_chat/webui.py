@@ -72,6 +72,50 @@ def update_token_display(system_prompt, logic_history=None, model_name=None):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
+def save_history_action(user_id, save_name, display_history, logic_history, system_prompt):
+    """Save current chat history (placeholder for Task 017-A-3)
+
+    Args:
+        user_id: User ID
+        save_name: Name to save the history as
+        display_history: Display history
+        logic_history: Logic history
+        system_prompt: System prompt
+
+    Returns:
+        tuple: (status_message, updated_dropdown_choices)
+    """
+    # TODO: Implement in Task 017-A-3 with HistoryStore
+    # For now, return success message
+    return (f"✅ 履歴 '{save_name}' を保存しました（ダミー）", [])
+
+
+def load_history_action(user_id, history_name):
+    """Load saved chat history (placeholder for Task 017-A-3)
+
+    Args:
+        user_id: User ID
+        history_name: Name of history to load
+
+    Returns:
+        tuple: (display_history, logic_history, system_prompt, status_message)
+    """
+    # TODO: Implement in Task 017-A-3 with HistoryStore
+    # For now, return empty history
+    return ([], [], "", f"✅ 履歴 '{history_name}' を読み込みました（ダミー）")
+
+
+def new_chat_action():
+    """Start new chat session (placeholder for Task 017-A-3)
+
+    Returns:
+        tuple: (display_history, logic_history, system_prompt, status_message)
+    """
+    # TODO: Implement in Task 017-A-3
+    # For now, return empty state
+    return ([], [], "", "✅ 新しい会話を開始しました（ダミー）")
+
+
 def respond(user_message, display_history, logic_history, system_prompt, user_id):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
@@ -334,6 +378,67 @@ with gr.Blocks() as demo:
     confirmation_yes_btn.click(
         hide_confirmation,
         outputs=[confirmation_dialog, confirmation_message, confirmation_state],
+    )
+
+    # History operations (basic implementation, confirmation to be added)
+    def handle_save_history(user_id, save_name, display_hist, logic_hist, sys_prompt):
+        """Handle save history button click"""
+        if not save_name or not save_name.strip():
+            return ("❌ 保存名を入力してください", gr.update())
+
+        # TODO: Check if name exists and show confirmation for overwrite
+        # For now, just save directly
+        status, choices = save_history_action(
+            user_id, save_name.strip(), display_hist, logic_hist, sys_prompt
+        )
+        return (status, gr.update(choices=choices))
+
+    save_history_btn.click(
+        handle_save_history,
+        inputs=[
+            user_id_input,
+            save_name_input,
+            display_history_state,
+            logic_history_state,
+            system_prompt_input,
+        ],
+        outputs=[history_status, history_dropdown],
+    )
+
+    def handle_load_history(user_id, history_name):
+        """Handle load history button click"""
+        if not history_name:
+            return ([], [], "", "❌ 読み込む履歴を選択してください")
+
+        # TODO: Check for unsaved session and show confirmation
+        # For now, just load directly
+        return load_history_action(user_id, history_name)
+
+    load_history_btn.click(
+        handle_load_history,
+        inputs=[user_id_input, history_dropdown],
+        outputs=[
+            display_history_state,
+            logic_history_state,
+            system_prompt_input,
+            history_status,
+        ],
+    )
+
+    def handle_new_chat():
+        """Handle new chat button click"""
+        # TODO: Check for unsaved session and show confirmation
+        # For now, just start new chat directly
+        return new_chat_action()
+
+    new_chat_btn.click(
+        handle_new_chat,
+        outputs=[
+            display_history_state,
+            logic_history_state,
+            system_prompt_input,
+            history_status,
+        ],
     )
 
     # Update token display and button state when system prompt or history changes
