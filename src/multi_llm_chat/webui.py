@@ -402,47 +402,57 @@ with gr.Blocks() as demo:
     )
 
     # Yes button handler - execute pending action
+    def _execute_save_overwrite(data):
+        """Helper to execute save action"""
+        status, choices = save_history_action(
+            data["user_id"],
+            data["save_name"],
+            data["display_hist"],
+            data["logic_hist"],
+            data["sys_prompt"],
+        )
+        return (status, gr.update(choices=choices), [], [], "", *hide_confirmation())
+
+    def _execute_load_unsaved(data):
+        """Helper to execute load action"""
+        display_hist, logic_hist, sys_prompt, status = load_history_action(
+            data["user_id"], data["history_name"]
+        )
+        return (
+            status,
+            gr.update(),
+            display_hist,
+            logic_hist,
+            sys_prompt,
+            *hide_confirmation(),
+        )
+
+    def _execute_new_chat_unsaved(data):
+        """Helper to execute new chat action"""
+        display_hist, logic_hist, sys_prompt, status = new_chat_action()
+        return (
+            status,
+            gr.update(),
+            display_hist,
+            logic_hist,
+            sys_prompt,
+            *hide_confirmation(),
+        )
+
+    ACTION_HANDLERS = {
+        "save_overwrite": _execute_save_overwrite,
+        "load_unsaved": _execute_load_unsaved,
+        "new_chat_unsaved": _execute_new_chat_unsaved,
+    }
+
     def handle_confirmation_yes(conf_state):
         """Handle Yes button click - execute pending action"""
         action = conf_state.get("pending_action")
-        data = conf_state.get("pending_data", {})
+        handler = ACTION_HANDLERS.get(action)
 
-        if action == "save_overwrite":
-            # Execute save operation
-            status, choices = save_history_action(
-                data["user_id"],
-                data["save_name"],
-                data["display_hist"],
-                data["logic_hist"],
-                data["sys_prompt"],
-            )
-            return (status, gr.update(choices=choices), [], [], "", *hide_confirmation())
-
-        elif action == "load_unsaved":
-            # Execute load operation
-            display_hist, logic_hist, sys_prompt, status = load_history_action(
-                data["user_id"], data["history_name"]
-            )
-            return (
-                status,
-                gr.update(),
-                display_hist,
-                logic_hist,
-                sys_prompt,
-                *hide_confirmation(),
-            )
-
-        elif action == "new_chat_unsaved":
-            # Execute new chat operation
-            display_hist, logic_hist, sys_prompt, status = new_chat_action()
-            return (
-                status,
-                gr.update(),
-                display_hist,
-                logic_hist,
-                sys_prompt,
-                *hide_confirmation(),
-            )
+        if handler:
+            data = conf_state.get("pending_data", {})
+            return handler(data)
 
         # Unknown action, just hide dialog
         return ("", gr.update(), [], [], "", *hide_confirmation())
