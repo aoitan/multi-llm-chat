@@ -266,8 +266,8 @@ def test_reset_command_clears_history_but_keeps_prompt(monkeypatch):
     ]
 
     with patch("builtins.input", side_effect=test_inputs):
-            with patch("builtins.print"):
-                history, system_prompt = cli.main()
+        with patch("builtins.print"):
+            history, system_prompt = cli.main()
 
     # After reset, only messages after the command should remain
     assert [entry["content"] for entry in history] == ["second message"]
