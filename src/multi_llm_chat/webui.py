@@ -525,14 +525,20 @@ with gr.Blocks() as demo:
     def handle_load_history(user_id, history_name, logic_hist):
         """Handle load history button click"""
         if not history_name:
-            return ([], [], "", "❌ 読み込む履歴を選択してください", *hide_confirmation())
+            return (
+                gr.update(),  # Don't change display_history
+                gr.update(),  # Don't change logic_history
+                gr.update(),  # Don't change system_prompt
+                "❌ 読み込む履歴を選択してください",
+                *hide_confirmation(),
+            )
 
         # Check for unsaved session and show confirmation
         if has_unsaved_session(logic_hist):
             return (
-                [],
-                [],
-                "",
+                gr.update(),  # Keep current display_history
+                gr.update(),  # Keep current logic_history
+                gr.update(),  # Keep current system_prompt
                 "",  # Don't update status yet
                 *show_confirmation(
                     "未保存の会話があります。破棄して読み込みますか？",
@@ -564,9 +570,9 @@ with gr.Blocks() as demo:
         # Check for unsaved session and show confirmation
         if has_unsaved_session(logic_hist):
             return (
-                [],
-                [],
-                "",
+                gr.update(),  # Keep current display_history
+                gr.update(),  # Keep current logic_history
+                gr.update(),  # Keep current system_prompt
                 "",  # Don't update status yet
                 *show_confirmation(
                     "未保存の会話があります。破棄して新規開始しますか？", "new_chat_unsaved", {}
