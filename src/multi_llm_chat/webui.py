@@ -438,7 +438,7 @@ with gr.Blocks() as demo:
     logic_history_state = gr.State([])
 
     # UIコンポーネント
-    chatbot_ui = gr.Chatbot(label="Conversation", height=600)
+    chatbot_ui = gr.Chatbot(label="Conversation", height=600, show_copy_button=True)
 
     with gr.Row():
         user_input = gr.Textbox(
@@ -448,6 +448,9 @@ with gr.Blocks() as demo:
             scale=4,
         )
         send_button = gr.Button("Send", variant="primary", scale=1, interactive=False)
+        reset_button = gr.Button(
+            "新しい会話を開始", variant="secondary", scale=1, interactive=False
+        )
 
     # Update button states when user ID changes
     def update_buttons_on_user_id(user_id, system_prompt, logic_history):
@@ -458,13 +461,21 @@ with gr.Blocks() as demo:
             gr.update(interactive=enabled),  # load_history_btn
             gr.update(interactive=enabled),  # new_chat_btn
             check_send_button_with_user_id(user_id, system_prompt, logic_history),  # send_button
+            gr.update(interactive=enabled),  # reset_button
             gr.update(choices=history_choices),  # history_dropdown
         )
 
     user_id_input.change(
         update_buttons_on_user_id,
         [user_id_input, system_prompt_input, logic_history_state],
-        [save_history_btn, load_history_btn, new_chat_btn, send_button, history_dropdown],
+        [
+            save_history_btn,
+            load_history_btn,
+            new_chat_btn,
+            send_button,
+            reset_button,
+            history_dropdown,
+        ],
     )
 
     # Confirmation dialog event handlers
@@ -812,22 +823,24 @@ with gr.Blocks() as demo:
             *hide_confirmation(),
         )
 
-    new_chat_btn.click(
-        handle_new_chat,
-        inputs=[user_id_input, logic_history_state, system_prompt_input],
-        outputs=[
-            chatbot_ui,  # Update chatbot display
-            display_history_state,
-            logic_history_state,
-            system_prompt_input,
-            history_status,
-            token_display,  # Update token count
-            send_button,  # Update send button state
-            confirmation_dialog,
-            confirmation_message,
-            confirmation_state,
-        ],
-    )
+    # Common inputs and outputs for new chat action
+    new_chat_inputs = [user_id_input, logic_history_state, system_prompt_input]
+    new_chat_outputs = [
+        chatbot_ui,
+        display_history_state,
+        logic_history_state,
+        system_prompt_input,
+        history_status,
+        token_display,
+        send_button,
+        confirmation_dialog,
+        confirmation_message,
+        confirmation_state,
+    ]
+
+    # Both new_chat_btn and reset_button trigger the same handler
+    new_chat_btn.click(handle_new_chat, inputs=new_chat_inputs, outputs=new_chat_outputs)
+    reset_button.click(handle_new_chat, inputs=new_chat_inputs, outputs=new_chat_outputs)
 
     # Update token display and button state when system prompt or history changes
     system_prompt_input.change(
