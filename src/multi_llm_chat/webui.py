@@ -218,6 +218,41 @@ def get_history_list(user_id):
         return []
 
 
+def _build_history_operation_updates(user_id, display_hist, logic_hist, sys_prompt, status):
+    """Build consistent UI update dictionary after history operations
+
+    This helper consolidates common UI update logic used across multiple event handlers
+    (load history, new chat, save history) to reduce code duplication.
+
+    Args:
+        user_id: User ID
+        display_hist: Display history
+        logic_hist: Logic history
+        sys_prompt: System prompt
+        status: Status message to display
+
+    Returns:
+        dict: Dictionary with keys matching Gradio output components
+    """
+    # Update token display and send button state
+    token_display_value = update_token_display(sys_prompt, logic_hist)
+    send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+    # Get updated history list
+    history_choices = get_history_list(user_id)
+
+    return {
+        "chatbot_ui": display_hist,
+        "display_history_state": display_hist,
+        "logic_history_state": logic_hist,
+        "system_prompt_input": sys_prompt,
+        "history_status": status,
+        "token_display": token_display_value,
+        "send_button": send_button_state,
+        "history_dropdown": gr.update(choices=history_choices),
+    }
+
+
 def respond(user_message, display_history, logic_history, system_prompt, user_id):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
@@ -540,23 +575,21 @@ with gr.Blocks() as demo:
                 *hide_confirmation(),
             )
 
-        # Update token display and send button
+        # Use helper to build consistent UI updates
         user_id = data["user_id"]
-        token_display_value = update_token_display(sys_prompt, logic_hist)
-        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
-
-        # Refresh history list after successful load
-        history_choices = get_history_list(user_id)
+        updates = _build_history_operation_updates(
+            user_id, display_hist, logic_hist, sys_prompt, status
+        )
 
         return (
-            status,
-            gr.update(choices=history_choices),  # Refresh dropdown
-            display_hist,  # Update chatbot_ui
-            display_hist,  # Update display_history_state
-            logic_hist,  # Update logic_history_state
-            sys_prompt,  # Update system_prompt_input
-            token_display_value,  # Update token_display
-            send_button_state,  # Update send_button
+            updates["history_status"],
+            updates["history_dropdown"],
+            updates["chatbot_ui"],
+            updates["display_history_state"],
+            updates["logic_history_state"],
+            updates["system_prompt_input"],
+            updates["token_display"],
+            updates["send_button"],
             *hide_confirmation(),
         )
 
@@ -564,21 +597,21 @@ with gr.Blocks() as demo:
         """Helper to execute new chat action"""
         display_hist, logic_hist, sys_prompt, status = new_chat_action()
 
-        # Update token display and send button
-        # For new chat, we need user_id from data (stored during confirmation)
+        # Use helper to build consistent UI updates
         user_id = data.get("user_id", "")
-        token_display_value = update_token_display(sys_prompt, logic_hist)
-        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+        updates = _build_history_operation_updates(
+            user_id, display_hist, logic_hist, sys_prompt, status
+        )
 
         return (
-            status,
-            gr.update(),
-            display_hist,  # Update chatbot_ui
-            display_hist,  # Update display_history_state
-            logic_hist,  # Update logic_history_state
-            sys_prompt,  # Update system_prompt_input
-            token_display_value,  # Update token_display
-            send_button_state,  # Update send_button
+            updates["history_status"],
+            updates["history_dropdown"],
+            updates["chatbot_ui"],
+            updates["display_history_state"],
+            updates["logic_history_state"],
+            updates["system_prompt_input"],
+            updates["token_display"],
+            updates["send_button"],
             *hide_confirmation(),
         )
 
@@ -749,22 +782,20 @@ with gr.Blocks() as demo:
                 *hide_confirmation(),
             )
 
-        # Update token display and send button state
-        token_display_value = update_token_display(sys_prompt, logic_hist)
-        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
-
-        # Refresh history list after successful load
-        history_choices = get_history_list(user_id)
+        # Use helper to build consistent UI updates
+        updates = _build_history_operation_updates(
+            user_id, display_hist, logic_hist, sys_prompt, status
+        )
 
         return (
-            display_hist,
-            display_hist,
-            logic_hist,
-            sys_prompt,
-            status,
-            token_display_value,
-            send_button_state,
-            gr.update(choices=history_choices),  # Refresh dropdown
+            updates["chatbot_ui"],
+            updates["display_history_state"],
+            updates["logic_history_state"],
+            updates["system_prompt_input"],
+            updates["history_status"],
+            updates["token_display"],
+            updates["send_button"],
+            updates["history_dropdown"],
             *hide_confirmation(),
         )
 
@@ -808,18 +839,19 @@ with gr.Blocks() as demo:
         # No unsaved content, start new chat directly
         display_hist, logic_hist, sys_prompt, status = new_chat_action()
 
-        # Update token display and send button state
-        token_display_value = update_token_display(sys_prompt, logic_hist)
-        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+        # Use helper to build consistent UI updates
+        updates = _build_history_operation_updates(
+            user_id, display_hist, logic_hist, sys_prompt, status
+        )
 
         return (
-            display_hist,
-            display_hist,
-            logic_hist,
-            sys_prompt,
-            status,
-            token_display_value,
-            send_button_state,
+            updates["chatbot_ui"],
+            updates["display_history_state"],
+            updates["logic_history_state"],
+            updates["system_prompt_input"],
+            updates["history_status"],
+            updates["token_display"],
+            updates["send_button"],
             *hide_confirmation(),
         )
 
