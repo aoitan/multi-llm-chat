@@ -125,7 +125,14 @@ def load_history_action(user_id, history_name):
                 display_history.append([turn["content"], ""])
             elif turn["role"] in ("assistant", "gemini", "chatgpt") and display_history:
                 # Add assistant/LLM response to the last turn
-                display_history[-1][1] = turn["content"]
+                # For @all mentions, multiple assistant responses exist - append them
+                current_response = display_history[-1][1]
+                if current_response:
+                    # Already has a response, append the new one
+                    display_history[-1][1] = current_response + "\n\n" + turn["content"]
+                else:
+                    # First response for this user message
+                    display_history[-1][1] = turn["content"]
 
         return (
             display_history,
@@ -488,10 +495,12 @@ with gr.Blocks() as demo:
 
         # Check if load failed (returns None)
         if display_hist is None:
-            # Load failed, preserve current state
+            # Load failed, preserve current state but refresh dropdown
+            user_id = data["user_id"]
+            history_choices = get_history_list(user_id)
             return (
                 status,  # Show error message
-                gr.update(),  # Keep current history_dropdown
+                gr.update(choices=history_choices),  # Refresh dropdown
                 gr.update(),  # Keep current chatbot_ui
                 gr.update(),  # Keep current display_history
                 gr.update(),  # Keep current logic_history
@@ -506,9 +515,12 @@ with gr.Blocks() as demo:
         token_display_value = update_token_display(sys_prompt, logic_hist)
         send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
 
+        # Refresh history list after successful load
+        history_choices = get_history_list(user_id)
+
         return (
             status,
-            gr.update(),
+            gr.update(choices=history_choices),  # Refresh dropdown
             display_hist,  # Update chatbot_ui
             display_hist,  # Update display_history_state
             logic_hist,  # Update logic_history_state
@@ -647,6 +659,7 @@ with gr.Blocks() as demo:
                 "❌ 読み込む履歴を選択してください",
                 gr.update(),  # Don't change token_display
                 gr.update(),  # Don't change send_button
+                gr.update(),  # Don't change history_dropdown
                 *hide_confirmation(),
             )
 
@@ -660,6 +673,7 @@ with gr.Blocks() as demo:
                 "",  # Don't update status yet
                 gr.update(),  # Keep current token_display
                 gr.update(),  # Keep current send_button
+                gr.update(),  # Keep current history_dropdown
                 *show_confirmation(
                     "未保存の会話があります。破棄して読み込みますか？",
                     "load_unsaved",
@@ -672,7 +686,8 @@ with gr.Blocks() as demo:
 
         # Check if load failed (returns None)
         if display_hist is None:
-            # Load failed, preserve current state
+            # Load failed, preserve current state but refresh dropdown
+            history_choices = get_history_list(user_id)
             return (
                 gr.update(),  # Keep current chatbot_ui
                 gr.update(),  # Keep current display_history
@@ -681,12 +696,16 @@ with gr.Blocks() as demo:
                 status,  # Show error message
                 gr.update(),  # Keep current token_display
                 gr.update(),  # Keep current send_button
+                gr.update(choices=history_choices),  # Refresh dropdown
                 *hide_confirmation(),
             )
 
         # Update token display and send button state
         token_display_value = update_token_display(sys_prompt, logic_hist)
         send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        # Refresh history list after successful load
+        history_choices = get_history_list(user_id)
 
         return (
             display_hist,
@@ -696,6 +715,7 @@ with gr.Blocks() as demo:
             status,
             token_display_value,
             send_button_state,
+            gr.update(choices=history_choices),  # Refresh dropdown
             *hide_confirmation(),
         )
 
@@ -710,6 +730,7 @@ with gr.Blocks() as demo:
             history_status,
             token_display,  # Update token count
             send_button,  # Update send button state
+            history_dropdown,  # Update history list
             confirmation_dialog,
             confirmation_message,
             confirmation_state,

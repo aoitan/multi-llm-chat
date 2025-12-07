@@ -504,3 +504,30 @@ def test_load_history_action_preserves_state_on_exception():
         assert logic_hist is None
         assert sys_prompt is None
         assert "失敗しました" in status
+
+
+def test_load_history_action_handles_multiple_assistant_responses():
+    """load_history_action should handle @all case with multiple assistant responses"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.return_value = {
+            "system_prompt": "Test",
+            "turns": [
+                {"role": "user", "content": "@all Hello"},
+                {"role": "gemini", "content": "Gemini response"},
+                {"role": "chatgpt", "content": "ChatGPT response"},
+            ],
+        }
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "multi_response"
+        )
+
+        # Should have both responses in display
+        assert len(display_hist) == 1
+        assert display_hist[0][0] == "@all Hello"
+        # Both responses should be present
+        assert "Gemini response" in display_hist[0][1]
+        assert "ChatGPT response" in display_hist[0][1]
+        # Logic history should have all 3 turns
+        assert len(logic_hist) == 3
