@@ -192,7 +192,7 @@ with gr.Blocks() as demo:
     logic_history_state = gr.State([])
 
     # UIコンポーネント
-    chatbot_ui = gr.Chatbot(label="Conversation", height=600)
+    chatbot_ui = gr.Chatbot(label="Conversation", height=600, show_copy_button=True)
 
     with gr.Row():
         user_input = gr.Textbox(

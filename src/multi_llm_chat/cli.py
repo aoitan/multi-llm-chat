@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pyperclip
+
 from . import core
 from .history import HistoryStore, reset_history, sanitize_name
 
@@ -231,6 +233,33 @@ def _handle_history_command(
     )
 
 
+def _handle_copy_command(args, history):
+    """Handle the '/copy <index>' command to copy LLM responses."""
+    if not args:
+        print("エラー: コピーするLLM応答のインデックスを指定してください。")
+        return
+
+    try:
+        index = int(args)
+    except ValueError:
+        print("エラー: インデックスは整数で指定してください。")
+        return
+
+    try:
+        from . import chat_logic
+
+        message = chat_logic.get_llm_response(history, index)
+    except IndexError:
+        print(f"エラー: 指定されたインデックスのLLM応答が見つかりません (index={index})。")
+        return
+
+    try:
+        pyperclip.copy(message)
+        print(f"LLM応答をクリップボードにコピーしました (index={index})。")
+    except pyperclip.PyperclipException:
+        print("エラー: クリップボードへのコピーに失敗しました。")
+
+
 def main():
     """Main CLI loop"""
     store = HistoryStore()
@@ -267,6 +296,8 @@ def main():
                 history, system_prompt, is_dirty = _handle_history_command(
                     args, user_id, store, history, system_prompt, is_dirty
                 )
+            elif command == "/copy":
+                _handle_copy_command(args, history)
             else:
                 print(
                     f"エラー: `{command}` は不明なコマンドです。"

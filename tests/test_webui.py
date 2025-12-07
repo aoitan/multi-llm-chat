@@ -146,3 +146,8 @@ def test_reset_clears_histories_and_keeps_prompt(monkeypatch):
     assert "10" in token_html  # system prompt remains for token count
     assert hasattr(send_button, "interactive") and send_button.interactive is True
     assert user_input == ""
+
+
+def test_chatbot_shows_copy_button():
+    """Chatbotコンポーネントにコピー機能が有効化されていること"""
+    assert webui.chatbot_ui.show_copy_button is True
