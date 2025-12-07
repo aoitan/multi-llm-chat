@@ -100,8 +100,13 @@ def save_history_action(user_id, save_name, logic_history, system_prompt):
 
         return (f"✅ 履歴 '{save_name}' を保存しました", choices)
     except ValueError as e:
+        logger.error(f"Error saving history '{save_name}' for user '{user_id}': {e}", exc_info=True)
         return (f"❌ 保存エラー: {e}", [])
     except Exception as e:
+        logger.error(
+            f"Unexpected error saving history '{save_name}' for user '{user_id}': {e}",
+            exc_info=True,
+        )
         return (f"❌ 保存に失敗しました: {e}", [])
 
 
@@ -844,7 +849,7 @@ with gr.Blocks() as demo:
     ]
     submit_outputs = [chatbot_ui, display_history_state, logic_history_state]
 
-    # Remove unused function (dead code)
+    # Update token display and send button state after response
     def update_token_and_button(user_id, logic, sys):
         """Update token display and button state after response (success or error)"""
         return (
