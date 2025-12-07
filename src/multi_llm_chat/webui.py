@@ -123,8 +123,8 @@ def load_history_action(user_id, history_name):
             if turn["role"] == "user":
                 # Start a new turn
                 display_history.append([turn["content"], ""])
-            elif turn["role"] == "assistant" and display_history:
-                # Add assistant response to the last turn
+            elif turn["role"] in ("assistant", "gemini", "chatgpt") and display_history:
+                # Add assistant/LLM response to the last turn
                 display_history[-1][1] = turn["content"]
 
         return (
@@ -452,6 +452,8 @@ with gr.Blocks() as demo:
             gr.update(),  # Keep current display_history
             gr.update(),  # Keep current logic_history
             gr.update(),  # Keep current system_prompt
+            gr.update(),  # Keep current token_display
+            gr.update(),  # Keep current send_button
             *hide_confirmation(),
         )
 
@@ -460,6 +462,12 @@ with gr.Blocks() as demo:
         display_hist, logic_hist, sys_prompt, status = load_history_action(
             data["user_id"], data["history_name"]
         )
+
+        # Update token display and send button
+        user_id = data["user_id"]
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
         return (
             status,
             gr.update(),
@@ -467,12 +475,32 @@ with gr.Blocks() as demo:
             display_hist,  # Update display_history_state
             logic_hist,  # Update logic_history_state
             sys_prompt,  # Update system_prompt_input
+            token_display_value,  # Update token_display
+            send_button_state,  # Update send_button
             *hide_confirmation(),
         )
 
     def _execute_new_chat_unsaved(data):
         """Helper to execute new chat action"""
         display_hist, logic_hist, sys_prompt, status = new_chat_action()
+
+        # Update token display and send button
+        # For new chat, we need user_id from data (stored during confirmation)
+        user_id = data.get("user_id", "")
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        return (
+            status,
+            gr.update(),
+            display_hist,  # Update chatbot_ui
+            display_hist,  # Update display_history_state
+            logic_hist,  # Update logic_history_state
+            sys_prompt,  # Update system_prompt_input
+            token_display_value,  # Update token_display
+            send_button_state,  # Update send_button
+            *hide_confirmation(),
+        )
         return (
             status,
             gr.update(),
@@ -506,6 +534,8 @@ with gr.Blocks() as demo:
             gr.update(),  # Don't change display_history
             gr.update(),  # Don't change logic_history
             gr.update(),  # Don't change system_prompt
+            gr.update(),  # Don't change token_display
+            gr.update(),  # Don't change send_button
             *hide_confirmation(),
         )
 
@@ -519,6 +549,8 @@ with gr.Blocks() as demo:
             display_history_state,
             logic_history_state,
             system_prompt_input,
+            token_display,  # Add token_display to outputs
+            send_button,  # Add send_button to outputs
             confirmation_dialog,
             confirmation_message,
             confirmation_state,
@@ -584,6 +616,8 @@ with gr.Blocks() as demo:
                 gr.update(),  # Don't change logic_history
                 gr.update(),  # Don't change system_prompt
                 "❌ 読み込む履歴を選択してください",
+                gr.update(),  # Don't change token_display
+                gr.update(),  # Don't change send_button
                 *hide_confirmation(),
             )
 
@@ -595,6 +629,8 @@ with gr.Blocks() as demo:
                 gr.update(),  # Keep current logic_history
                 gr.update(),  # Keep current system_prompt
                 "",  # Don't update status yet
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
                 *show_confirmation(
                     "未保存の会話があります。破棄して読み込みますか？",
                     "load_unsaved",
@@ -604,7 +640,21 @@ with gr.Blocks() as demo:
 
         # No unsaved content, load directly
         display_hist, logic_hist, sys_prompt, status = load_history_action(user_id, history_name)
-        return (display_hist, display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
+
+        # Update token display and send button state
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        return (
+            display_hist,
+            display_hist,
+            logic_hist,
+            sys_prompt,
+            status,
+            token_display_value,
+            send_button_state,
+            *hide_confirmation(),
+        )
 
     load_history_btn.click(
         handle_load_history,
@@ -615,13 +665,15 @@ with gr.Blocks() as demo:
             logic_history_state,
             system_prompt_input,
             history_status,
+            token_display,  # Update token count
+            send_button,  # Update send button state
             confirmation_dialog,
             confirmation_message,
             confirmation_state,
         ],
     )
 
-    def handle_new_chat(logic_hist):
+    def handle_new_chat(user_id, logic_hist, sys_prompt):
         """Handle new chat button click"""
         # Check for unsaved session and show confirmation
         if has_unsaved_session(logic_hist):
@@ -631,24 +683,44 @@ with gr.Blocks() as demo:
                 gr.update(),  # Keep current logic_history
                 gr.update(),  # Keep current system_prompt
                 "",  # Don't update status yet
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
                 *show_confirmation(
-                    "未保存の会話があります。破棄して新規開始しますか？", "new_chat_unsaved", {}
+                    "未保存の会話があります。破棄して新規開始しますか？",
+                    "new_chat_unsaved",
+                    {"user_id": user_id},  # Store user_id for token/button update
                 ),
             )
 
         # No unsaved content, start new chat directly
         display_hist, logic_hist, sys_prompt, status = new_chat_action()
-        return (display_hist, display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
+
+        # Update token display and send button state
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        return (
+            display_hist,
+            display_hist,
+            logic_hist,
+            sys_prompt,
+            status,
+            token_display_value,
+            send_button_state,
+            *hide_confirmation(),
+        )
 
     new_chat_btn.click(
         handle_new_chat,
-        inputs=[logic_history_state],
+        inputs=[user_id_input, logic_history_state, system_prompt_input],
         outputs=[
             chatbot_ui,  # Update chatbot display
             display_history_state,
             logic_history_state,
             system_prompt_input,
             history_status,
+            token_display,  # Update token count
+            send_button,  # Update send button state
             confirmation_dialog,
             confirmation_message,
             confirmation_state,
