@@ -449,3 +449,24 @@ def test_check_history_name_exists_uses_historystore():
 
         mock_store.history_exists.assert_called_once_with("test_user", "existing_history")
         assert result is True
+
+
+def test_get_history_list_returns_choices():
+    """get_history_list should return list of saved histories"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.list_histories.return_value = ["history1", "history2", "history3"]
+
+        result = webui.get_history_list("test_user")
+
+        mock_store.list_histories.assert_called_once_with("test_user")
+        assert result == ["history1", "history2", "history3"]
+
+
+def test_get_history_list_empty_user_id():
+    """get_history_list should return empty list for empty user_id"""
+    result = webui.get_history_list("")
+    assert result == []
+
+    result = webui.get_history_list("   ")
+    assert result == []

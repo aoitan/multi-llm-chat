@@ -178,6 +178,25 @@ def check_history_name_exists(user_id, save_name):
         return False
 
 
+def get_history_list(user_id):
+    """Get list of saved histories for user
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        list: List of history names (empty list on error)
+    """
+    if not user_id or not user_id.strip():
+        return []
+
+    try:
+        store = HistoryStore()
+        return store.list_histories(user_id)
+    except Exception:
+        return []
+
+
 def respond(user_message, display_history, logic_history, system_prompt, user_id):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
@@ -412,17 +431,19 @@ with gr.Blocks() as demo:
     # Update button states when user ID changes
     def update_buttons_on_user_id(user_id, system_prompt, logic_history):
         enabled = bool(user_id and user_id.strip())
+        history_choices = get_history_list(user_id)
         return (
             gr.update(interactive=enabled),  # save_history_btn
             gr.update(interactive=enabled),  # load_history_btn
             gr.update(interactive=enabled),  # new_chat_btn
             check_send_button_with_user_id(user_id, system_prompt, logic_history),  # send_button
+            gr.update(choices=history_choices),  # history_dropdown
         )
 
     user_id_input.change(
         update_buttons_on_user_id,
         [user_id_input, system_prompt_input, logic_history_state],
-        [save_history_btn, load_history_btn, new_chat_btn, send_button],
+        [save_history_btn, load_history_btn, new_chat_btn, send_button, history_dropdown],
     )
 
     # Confirmation dialog event handlers
@@ -499,15 +520,6 @@ with gr.Blocks() as demo:
             sys_prompt,  # Update system_prompt_input
             token_display_value,  # Update token_display
             send_button_state,  # Update send_button
-            *hide_confirmation(),
-        )
-        return (
-            status,
-            gr.update(),
-            display_hist,  # Update chatbot_ui
-            display_hist,  # Update display_history_state
-            logic_hist,  # Update logic_history_state
-            sys_prompt,  # Update system_prompt_input
             *hide_confirmation(),
         )
 
