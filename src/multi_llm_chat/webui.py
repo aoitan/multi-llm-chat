@@ -4,6 +4,7 @@ import gradio as gr
 from gradio_client import utils as gradio_utils
 
 from . import core
+from .history import HistoryStore
 
 # Gradio 4.42.0時点のバグで、JSON Schema内にboolが含まれると
 # gradio_client.utils.json_schema_to_python_typeが落ちる。
@@ -73,7 +74,7 @@ def update_token_display(system_prompt, logic_history=None, model_name=None):
 
 
 def save_history_action(user_id, save_name, display_history, logic_history, system_prompt):
-    """Save current chat history (placeholder for Task 017-A-3)
+    """Save current chat history using HistoryStore
 
     Args:
         user_id: User ID
@@ -85,13 +86,22 @@ def save_history_action(user_id, save_name, display_history, logic_history, syst
     Returns:
         tuple: (status_message, updated_dropdown_choices)
     """
-    # TODO: Implement in Task 017-A-3 with HistoryStore
-    # For now, return success message
-    return (f"✅ 履歴 '{save_name}' を保存しました（ダミー）", [])
+    try:
+        store = HistoryStore()
+        store.save_history(user_id, save_name, system_prompt, logic_history)
+
+        # Get updated list of histories
+        choices = store.list_histories(user_id)
+
+        return (f"✅ 履歴 '{save_name}' を保存しました", choices)
+    except ValueError as e:
+        return (f"❌ 保存エラー: {e}", [])
+    except Exception as e:
+        return (f"❌ 保存に失敗しました: {e}", [])
 
 
 def load_history_action(user_id, history_name):
-    """Load saved chat history (placeholder for Task 017-A-3)
+    """Load saved chat history using HistoryStore
 
     Args:
         user_id: User ID
@@ -100,20 +110,42 @@ def load_history_action(user_id, history_name):
     Returns:
         tuple: (display_history, logic_history, system_prompt, status_message)
     """
-    # TODO: Implement in Task 017-A-3 with HistoryStore
-    # For now, return empty history
-    return ([], [], "", f"✅ 履歴 '{history_name}' を読み込みました（ダミー）")
+    try:
+        store = HistoryStore()
+        data = store.load_history(user_id, history_name)
+
+        system_prompt = data.get("system_prompt", "")
+        logic_history = data.get("turns", [])
+
+        # Convert logic history to display history
+        display_history = []
+        for turn in logic_history:
+            if turn["role"] == "user":
+                # Start a new turn
+                display_history.append([turn["content"], ""])
+            elif turn["role"] == "assistant" and display_history:
+                # Add assistant response to the last turn
+                display_history[-1][1] = turn["content"]
+
+        return (
+            display_history,
+            logic_history,
+            system_prompt,
+            f"✅ 履歴 '{history_name}' を読み込みました",
+        )
+    except FileNotFoundError:
+        return ([], [], "", f"❌ 履歴 '{history_name}' が見つかりません")
+    except Exception as e:
+        return ([], [], "", f"❌ 読み込みに失敗しました: {e}")
 
 
 def new_chat_action():
-    """Start new chat session (placeholder for Task 017-A-3)
+    """Start new chat session
 
     Returns:
         tuple: (display_history, logic_history, system_prompt, status_message)
     """
-    # TODO: Implement in Task 017-A-3
-    # For now, return empty state
-    return ([], [], "", "✅ 新しい会話を開始しました（ダミー）")
+    return ([], [], "", "✅ 新しい会話を開始しました")
 
 
 def has_unsaved_session(logic_history):
@@ -130,7 +162,7 @@ def has_unsaved_session(logic_history):
 
 
 def check_history_name_exists(user_id, save_name):
-    """Check if a history name already exists (placeholder for Task 017-A-3)
+    """Check if a history name already exists using HistoryStore
 
     Args:
         user_id: User ID
@@ -139,9 +171,11 @@ def check_history_name_exists(user_id, save_name):
     Returns:
         bool: True if name exists
     """
-    # TODO: Implement in Task 017-A-3 with HistoryStore.list_histories()
-    # For now, always return False (no conflict)
-    return False
+    try:
+        store = HistoryStore()
+        return store.history_exists(user_id, save_name)
+    except Exception:
+        return False
 
 
 def respond(user_message, display_history, logic_history, system_prompt, user_id):

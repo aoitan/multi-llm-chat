@@ -373,3 +373,79 @@ def test_new_chat_preserves_data_when_showing_confirmation():
     # Similar to above, when confirmation is shown, data should be preserved
     logic_hist = [{"role": "user", "content": "Test"}]
     assert webui.has_unsaved_session(logic_hist) is True
+
+
+# Task 017-A-3: HistoryStore統合と機能連携
+def test_save_history_action_saves_to_file():
+    """save_history_action should save history to file using HistoryStore"""
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory():
+        user_id = "test_user"
+        save_name = "test_history"
+        display_hist = [["Hello", "Hi there"]]
+        logic_hist = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there", "model": "gemini"},
+        ]
+        sys_prompt = "You are a helpful assistant"
+
+        # Mock HistoryStore to use tmpdir
+        with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+            mock_store = MockStore.return_value
+            mock_store.save_history.return_value = None
+            mock_store.list_histories.return_value = ["test_history"]
+
+            status, choices = webui.save_history_action(
+                user_id, save_name, display_hist, logic_hist, sys_prompt
+            )
+
+            # Should call HistoryStore.save_history
+            mock_store.save_history.assert_called_once()
+            assert "test_history" in status or "保存" in status
+            assert "test_history" in choices
+
+
+def test_load_history_action_loads_from_file():
+    """load_history_action should load history from file using HistoryStore"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.return_value = {
+            "system_prompt": "Test prompt",
+            "turns": [
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi", "model": "gemini"},
+            ],
+        }
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "test_history"
+        )
+
+        # Should call HistoryStore.load_history
+        mock_store.load_history.assert_called_once_with("test_user", "test_history")
+        assert sys_prompt == "Test prompt"
+        assert len(logic_hist) == 2
+        assert "読み込み" in status or "test_history" in status
+
+
+def test_new_chat_action_resets_state():
+    """new_chat_action should reset all state"""
+    display_hist, logic_hist, sys_prompt, status = webui.new_chat_action()
+
+    assert display_hist == []
+    assert logic_hist == []
+    assert sys_prompt == ""
+    assert "新しい会話" in status or "開始" in status
+
+
+def test_check_history_name_exists_uses_historystore():
+    """check_history_name_exists should use HistoryStore.history_exists"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.history_exists.return_value = True
+
+        result = webui.check_history_name_exists("test_user", "existing_history")
+
+        mock_store.history_exists.assert_called_once_with("test_user", "existing_history")
+        assert result is True
