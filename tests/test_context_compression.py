@@ -199,15 +199,19 @@ def test_context_overflow_warning():
 
 def test_invalid_env_var_logs_warning():
     """Should log warning when environment variable has invalid value"""
-    with patch.dict(os.environ, {"GEMINI_MAX_CONTEXT_LENGTH": "not_a_number"}):
+    with patch.dict(
+        os.environ,
+        {"GEMINI_MAX_CONTEXT_LENGTH": "not_a_number", "DEFAULT_MAX_CONTEXT_LENGTH": ""},
+        clear=True,
+    ):
         with patch("logging.warning") as mock_warning:
             result = core.get_max_context_length("gemini-1.5-pro")
 
-            # Should fall back to model default (not 4096)
-            assert result == 2097152  # gemini-1.5-pro default
-            # Should log warning about invalid value
-            mock_warning.assert_called_once()
-            assert "GEMINI_MAX_CONTEXT_LENGTH" in str(mock_warning.call_args)
+        # Should fall back to model default (not 4096)
+        assert result == 2097152  # gemini-1.5-pro default
+        # Should log warning about invalid value
+        mock_warning.assert_called_once()
+        assert "GEMINI_MAX_CONTEXT_LENGTH" in str(mock_warning.call_args)
 
 
 def test_get_token_info_uses_env_based_max_context():
