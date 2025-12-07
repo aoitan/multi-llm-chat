@@ -466,7 +466,14 @@ with gr.Blocks() as demo:
     user_id_input.change(
         update_buttons_on_user_id,
         [user_id_input, system_prompt_input, logic_history_state],
-        [save_history_btn, load_history_btn, new_chat_btn, send_button, reset_button, history_dropdown],
+        [
+            save_history_btn,
+            load_history_btn,
+            new_chat_btn,
+            send_button,
+            reset_button,
+            history_dropdown,
+        ],
     )
 
     # Confirmation dialog event handlers
