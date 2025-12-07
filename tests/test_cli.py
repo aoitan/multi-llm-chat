@@ -327,4 +327,6 @@ def test_copy_command_handles_invalid_index(monkeypatch):
                     cli.main()
 
     mock_copy.assert_not_called()
-    assert any("見つかりません" in str(call) or "存在" in str(call) for call in mock_print.call_args_list)
+    assert any(
+        "見つかりません" in str(call) or "存在" in str(call) for call in mock_print.call_args_list
+    )
