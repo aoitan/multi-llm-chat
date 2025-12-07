@@ -290,3 +290,101 @@ def test_reset_command_calls_chat_logic(monkeypatch):
                 cli.main()
 
     mock_reset.assert_called_once()
+
+
+def test_copy_command_copies_latest_response(monkeypatch):
+    """CLIの /copy で最新のLLM応答をクリップボードに送れること"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "@gemini hello",
+        "/copy 0",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print") as mock_print:
+            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+                with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
+                    cli.main()
+
+    mock_copy.assert_called_once_with("Mocked Gemini Response")
+    assert any("コピー" in str(call) for call in mock_print.call_args_list)
+
+
+def test_copy_command_handles_invalid_index(monkeypatch):
+    """存在しないインデックスを指定した場合はエラーメッセージを表示する"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "@gemini hello",
+        "/copy 5",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print") as mock_print:
+            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+                with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
+                    cli.main()
+
+    mock_copy.assert_not_called()
+    assert any(
+        "見つかりません" in str(call) or "存在" in str(call) for call in mock_print.call_args_list
+    )
+
+
+def test_copy_command_requires_argument(monkeypatch):
+    """引数なしの /copy でエラー表示しクリップボードを呼ばない"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "/copy",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print") as mock_print:
+            with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
+                cli.main()
+
+    mock_copy.assert_not_called()
+    assert any("インデックスを指定" in str(call) for call in mock_print.call_args_list)
+
+
+def test_copy_command_requires_integer(monkeypatch):
+    """非整数の引数でエラー表示しクリップボードを呼ばない"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "@gemini hello",
+        "/copy abc",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print") as mock_print:
+            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+                with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
+                    cli.main()
+
+    mock_copy.assert_not_called()
+    assert any("整数" in str(call) for call in mock_print.call_args_list)
+
+
+def test_copy_command_handles_negative_index(monkeypatch):
+    """負のインデックス指定でエラー表示しクリップボードを呼ばない"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "@gemini hello",
+        "/copy -1",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print") as mock_print:
+            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+                with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
+                    cli.main()
+
+    mock_copy.assert_not_called()
+    assert any(
+        "見つかりません" in str(call) or "index=-1" in str(call)
+        for call in mock_print.call_args_list
+    )

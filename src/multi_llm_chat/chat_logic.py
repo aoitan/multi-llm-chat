@@ -11,6 +11,7 @@ from .core import (
     format_history_for_gemini,
     list_gemini_models,
 )
+from .history import get_llm_response
 from .history import reset_history as _reset_history
 
 
@@ -33,6 +34,7 @@ __all__ = [
     "format_history_for_gemini",
     "format_history_for_chatgpt",
     "list_gemini_models",
+    "get_llm_response",
     "GOOGLE_API_KEY",
     "OPENAI_API_KEY",
     "GEMINI_MODEL",

@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 import multi_llm_chat.chat_logic as chat_logic
 
 
@@ -130,3 +132,32 @@ def test_reset_command_clears_history(monkeypatch):
             history = chat_logic.main()
 
     assert [entry["content"] for entry in history] == ["after reset"]
+
+
+def test_get_llm_response_by_index():
+    """指定インデックスのLLM応答を取得できること"""
+    history = [
+        {"role": "user", "content": "hi"},
+        {"role": "gemini", "content": "G-1"},
+        {"role": "user", "content": "hello"},
+        {"role": "chatgpt", "content": "C-1"},
+    ]
+
+    assert chat_logic.get_llm_response(history, 0) == "C-1"
+    assert chat_logic.get_llm_response(history, 1) == "G-1"
+
+
+def test_get_llm_response_raises_on_missing():
+    """LLM応答が存在しない場合はIndexErrorとなること"""
+    history = [{"role": "user", "content": "only user"}]
+
+    with pytest.raises(IndexError):
+        chat_logic.get_llm_response(history, 0)
+
+
+def test_get_llm_response_raises_on_negative_index():
+    """負のインデックス指定でIndexErrorとなること"""
+    history = [{"role": "gemini", "content": "ok"}]
+
+    with pytest.raises(IndexError):
+        chat_logic.get_llm_response(history, -1)
