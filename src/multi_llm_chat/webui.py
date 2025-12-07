@@ -134,9 +134,11 @@ def load_history_action(user_id, history_name):
             f"✅ 履歴 '{history_name}' を読み込みました",
         )
     except FileNotFoundError:
-        return ([], [], "", f"❌ 履歴 '{history_name}' が見つかりません")
+        # Return None to indicate error - caller should preserve current state
+        return (None, None, None, f"❌ 履歴 '{history_name}' が見つかりません")
     except Exception as e:
-        return ([], [], "", f"❌ 読み込みに失敗しました: {e}")
+        # Return None to indicate error - caller should preserve current state
+        return (None, None, None, f"❌ 読み込みに失敗しました: {e}")
 
 
 def new_chat_action():
@@ -484,6 +486,21 @@ with gr.Blocks() as demo:
             data["user_id"], data["history_name"]
         )
 
+        # Check if load failed (returns None)
+        if display_hist is None:
+            # Load failed, preserve current state
+            return (
+                status,  # Show error message
+                gr.update(),  # Keep current history_dropdown
+                gr.update(),  # Keep current chatbot_ui
+                gr.update(),  # Keep current display_history
+                gr.update(),  # Keep current logic_history
+                gr.update(),  # Keep current system_prompt
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
+                *hide_confirmation(),
+            )
+
         # Update token display and send button
         user_id = data["user_id"]
         token_display_value = update_token_display(sys_prompt, logic_hist)
@@ -652,6 +669,20 @@ with gr.Blocks() as demo:
 
         # No unsaved content, load directly
         display_hist, logic_hist, sys_prompt, status = load_history_action(user_id, history_name)
+
+        # Check if load failed (returns None)
+        if display_hist is None:
+            # Load failed, preserve current state
+            return (
+                gr.update(),  # Keep current chatbot_ui
+                gr.update(),  # Keep current display_history
+                gr.update(),  # Keep current logic_history
+                gr.update(),  # Keep current system_prompt
+                status,  # Show error message
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
+                *hide_confirmation(),
+            )
 
         # Update token display and send button state
         token_display_value = update_token_display(sys_prompt, logic_hist)

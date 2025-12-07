@@ -470,3 +470,37 @@ def test_get_history_list_empty_user_id():
 
     result = webui.get_history_list("   ")
     assert result == []
+
+
+def test_load_history_action_preserves_state_on_error():
+    """load_history_action should return None on error to preserve current state"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.side_effect = FileNotFoundError("Not found")
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "nonexistent"
+        )
+
+        # Should return None to indicate error
+        assert display_hist is None
+        assert logic_hist is None
+        assert sys_prompt is None
+        assert "見つかりません" in status
+
+
+def test_load_history_action_preserves_state_on_exception():
+    """load_history_action should return None on exception"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.side_effect = Exception("Read error")
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "corrupted"
+        )
+
+        # Should return None to indicate error
+        assert display_hist is None
+        assert logic_hist is None
+        assert sys_prompt is None
+        assert "失敗しました" in status
