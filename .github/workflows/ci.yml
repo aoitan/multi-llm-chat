@@ -7,6 +7,10 @@ on:
   pull_request:
     branches:
       - main
+      - 'epic/*'
+      - 'story/*'
+      - 'feat/*'
+      - 'feature/*'
 
 jobs:
   lint:
