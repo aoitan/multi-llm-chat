@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
+from . import core
+
 
 def _default_base_dir() -> Path:
     """Resolve the base directory for history storage."""
@@ -35,6 +37,34 @@ def sanitize_name(name: str) -> str:
 def reset_history():
     """Return an empty conversation history."""
     return []
+
+
+def get_llm_response(history, index):
+    """指定インデックスのLLM応答本文を取得する（最新が0）。
+
+    Args:
+        history: 会話履歴のリスト。各エントリは role と content を持つ辞書。
+        index: 取得する応答のインデックス（0が最新）。
+
+    Returns:
+        str: 指定されたインデックスのLLM応答本文。
+
+    Raises:
+        IndexError: インデックスが負、または該当するLLM応答が存在しない場合。
+    """
+    if index < 0:
+        raise IndexError("index must be non-negative")
+
+    responses = [
+        entry.get("content", "")
+        for entry in reversed(history or [])
+        if entry.get("role") in core.LLM_ROLES
+    ]
+
+    try:
+        return responses[index]
+    except IndexError as exc:
+        raise IndexError("LLM response not found for the given index") from exc
 
 
 class HistoryStore:

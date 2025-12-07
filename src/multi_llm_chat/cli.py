@@ -4,7 +4,7 @@ import sys
 import pyperclip
 
 from . import core
-from .history import HistoryStore, reset_history, sanitize_name
+from .history import HistoryStore, get_llm_response, reset_history, sanitize_name
 
 
 def _clone_history(history):
@@ -234,7 +234,12 @@ def _handle_history_command(
 
 
 def _handle_copy_command(args, history):
-    """Handle the '/copy <index>' command to copy LLM responses."""
+    """Handle the '/copy <index>' command to copy LLM responses.
+
+    Args:
+        args: コマンド引数文字列（インデックス番号）。
+        history: 現在の会話履歴のリスト。
+    """
     if not args:
         print("エラー: コピーするLLM応答のインデックスを指定してください。")
         return
@@ -246,9 +251,7 @@ def _handle_copy_command(args, history):
         return
 
     try:
-        from . import chat_logic
-
-        message = chat_logic.get_llm_response(history, index)
+        message = get_llm_response(history, index)
     except IndexError:
         print(f"エラー: 指定されたインデックスのLLM応答が見つかりません (index={index})。")
         return

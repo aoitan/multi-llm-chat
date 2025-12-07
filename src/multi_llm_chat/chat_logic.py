@@ -11,25 +11,8 @@ from .core import (
     format_history_for_gemini,
     list_gemini_models,
 )
+from .history import get_llm_response
 from .history import reset_history as _reset_history
-
-
-def get_llm_response(history, index):
-    """指定インデックスのLLM応答本文を取得する（最新が0）。"""
-    if index < 0:
-        raise IndexError("index must be non-negative")
-
-    # 最新のLLM応答から順に拾う
-    responses = [
-        entry.get("content", "")
-        for entry in reversed(history or [])
-        if entry.get("role") in {"gemini", "chatgpt"}
-    ]
-
-    try:
-        return responses[index]
-    except IndexError as exc:
-        raise IndexError("LLM response not found for the given index") from exc
 
 
 def main():

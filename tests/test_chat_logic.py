@@ -153,3 +153,11 @@ def test_get_llm_response_raises_on_missing():
 
     with pytest.raises(IndexError):
         chat_logic.get_llm_response(history, 0)
+
+
+def test_get_llm_response_raises_on_negative_index():
+    """負のインデックス指定でIndexErrorとなること"""
+    history = [{"role": "gemini", "content": "ok"}]
+
+    with pytest.raises(IndexError):
+        chat_logic.get_llm_response(history, -1)
