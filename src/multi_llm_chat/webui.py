@@ -475,6 +475,14 @@ with gr.Blocks() as demo:
             data["logic_hist"],
             data["sys_prompt"],
         )
+
+        # Update token display and send button state after save
+        user_id = data["user_id"]
+        sys_prompt = data["sys_prompt"]
+        logic_hist = data["logic_hist"]
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
         return (
             status,
             gr.update(choices=choices),
@@ -482,8 +490,8 @@ with gr.Blocks() as demo:
             gr.update(),  # Keep current display_history
             gr.update(),  # Keep current logic_history
             gr.update(),  # Keep current system_prompt
-            gr.update(),  # Keep current token_display
-            gr.update(),  # Keep current send_button
+            token_display_value,  # Update token_display
+            send_button_state,  # Update send_button
             *hide_confirmation(),
         )
 
@@ -602,7 +610,13 @@ with gr.Blocks() as demo:
     def handle_save_history(user_id, save_name, display_hist, logic_hist, sys_prompt):
         """Handle save history button click"""
         if not save_name or not save_name.strip():
-            return ("❌ 保存名を入力してください", gr.update(), *hide_confirmation())
+            return (
+                "❌ 保存名を入力してください",
+                gr.update(),
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
+                *hide_confirmation(),
+            )
 
         save_name = save_name.strip()
 
@@ -611,6 +625,8 @@ with gr.Blocks() as demo:
             return (
                 "",  # Don't update status yet
                 gr.update(),  # Don't update dropdown yet
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
                 *show_confirmation(
                     f"履歴 '{save_name}' は既に存在します。上書きしますか？",
                     "save_overwrite",
@@ -628,7 +644,18 @@ with gr.Blocks() as demo:
         status, choices = save_history_action(
             user_id, save_name, display_hist, logic_hist, sys_prompt
         )
-        return (status, gr.update(choices=choices), *hide_confirmation())
+
+        # Update token display and send button state after save
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        return (
+            status,
+            gr.update(choices=choices),
+            token_display_value,
+            send_button_state,
+            *hide_confirmation(),
+        )
 
     save_history_btn.click(
         handle_save_history,
@@ -642,6 +669,8 @@ with gr.Blocks() as demo:
         outputs=[
             history_status,
             history_dropdown,
+            token_display,  # Update token count
+            send_button,  # Update send button state
             confirmation_dialog,
             confirmation_message,
             confirmation_state,
