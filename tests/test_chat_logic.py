@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 import multi_llm_chat.chat_logic as chat_logic
 
 
@@ -111,3 +113,51 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             assert not mock_chatgpt_api.called
             assert history[-1]["role"] == "user"
             assert history[-1]["content"] == "hello"
+
+
+def test_reset_command_clears_history(monkeypatch):
+    """chat_logic.main should honor /reset and return only post-reset messages"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "/system base prompt",
+        "before reset",
+        "/reset",
+        "y",
+        "after reset",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print"):
+            history = chat_logic.main()
+
+    assert [entry["content"] for entry in history] == ["after reset"]
+
+
+def test_get_llm_response_by_index():
+    """指定インデックスのLLM応答を取得できること"""
+    history = [
+        {"role": "user", "content": "hi"},
+        {"role": "gemini", "content": "G-1"},
+        {"role": "user", "content": "hello"},
+        {"role": "chatgpt", "content": "C-1"},
+    ]
+
+    assert chat_logic.get_llm_response(history, 0) == "C-1"
+    assert chat_logic.get_llm_response(history, 1) == "G-1"
+
+
+def test_get_llm_response_raises_on_missing():
+    """LLM応答が存在しない場合はIndexErrorとなること"""
+    history = [{"role": "user", "content": "only user"}]
+
+    with pytest.raises(IndexError):
+        chat_logic.get_llm_response(history, 0)
+
+
+def test_get_llm_response_raises_on_negative_index():
+    """負のインデックス指定でIndexErrorとなること"""
+    history = [{"role": "gemini", "content": "ok"}]
+
+    with pytest.raises(IndexError):
+        chat_logic.get_llm_response(history, -1)
