@@ -1,3 +1,4 @@
+import logging
 import os
 
 import gradio as gr
@@ -5,6 +6,11 @@ from gradio_client import utils as gradio_utils
 
 from . import core
 from .history import HistoryStore
+
+# Constants
+ASSISTANT_ROLES = ("assistant", "gemini", "chatgpt")
+
+logger = logging.getLogger(__name__)
 
 # Gradio 4.42.0時点のバグで、JSON Schema内にboolが含まれると
 # gradio_client.utils.json_schema_to_python_typeが落ちる。
@@ -73,13 +79,12 @@ def update_token_display(system_prompt, logic_history=None, model_name=None):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
-def save_history_action(user_id, save_name, display_history, logic_history, system_prompt):
+def save_history_action(user_id, save_name, logic_history, system_prompt):
     """Save current chat history using HistoryStore
 
     Args:
         user_id: User ID
         save_name: Name to save the history as
-        display_history: Display history
         logic_history: Logic history
         system_prompt: System prompt
 
@@ -123,7 +128,7 @@ def load_history_action(user_id, history_name):
             if turn["role"] == "user":
                 # Start a new turn
                 display_history.append([turn["content"], ""])
-            elif turn["role"] in ("assistant", "gemini", "chatgpt") and display_history:
+            elif turn["role"] in ASSISTANT_ROLES and display_history:
                 # Add assistant/LLM response to the last turn
                 # For @all mentions, multiple assistant responses exist - append them
                 current_response = display_history[-1][1]
@@ -183,7 +188,8 @@ def check_history_name_exists(user_id, save_name):
     try:
         store = HistoryStore()
         return store.history_exists(user_id, save_name)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to check history existence for user '{user_id}': {e}")
         return False
 
 
@@ -202,7 +208,8 @@ def get_history_list(user_id):
     try:
         store = HistoryStore()
         return store.list_histories(user_id)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to list histories for user '{user_id}': {e}")
         return []
 
 
@@ -471,7 +478,6 @@ with gr.Blocks() as demo:
         status, choices = save_history_action(
             data["user_id"],
             data["save_name"],
-            data["display_hist"],
             data["logic_hist"],
             data["sys_prompt"],
         )
@@ -641,9 +647,7 @@ with gr.Blocks() as demo:
             )
 
         # No conflict, save directly
-        status, choices = save_history_action(
-            user_id, save_name, display_hist, logic_hist, sys_prompt
-        )
+        status, choices = save_history_action(user_id, save_name, logic_hist, sys_prompt)
 
         # Update token display and send button state after save
         token_display_value = update_token_display(sys_prompt, logic_hist)

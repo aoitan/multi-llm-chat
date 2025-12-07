@@ -383,7 +383,6 @@ def test_save_history_action_saves_to_file():
     with TemporaryDirectory():
         user_id = "test_user"
         save_name = "test_history"
-        display_hist = [["Hello", "Hi there"]]
         logic_hist = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there", "model": "gemini"},
@@ -396,9 +395,7 @@ def test_save_history_action_saves_to_file():
             mock_store.save_history.return_value = None
             mock_store.list_histories.return_value = ["test_history"]
 
-            status, choices = webui.save_history_action(
-                user_id, save_name, display_hist, logic_hist, sys_prompt
-            )
+            status, choices = webui.save_history_action(user_id, save_name, logic_hist, sys_prompt)
 
             # Should call HistoryStore.save_history
             mock_store.save_history.assert_called_once()
