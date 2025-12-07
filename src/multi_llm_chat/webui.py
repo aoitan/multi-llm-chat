@@ -1,9 +1,16 @@
+import logging
 import os
 
 import gradio as gr
 from gradio_client import utils as gradio_utils
 
 from . import core
+from .history import HistoryStore
+
+# Constants
+ASSISTANT_ROLES = ("assistant", "gemini", "chatgpt")
+
+logger = logging.getLogger(__name__)
 
 # Gradio 4.42.0時点のバグで、JSON Schema内にboolが含まれると
 # gradio_client.utils.json_schema_to_python_typeが落ちる。
@@ -72,26 +79,34 @@ def update_token_display(system_prompt, logic_history=None, model_name=None):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
-def save_history_action(user_id, save_name, display_history, logic_history, system_prompt):
-    """Save current chat history (placeholder for Task 017-A-3)
+def save_history_action(user_id, save_name, logic_history, system_prompt):
+    """Save current chat history using HistoryStore
 
     Args:
         user_id: User ID
         save_name: Name to save the history as
-        display_history: Display history
         logic_history: Logic history
         system_prompt: System prompt
 
     Returns:
         tuple: (status_message, updated_dropdown_choices)
     """
-    # TODO: Implement in Task 017-A-3 with HistoryStore
-    # For now, return success message
-    return (f"✅ 履歴 '{save_name}' を保存しました（ダミー）", [])
+    try:
+        store = HistoryStore()
+        store.save_history(user_id, save_name, system_prompt, logic_history)
+
+        # Get updated list of histories
+        choices = store.list_histories(user_id)
+
+        return (f"✅ 履歴 '{save_name}' を保存しました", choices)
+    except ValueError as e:
+        return (f"❌ 保存エラー: {e}", [])
+    except Exception as e:
+        return (f"❌ 保存に失敗しました: {e}", [])
 
 
 def load_history_action(user_id, history_name):
-    """Load saved chat history (placeholder for Task 017-A-3)
+    """Load saved chat history using HistoryStore
 
     Args:
         user_id: User ID
@@ -100,20 +115,51 @@ def load_history_action(user_id, history_name):
     Returns:
         tuple: (display_history, logic_history, system_prompt, status_message)
     """
-    # TODO: Implement in Task 017-A-3 with HistoryStore
-    # For now, return empty history
-    return ([], [], "", f"✅ 履歴 '{history_name}' を読み込みました（ダミー）")
+    try:
+        store = HistoryStore()
+        data = store.load_history(user_id, history_name)
+
+        system_prompt = data.get("system_prompt", "")
+        logic_history = data.get("turns", [])
+
+        # Convert logic history to display history
+        display_history = []
+        for turn in logic_history:
+            if turn["role"] == "user":
+                # Start a new turn
+                display_history.append([turn["content"], ""])
+            elif turn["role"] in ASSISTANT_ROLES and display_history:
+                # Add assistant/LLM response to the last turn
+                # For @all mentions, multiple assistant responses exist - append them
+                current_response = display_history[-1][1]
+                if current_response:
+                    # Already has a response, append the new one
+                    display_history[-1][1] = current_response + "\n\n" + turn["content"]
+                else:
+                    # First response for this user message
+                    display_history[-1][1] = turn["content"]
+
+        return (
+            display_history,
+            logic_history,
+            system_prompt,
+            f"✅ 履歴 '{history_name}' を読み込みました",
+        )
+    except FileNotFoundError:
+        # Return None to indicate error - caller should preserve current state
+        return (None, None, None, f"❌ 履歴 '{history_name}' が見つかりません")
+    except Exception as e:
+        # Return None to indicate error - caller should preserve current state
+        return (None, None, None, f"❌ 読み込みに失敗しました: {e}")
 
 
 def new_chat_action():
-    """Start new chat session (placeholder for Task 017-A-3)
+    """Start new chat session
 
     Returns:
         tuple: (display_history, logic_history, system_prompt, status_message)
     """
-    # TODO: Implement in Task 017-A-3
-    # For now, return empty state
-    return ([], [], "", "✅ 新しい会話を開始しました（ダミー）")
+    return ([], [], "", "✅ 新しい会話を開始しました")
 
 
 def has_unsaved_session(logic_history):
@@ -130,7 +176,7 @@ def has_unsaved_session(logic_history):
 
 
 def check_history_name_exists(user_id, save_name):
-    """Check if a history name already exists (placeholder for Task 017-A-3)
+    """Check if a history name already exists using HistoryStore
 
     Args:
         user_id: User ID
@@ -139,9 +185,32 @@ def check_history_name_exists(user_id, save_name):
     Returns:
         bool: True if name exists
     """
-    # TODO: Implement in Task 017-A-3 with HistoryStore.list_histories()
-    # For now, always return False (no conflict)
-    return False
+    try:
+        store = HistoryStore()
+        return store.history_exists(user_id, save_name)
+    except Exception as e:
+        logger.error(f"Failed to check history existence for user '{user_id}': {e}")
+        return False
+
+
+def get_history_list(user_id):
+    """Get list of saved histories for user
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        list: List of history names (empty list on error)
+    """
+    if not user_id or not user_id.strip():
+        return []
+
+    try:
+        store = HistoryStore()
+        return store.list_histories(user_id)
+    except Exception as e:
+        logger.error(f"Failed to list histories for user '{user_id}': {e}")
+        return []
 
 
 def respond(user_message, display_history, logic_history, system_prompt, user_id):
@@ -378,17 +447,19 @@ with gr.Blocks() as demo:
     # Update button states when user ID changes
     def update_buttons_on_user_id(user_id, system_prompt, logic_history):
         enabled = bool(user_id and user_id.strip())
+        history_choices = get_history_list(user_id)
         return (
             gr.update(interactive=enabled),  # save_history_btn
             gr.update(interactive=enabled),  # load_history_btn
             gr.update(interactive=enabled),  # new_chat_btn
             check_send_button_with_user_id(user_id, system_prompt, logic_history),  # send_button
+            gr.update(choices=history_choices),  # history_dropdown
         )
 
     user_id_input.change(
         update_buttons_on_user_id,
         [user_id_input, system_prompt_input, logic_history_state],
-        [save_history_btn, load_history_btn, new_chat_btn, send_button],
+        [save_history_btn, load_history_btn, new_chat_btn, send_button, history_dropdown],
     )
 
     # Confirmation dialog event handlers
@@ -407,10 +478,17 @@ with gr.Blocks() as demo:
         status, choices = save_history_action(
             data["user_id"],
             data["save_name"],
-            data["display_hist"],
             data["logic_hist"],
             data["sys_prompt"],
         )
+
+        # Update token display and send button state after save
+        user_id = data["user_id"]
+        sys_prompt = data["sys_prompt"]
+        logic_hist = data["logic_hist"]
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
         return (
             status,
             gr.update(choices=choices),
@@ -418,6 +496,8 @@ with gr.Blocks() as demo:
             gr.update(),  # Keep current display_history
             gr.update(),  # Keep current logic_history
             gr.update(),  # Keep current system_prompt
+            token_display_value,  # Update token_display
+            send_button_state,  # Update send_button
             *hide_confirmation(),
         )
 
@@ -426,19 +506,54 @@ with gr.Blocks() as demo:
         display_hist, logic_hist, sys_prompt, status = load_history_action(
             data["user_id"], data["history_name"]
         )
+
+        # Check if load failed (returns None)
+        if display_hist is None:
+            # Load failed, preserve current state but refresh dropdown
+            user_id = data["user_id"]
+            history_choices = get_history_list(user_id)
+            return (
+                status,  # Show error message
+                gr.update(choices=history_choices),  # Refresh dropdown
+                gr.update(),  # Keep current chatbot_ui
+                gr.update(),  # Keep current display_history
+                gr.update(),  # Keep current logic_history
+                gr.update(),  # Keep current system_prompt
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
+                *hide_confirmation(),
+            )
+
+        # Update token display and send button
+        user_id = data["user_id"]
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        # Refresh history list after successful load
+        history_choices = get_history_list(user_id)
+
         return (
             status,
-            gr.update(),
+            gr.update(choices=history_choices),  # Refresh dropdown
             display_hist,  # Update chatbot_ui
             display_hist,  # Update display_history_state
             logic_hist,  # Update logic_history_state
             sys_prompt,  # Update system_prompt_input
+            token_display_value,  # Update token_display
+            send_button_state,  # Update send_button
             *hide_confirmation(),
         )
 
     def _execute_new_chat_unsaved(data):
         """Helper to execute new chat action"""
         display_hist, logic_hist, sys_prompt, status = new_chat_action()
+
+        # Update token display and send button
+        # For new chat, we need user_id from data (stored during confirmation)
+        user_id = data.get("user_id", "")
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
         return (
             status,
             gr.update(),
@@ -446,6 +561,8 @@ with gr.Blocks() as demo:
             display_hist,  # Update display_history_state
             logic_hist,  # Update logic_history_state
             sys_prompt,  # Update system_prompt_input
+            token_display_value,  # Update token_display
+            send_button_state,  # Update send_button
             *hide_confirmation(),
         )
 
@@ -472,6 +589,8 @@ with gr.Blocks() as demo:
             gr.update(),  # Don't change display_history
             gr.update(),  # Don't change logic_history
             gr.update(),  # Don't change system_prompt
+            gr.update(),  # Don't change token_display
+            gr.update(),  # Don't change send_button
             *hide_confirmation(),
         )
 
@@ -485,6 +604,8 @@ with gr.Blocks() as demo:
             display_history_state,
             logic_history_state,
             system_prompt_input,
+            token_display,  # Add token_display to outputs
+            send_button,  # Add send_button to outputs
             confirmation_dialog,
             confirmation_message,
             confirmation_state,
@@ -495,7 +616,13 @@ with gr.Blocks() as demo:
     def handle_save_history(user_id, save_name, display_hist, logic_hist, sys_prompt):
         """Handle save history button click"""
         if not save_name or not save_name.strip():
-            return ("❌ 保存名を入力してください", gr.update(), *hide_confirmation())
+            return (
+                "❌ 保存名を入力してください",
+                gr.update(),
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
+                *hide_confirmation(),
+            )
 
         save_name = save_name.strip()
 
@@ -504,6 +631,8 @@ with gr.Blocks() as demo:
             return (
                 "",  # Don't update status yet
                 gr.update(),  # Don't update dropdown yet
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
                 *show_confirmation(
                     f"履歴 '{save_name}' は既に存在します。上書きしますか？",
                     "save_overwrite",
@@ -518,10 +647,19 @@ with gr.Blocks() as demo:
             )
 
         # No conflict, save directly
-        status, choices = save_history_action(
-            user_id, save_name, display_hist, logic_hist, sys_prompt
+        status, choices = save_history_action(user_id, save_name, logic_hist, sys_prompt)
+
+        # Update token display and send button state after save
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        return (
+            status,
+            gr.update(choices=choices),
+            token_display_value,
+            send_button_state,
+            *hide_confirmation(),
         )
-        return (status, gr.update(choices=choices), *hide_confirmation())
 
     save_history_btn.click(
         handle_save_history,
@@ -535,6 +673,8 @@ with gr.Blocks() as demo:
         outputs=[
             history_status,
             history_dropdown,
+            token_display,  # Update token count
+            send_button,  # Update send button state
             confirmation_dialog,
             confirmation_message,
             confirmation_state,
@@ -550,6 +690,9 @@ with gr.Blocks() as demo:
                 gr.update(),  # Don't change logic_history
                 gr.update(),  # Don't change system_prompt
                 "❌ 読み込む履歴を選択してください",
+                gr.update(),  # Don't change token_display
+                gr.update(),  # Don't change send_button
+                gr.update(),  # Don't change history_dropdown
                 *hide_confirmation(),
             )
 
@@ -561,6 +704,9 @@ with gr.Blocks() as demo:
                 gr.update(),  # Keep current logic_history
                 gr.update(),  # Keep current system_prompt
                 "",  # Don't update status yet
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
+                gr.update(),  # Keep current history_dropdown
                 *show_confirmation(
                     "未保存の会話があります。破棄して読み込みますか？",
                     "load_unsaved",
@@ -570,7 +716,41 @@ with gr.Blocks() as demo:
 
         # No unsaved content, load directly
         display_hist, logic_hist, sys_prompt, status = load_history_action(user_id, history_name)
-        return (display_hist, display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
+
+        # Check if load failed (returns None)
+        if display_hist is None:
+            # Load failed, preserve current state but refresh dropdown
+            history_choices = get_history_list(user_id)
+            return (
+                gr.update(),  # Keep current chatbot_ui
+                gr.update(),  # Keep current display_history
+                gr.update(),  # Keep current logic_history
+                gr.update(),  # Keep current system_prompt
+                status,  # Show error message
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
+                gr.update(choices=history_choices),  # Refresh dropdown
+                *hide_confirmation(),
+            )
+
+        # Update token display and send button state
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        # Refresh history list after successful load
+        history_choices = get_history_list(user_id)
+
+        return (
+            display_hist,
+            display_hist,
+            logic_hist,
+            sys_prompt,
+            status,
+            token_display_value,
+            send_button_state,
+            gr.update(choices=history_choices),  # Refresh dropdown
+            *hide_confirmation(),
+        )
 
     load_history_btn.click(
         handle_load_history,
@@ -581,13 +761,16 @@ with gr.Blocks() as demo:
             logic_history_state,
             system_prompt_input,
             history_status,
+            token_display,  # Update token count
+            send_button,  # Update send button state
+            history_dropdown,  # Update history list
             confirmation_dialog,
             confirmation_message,
             confirmation_state,
         ],
     )
 
-    def handle_new_chat(logic_hist):
+    def handle_new_chat(user_id, logic_hist, sys_prompt):
         """Handle new chat button click"""
         # Check for unsaved session and show confirmation
         if has_unsaved_session(logic_hist):
@@ -597,24 +780,44 @@ with gr.Blocks() as demo:
                 gr.update(),  # Keep current logic_history
                 gr.update(),  # Keep current system_prompt
                 "",  # Don't update status yet
+                gr.update(),  # Keep current token_display
+                gr.update(),  # Keep current send_button
                 *show_confirmation(
-                    "未保存の会話があります。破棄して新規開始しますか？", "new_chat_unsaved", {}
+                    "未保存の会話があります。破棄して新規開始しますか？",
+                    "new_chat_unsaved",
+                    {"user_id": user_id},  # Store user_id for token/button update
                 ),
             )
 
         # No unsaved content, start new chat directly
         display_hist, logic_hist, sys_prompt, status = new_chat_action()
-        return (display_hist, display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
+
+        # Update token display and send button state
+        token_display_value = update_token_display(sys_prompt, logic_hist)
+        send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
+
+        return (
+            display_hist,
+            display_hist,
+            logic_hist,
+            sys_prompt,
+            status,
+            token_display_value,
+            send_button_state,
+            *hide_confirmation(),
+        )
 
     new_chat_btn.click(
         handle_new_chat,
-        inputs=[logic_history_state],
+        inputs=[user_id_input, logic_history_state, system_prompt_input],
         outputs=[
             chatbot_ui,  # Update chatbot display
             display_history_state,
             logic_history_state,
             system_prompt_input,
             history_status,
+            token_display,  # Update token count
+            send_button,  # Update send button state
             confirmation_dialog,
             confirmation_message,
             confirmation_state,

@@ -373,3 +373,158 @@ def test_new_chat_preserves_data_when_showing_confirmation():
     # Similar to above, when confirmation is shown, data should be preserved
     logic_hist = [{"role": "user", "content": "Test"}]
     assert webui.has_unsaved_session(logic_hist) is True
+
+
+# Task 017-A-3: HistoryStore統合と機能連携
+def test_save_history_action_saves_to_file():
+    """save_history_action should save history to file using HistoryStore"""
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory():
+        user_id = "test_user"
+        save_name = "test_history"
+        logic_hist = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there", "model": "gemini"},
+        ]
+        sys_prompt = "You are a helpful assistant"
+
+        # Mock HistoryStore to use tmpdir
+        with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+            mock_store = MockStore.return_value
+            mock_store.save_history.return_value = None
+            mock_store.list_histories.return_value = ["test_history"]
+
+            status, choices = webui.save_history_action(user_id, save_name, logic_hist, sys_prompt)
+
+            # Should call HistoryStore.save_history
+            mock_store.save_history.assert_called_once()
+            assert "test_history" in status or "保存" in status
+            assert "test_history" in choices
+
+
+def test_load_history_action_loads_from_file():
+    """load_history_action should load history from file using HistoryStore"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.return_value = {
+            "system_prompt": "Test prompt",
+            "turns": [
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi", "model": "gemini"},
+            ],
+        }
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "test_history"
+        )
+
+        # Should call HistoryStore.load_history
+        mock_store.load_history.assert_called_once_with("test_user", "test_history")
+        assert sys_prompt == "Test prompt"
+        assert len(logic_hist) == 2
+        assert "読み込み" in status or "test_history" in status
+
+
+def test_new_chat_action_resets_state():
+    """new_chat_action should reset all state"""
+    display_hist, logic_hist, sys_prompt, status = webui.new_chat_action()
+
+    assert display_hist == []
+    assert logic_hist == []
+    assert sys_prompt == ""
+    assert "新しい会話" in status or "開始" in status
+
+
+def test_check_history_name_exists_uses_historystore():
+    """check_history_name_exists should use HistoryStore.history_exists"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.history_exists.return_value = True
+
+        result = webui.check_history_name_exists("test_user", "existing_history")
+
+        mock_store.history_exists.assert_called_once_with("test_user", "existing_history")
+        assert result is True
+
+
+def test_get_history_list_returns_choices():
+    """get_history_list should return list of saved histories"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.list_histories.return_value = ["history1", "history2", "history3"]
+
+        result = webui.get_history_list("test_user")
+
+        mock_store.list_histories.assert_called_once_with("test_user")
+        assert result == ["history1", "history2", "history3"]
+
+
+def test_get_history_list_empty_user_id():
+    """get_history_list should return empty list for empty user_id"""
+    result = webui.get_history_list("")
+    assert result == []
+
+    result = webui.get_history_list("   ")
+    assert result == []
+
+
+def test_load_history_action_preserves_state_on_error():
+    """load_history_action should return None on error to preserve current state"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.side_effect = FileNotFoundError("Not found")
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "nonexistent"
+        )
+
+        # Should return None to indicate error
+        assert display_hist is None
+        assert logic_hist is None
+        assert sys_prompt is None
+        assert "見つかりません" in status
+
+
+def test_load_history_action_preserves_state_on_exception():
+    """load_history_action should return None on exception"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.side_effect = Exception("Read error")
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "corrupted"
+        )
+
+        # Should return None to indicate error
+        assert display_hist is None
+        assert logic_hist is None
+        assert sys_prompt is None
+        assert "失敗しました" in status
+
+
+def test_load_history_action_handles_multiple_assistant_responses():
+    """load_history_action should handle @all case with multiple assistant responses"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.return_value = {
+            "system_prompt": "Test",
+            "turns": [
+                {"role": "user", "content": "@all Hello"},
+                {"role": "gemini", "content": "Gemini response"},
+                {"role": "chatgpt", "content": "ChatGPT response"},
+            ],
+        }
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "multi_response"
+        )
+
+        # Should have both responses in display
+        assert len(display_hist) == 1
+        assert display_hist[0][0] == "@all Hello"
+        # Both responses should be present
+        assert "Gemini response" in display_hist[0][1]
+        assert "ChatGPT response" in display_hist[0][1]
+        # Logic history should have all 3 turns
+        assert len(logic_hist) == 3
