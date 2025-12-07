@@ -150,7 +150,7 @@ Web UIでは、ユーザーID別に会話履歴を保存・読み込み・管理
    - **Yes**: 既存履歴を上書きします
    - **No**: 保存をキャンセルします
 
-**注意**: ファイル名として使用できない文字（`/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`）は自動的にアンダースコアに変換されます。
+**注意**: 保存名に入力された半角英数字、アンダースコア(`_`)、ハイフン(`-`)以外の文字は、自動的にアンダースコアに変換されます。
 
 ##### 履歴の読み込み
 
@@ -172,8 +172,8 @@ Web UIでは、ユーザーID別に会話履歴を保存・読み込み・管理
 ##### 履歴ファイルの保存場所
 
 履歴ファイルは以下のディレクトリに保存されます：
-- `XDG_DATA_HOME/multi_llm_chat/chat_histories/<user_id>/` (Linux/macOS)
-- `~/.multi_llm_chat/chat_histories/<user_id>/` (上記が未設定の場合)
+- **Linux/macOS**: `$XDG_DATA_HOME/multi_llm_chat/chat_histories/<user_id>/`、またはフォールバックとして `~/.multi_llm_chat/chat_histories/<user_id>/`
+- **Windows**: `%USERPROFILE%/.multi_llm_chat/chat_histories/<user_id>/`
 
 環境変数 `CHAT_HISTORY_DIR` で保存先ディレクトリをカスタマイズできます。
 
