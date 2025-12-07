@@ -72,6 +72,78 @@ def update_token_display(system_prompt, logic_history=None, model_name=None):
         return f"Tokens: {token_count} / {max_context}{estimation_note}"
 
 
+def save_history_action(user_id, save_name, display_history, logic_history, system_prompt):
+    """Save current chat history (placeholder for Task 017-A-3)
+
+    Args:
+        user_id: User ID
+        save_name: Name to save the history as
+        display_history: Display history
+        logic_history: Logic history
+        system_prompt: System prompt
+
+    Returns:
+        tuple: (status_message, updated_dropdown_choices)
+    """
+    # TODO: Implement in Task 017-A-3 with HistoryStore
+    # For now, return success message
+    return (f"✅ 履歴 '{save_name}' を保存しました（ダミー）", [])
+
+
+def load_history_action(user_id, history_name):
+    """Load saved chat history (placeholder for Task 017-A-3)
+
+    Args:
+        user_id: User ID
+        history_name: Name of history to load
+
+    Returns:
+        tuple: (display_history, logic_history, system_prompt, status_message)
+    """
+    # TODO: Implement in Task 017-A-3 with HistoryStore
+    # For now, return empty history
+    return ([], [], "", f"✅ 履歴 '{history_name}' を読み込みました（ダミー）")
+
+
+def new_chat_action():
+    """Start new chat session (placeholder for Task 017-A-3)
+
+    Returns:
+        tuple: (display_history, logic_history, system_prompt, status_message)
+    """
+    # TODO: Implement in Task 017-A-3
+    # For now, return empty state
+    return ([], [], "", "✅ 新しい会話を開始しました（ダミー）")
+
+
+def has_unsaved_session(logic_history):
+    """Check if there's an unsaved session
+
+    Args:
+        logic_history: Current logic history
+
+    Returns:
+        bool: True if there's unsaved content
+    """
+    # Session is unsaved if there's any conversation history
+    return len(logic_history) > 0
+
+
+def check_history_name_exists(user_id, save_name):
+    """Check if a history name already exists (placeholder for Task 017-A-3)
+
+    Args:
+        user_id: User ID
+        save_name: Name to check
+
+    Returns:
+        bool: True if name exists
+    """
+    # TODO: Implement in Task 017-A-3 with HistoryStore.list_histories()
+    # For now, always return False (no conflict)
+    return False
+
+
 def respond(user_message, display_history, logic_history, system_prompt, user_id):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
@@ -192,6 +264,37 @@ def check_send_button_with_user_id(user_id, system_prompt, logic_history=None, m
     return gr.update(interactive=is_enabled)
 
 
+def show_confirmation(message, action, data=None):
+    """Show confirmation dialog with message
+
+    Args:
+        message: Confirmation message to display
+        action: Action identifier (e.g., "save_overwrite", "load_unsaved")
+        data: Optional data to pass to the action
+
+    Returns:
+        tuple: (dialog_visibility, message_content, state)
+    """
+    return (
+        gr.update(visible=True),  # confirmation_dialog
+        message,  # confirmation_message
+        {"pending_action": action, "pending_data": data},  # confirmation_state
+    )
+
+
+def hide_confirmation():
+    """Hide confirmation dialog and clear state
+
+    Returns:
+        tuple: (dialog_visibility, message_content, state)
+    """
+    return (
+        gr.update(visible=False),  # confirmation_dialog
+        "",  # confirmation_message
+        {"pending_action": None, "pending_data": None},  # confirmation_state
+    )
+
+
 # --- Gradio UIの構築 ---
 with gr.Blocks() as demo:
     gr.Markdown("# Multi-LLM Chat")
@@ -243,6 +346,19 @@ with gr.Blocks() as demo:
             new_chat_btn = gr.Button("新しい会話を開始", elem_id="new_chat_btn", interactive=False)
         history_status = gr.Markdown("", elem_id="history_status")
 
+    # Confirmation dialog (modal-like UI)
+    with gr.Row(visible=False, elem_id="confirmation_dialog") as confirmation_dialog:
+        with gr.Column():
+            confirmation_message = gr.Markdown("", elem_id="confirmation_message")
+            with gr.Row():
+                confirmation_yes_btn = gr.Button("Yes", elem_id="confirmation_yes_btn", size="sm")
+                confirmation_no_btn = gr.Button("No", elem_id="confirmation_no_btn", size="sm")
+
+    # Confirmation state management
+    confirmation_state = gr.State(
+        {"pending_action": None, "pending_data": None}
+    )  # Stores pending action and data
+
     # 履歴を管理するための非表示Stateコンポーネント
     display_history_state = gr.State([])
     logic_history_state = gr.State([])
@@ -273,6 +389,236 @@ with gr.Blocks() as demo:
         update_buttons_on_user_id,
         [user_id_input, system_prompt_input, logic_history_state],
         [save_history_btn, load_history_btn, new_chat_btn, send_button],
+    )
+
+    # Confirmation dialog event handlers
+    def handle_confirmation_no():
+        """Handle No button click - cancel pending action"""
+        return hide_confirmation()
+
+    confirmation_no_btn.click(
+        handle_confirmation_no,
+        outputs=[confirmation_dialog, confirmation_message, confirmation_state],
+    )
+
+    # Yes button handler - execute pending action
+    def _execute_save_overwrite(data):
+        """Helper to execute save action"""
+        status, choices = save_history_action(
+            data["user_id"],
+            data["save_name"],
+            data["display_hist"],
+            data["logic_hist"],
+            data["sys_prompt"],
+        )
+        return (
+            status,
+            gr.update(choices=choices),
+            gr.update(),  # Don't change chatbot_ui
+            gr.update(),  # Keep current display_history
+            gr.update(),  # Keep current logic_history
+            gr.update(),  # Keep current system_prompt
+            *hide_confirmation(),
+        )
+
+    def _execute_load_unsaved(data):
+        """Helper to execute load action"""
+        display_hist, logic_hist, sys_prompt, status = load_history_action(
+            data["user_id"], data["history_name"]
+        )
+        return (
+            status,
+            gr.update(),
+            display_hist,  # Update chatbot_ui
+            display_hist,  # Update display_history_state
+            logic_hist,  # Update logic_history_state
+            sys_prompt,  # Update system_prompt_input
+            *hide_confirmation(),
+        )
+
+    def _execute_new_chat_unsaved(data):
+        """Helper to execute new chat action"""
+        display_hist, logic_hist, sys_prompt, status = new_chat_action()
+        return (
+            status,
+            gr.update(),
+            display_hist,  # Update chatbot_ui
+            display_hist,  # Update display_history_state
+            logic_hist,  # Update logic_history_state
+            sys_prompt,  # Update system_prompt_input
+            *hide_confirmation(),
+        )
+
+    ACTION_HANDLERS = {
+        "save_overwrite": _execute_save_overwrite,
+        "load_unsaved": _execute_load_unsaved,
+        "new_chat_unsaved": _execute_new_chat_unsaved,
+    }
+
+    def handle_confirmation_yes(conf_state):
+        """Handle Yes button click - execute pending action"""
+        action = conf_state.get("pending_action")
+        handler = ACTION_HANDLERS.get(action)
+
+        if handler:
+            data = conf_state.get("pending_data", {})
+            return handler(data)
+
+        # Unknown action, just hide dialog
+        return (
+            "",
+            gr.update(),
+            gr.update(),  # Don't change chatbot_ui
+            gr.update(),  # Don't change display_history
+            gr.update(),  # Don't change logic_history
+            gr.update(),  # Don't change system_prompt
+            *hide_confirmation(),
+        )
+
+    confirmation_yes_btn.click(
+        handle_confirmation_yes,
+        inputs=[confirmation_state],
+        outputs=[
+            history_status,
+            history_dropdown,
+            chatbot_ui,  # Add chatbot_ui to outputs
+            display_history_state,
+            logic_history_state,
+            system_prompt_input,
+            confirmation_dialog,
+            confirmation_message,
+            confirmation_state,
+        ],
+    )
+
+    # History operations with confirmation flow
+    def handle_save_history(user_id, save_name, display_hist, logic_hist, sys_prompt):
+        """Handle save history button click"""
+        if not save_name or not save_name.strip():
+            return ("❌ 保存名を入力してください", gr.update(), *hide_confirmation())
+
+        save_name = save_name.strip()
+
+        # Check if name exists and show confirmation for overwrite
+        if check_history_name_exists(user_id, save_name):
+            return (
+                "",  # Don't update status yet
+                gr.update(),  # Don't update dropdown yet
+                *show_confirmation(
+                    f"履歴 '{save_name}' は既に存在します。上書きしますか？",
+                    "save_overwrite",
+                    {
+                        "user_id": user_id,
+                        "save_name": save_name,
+                        "display_hist": display_hist,
+                        "logic_hist": logic_hist,
+                        "sys_prompt": sys_prompt,
+                    },
+                ),
+            )
+
+        # No conflict, save directly
+        status, choices = save_history_action(
+            user_id, save_name, display_hist, logic_hist, sys_prompt
+        )
+        return (status, gr.update(choices=choices), *hide_confirmation())
+
+    save_history_btn.click(
+        handle_save_history,
+        inputs=[
+            user_id_input,
+            save_name_input,
+            display_history_state,
+            logic_history_state,
+            system_prompt_input,
+        ],
+        outputs=[
+            history_status,
+            history_dropdown,
+            confirmation_dialog,
+            confirmation_message,
+            confirmation_state,
+        ],
+    )
+
+    def handle_load_history(user_id, history_name, logic_hist):
+        """Handle load history button click"""
+        if not history_name:
+            return (
+                gr.update(),  # Don't change chatbot_ui
+                gr.update(),  # Don't change display_history
+                gr.update(),  # Don't change logic_history
+                gr.update(),  # Don't change system_prompt
+                "❌ 読み込む履歴を選択してください",
+                *hide_confirmation(),
+            )
+
+        # Check for unsaved session and show confirmation
+        if has_unsaved_session(logic_hist):
+            return (
+                gr.update(),  # Keep current chatbot_ui
+                gr.update(),  # Keep current display_history
+                gr.update(),  # Keep current logic_history
+                gr.update(),  # Keep current system_prompt
+                "",  # Don't update status yet
+                *show_confirmation(
+                    "未保存の会話があります。破棄して読み込みますか？",
+                    "load_unsaved",
+                    {"user_id": user_id, "history_name": history_name},
+                ),
+            )
+
+        # No unsaved content, load directly
+        display_hist, logic_hist, sys_prompt, status = load_history_action(user_id, history_name)
+        return (display_hist, display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
+
+    load_history_btn.click(
+        handle_load_history,
+        inputs=[user_id_input, history_dropdown, logic_history_state],
+        outputs=[
+            chatbot_ui,  # Update chatbot display
+            display_history_state,
+            logic_history_state,
+            system_prompt_input,
+            history_status,
+            confirmation_dialog,
+            confirmation_message,
+            confirmation_state,
+        ],
+    )
+
+    def handle_new_chat(logic_hist):
+        """Handle new chat button click"""
+        # Check for unsaved session and show confirmation
+        if has_unsaved_session(logic_hist):
+            return (
+                gr.update(),  # Keep current chatbot_ui
+                gr.update(),  # Keep current display_history
+                gr.update(),  # Keep current logic_history
+                gr.update(),  # Keep current system_prompt
+                "",  # Don't update status yet
+                *show_confirmation(
+                    "未保存の会話があります。破棄して新規開始しますか？", "new_chat_unsaved", {}
+                ),
+            )
+
+        # No unsaved content, start new chat directly
+        display_hist, logic_hist, sys_prompt, status = new_chat_action()
+        return (display_hist, display_hist, logic_hist, sys_prompt, status, *hide_confirmation())
+
+    new_chat_btn.click(
+        handle_new_chat,
+        inputs=[logic_history_state],
+        outputs=[
+            chatbot_ui,  # Update chatbot display
+            display_history_state,
+            logic_history_state,
+            system_prompt_input,
+            history_status,
+            confirmation_dialog,
+            confirmation_message,
+            confirmation_state,
+        ],
     )
 
     # Update token display and button state when system prompt or history changes

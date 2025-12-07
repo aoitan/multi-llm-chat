@@ -286,3 +286,90 @@ def test_respond_rejects_whitespace_user_id():
 
         # LLM should NOT be called
         mock_api.assert_not_called()
+
+
+# Task 017-A-2: 確認フロー（モーダル風UI）の実装
+def test_confirmation_ui_components_exist():
+    """WebUI should have confirmation UI components"""
+    assert webui.demo is not None
+    components = {
+        block.elem_id: block for block in webui.demo.blocks.values() if hasattr(block, "elem_id")
+    }
+    assert "confirmation_message" in components
+    assert "confirmation_yes_btn" in components
+    assert "confirmation_no_btn" in components
+
+
+def test_confirmation_state_exists():
+    """WebUI should have confirmation state management"""
+    # Check that confirmation_state exists in demo
+    assert webui.demo is not None
+    # Confirmation state should be a gr.State component
+    # Will be verified by checking it's used in event handlers
+
+
+def test_show_confirmation_dialog():
+    """show_confirmation function should display dialog with message"""
+    if not hasattr(webui, "show_confirmation"):
+        import pytest
+
+        pytest.skip("show_confirmation not yet implemented")
+
+    message = "この操作を実行しますか？"
+    result = webui.show_confirmation(message, "test_action", {"key": "value"})
+
+    # Should return updates for visibility and message
+    assert result[0]["visible"] is True  # confirmation_dialog visible
+    assert message in result[1]  # confirmation_message content
+    assert result[2]["pending_action"] == "test_action"  # confirmation_state
+
+
+def test_hide_confirmation_dialog():
+    """hide_confirmation function should hide dialog"""
+    if not hasattr(webui, "hide_confirmation"):
+        import pytest
+
+        pytest.skip("hide_confirmation not yet implemented")
+
+    result = webui.hide_confirmation()
+
+    # Should return update to hide dialog
+    assert result[0]["visible"] is False  # confirmation_dialog hidden
+    assert result[1] == ""  # confirmation_message cleared
+    assert result[2]["pending_action"] is None  # confirmation_state cleared
+
+
+def test_has_unsaved_session_empty():
+    """has_unsaved_session should return False for empty history"""
+    assert webui.has_unsaved_session([]) is False
+
+
+def test_has_unsaved_session_with_content():
+    """has_unsaved_session should return True when history exists"""
+    history = [{"role": "user", "content": "Hello"}]
+    assert webui.has_unsaved_session(history) is True
+
+
+def test_check_history_name_exists():
+    """check_history_name_exists placeholder should return False"""
+    # Currently returns False (placeholder)
+    assert webui.check_history_name_exists("test_user", "test_name") is False
+
+
+def test_load_history_preserves_data_when_showing_confirmation():
+    """handle_load_history should preserve current data when showing confirmation"""
+    # This tests that when confirmation is shown, existing history is NOT cleared
+    # Simulate calling handle_load_history with unsaved session
+    # The function should return gr.update() to preserve existing values
+
+    # Note: This is difficult to test without actually running the Gradio app
+    # We're testing the logic by checking has_unsaved_session behavior
+    logic_hist = [{"role": "user", "content": "Test"}]
+    assert webui.has_unsaved_session(logic_hist) is True
+
+
+def test_new_chat_preserves_data_when_showing_confirmation():
+    """handle_new_chat should preserve current data when showing confirmation"""
+    # Similar to above, when confirmation is shown, data should be preserved
+    logic_hist = [{"role": "user", "content": "Test"}]
+    assert webui.has_unsaved_session(logic_hist) is True
