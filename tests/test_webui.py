@@ -528,3 +528,74 @@ def test_load_history_action_handles_multiple_assistant_responses():
         assert "ChatGPT response" in display_hist[0][1]
         # Logic history should have all 3 turns
         assert len(logic_hist) == 3
+
+
+def test_build_history_operation_updates_helper():
+    """Helper function should build consistent UI update dictionary"""
+    user_id = "test_user"
+    display_hist = [["Hello", "Hi there"]]
+    logic_hist = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi there"},
+    ]
+    sys_prompt = "You are helpful"
+    status = "✅ Success"
+
+    with patch("multi_llm_chat.core.get_token_info") as mock_token_info:
+        mock_token_info.return_value = {
+            "token_count": 50,
+            "max_context_length": 100000,
+            "is_estimated": False,
+        }
+
+        result = webui._build_history_operation_updates(
+            user_id, display_hist, logic_hist, sys_prompt, status
+        )
+
+        # Should return dictionary with all required keys
+        assert "chatbot_ui" in result
+        assert "display_history_state" in result
+        assert "logic_history_state" in result
+        assert "system_prompt_input" in result
+        assert "history_status" in result
+        assert "token_display" in result
+        assert "send_button" in result
+        assert "history_dropdown" in result
+
+        # Values should match inputs
+        assert result["chatbot_ui"] == display_hist
+        assert result["display_history_state"] == display_hist
+        assert result["logic_history_state"] == logic_hist
+        assert result["system_prompt_input"] == sys_prompt
+        assert result["history_status"] == status
+
+
+def test_build_history_operation_updates_with_history_list():
+    """Helper should include history dropdown choices when available"""
+    user_id = "test_user"
+    display_hist = []
+    logic_hist = []
+    sys_prompt = ""
+    status = "Test"
+
+    with (
+        patch("multi_llm_chat.core.get_token_info") as mock_token_info,
+        patch("multi_llm_chat.webui.get_history_list") as mock_history_list,
+    ):
+        mock_token_info.return_value = {
+            "token_count": 0,
+            "max_context_length": 100000,
+            "is_estimated": False,
+        }
+        mock_history_list.return_value = ["history1", "history2"]
+
+        result = webui._build_history_operation_updates(
+            user_id, display_hist, logic_hist, sys_prompt, status
+        )
+
+        # Should call get_history_list
+        mock_history_list.assert_called_once_with(user_id)
+
+        # history_dropdown should be gr.update dict with choices
+        assert isinstance(result["history_dropdown"], dict)
+        assert result["history_dropdown"]["choices"] == ["history1", "history2"]
