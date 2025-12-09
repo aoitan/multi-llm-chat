@@ -19,33 +19,56 @@ def _process_service_stream(service, user_message):
         tuple: (display_history, logic_history) after processing
     """
     display_hist, logic_hist = [], []
-    last_printed_length = {}  # Track printed length per model to enable incremental printing
+    last_printed_idx = 0  # Track how many exchanges have been fully printed
+    last_content_length = 0  # Track printed content length for current streaming message
 
     # Process message through ChatService with streaming
     for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
-        # Print only new content from assistant responses in real-time
-        # Use logic_history to avoid Markdown formatting issues
-        # (display_hist not used in loop body, but needed for return value)
-        for turn in logic_hist:
-            if turn["role"] in ("gemini", "chatgpt"):
-                model_name = turn["role"].capitalize()
-                content = turn["content"]
+        # Print only new content from display_history (incremental streaming)
+        # display_history format: [[user_msg, assistant_msg], ...]
 
-                # Print only the new part (incremental streaming)
-                printed_so_far = last_printed_length.get(turn["role"], 0)
-                if len(content) > printed_so_far:
-                    new_content = content[printed_so_far:]
+        if not display_hist:
+            continue
 
-                    # Print model label only on first chunk
-                    if printed_so_far == 0:
-                        print(f"[{model_name}]: ", end="", flush=True)
+        # Check if there's a new exchange (new user message added)
+        if len(display_hist) > last_printed_idx:
+            # New exchange started - reset content length tracker
+            last_content_length = 0
+            last_printed_idx = len(display_hist)
 
-                    print(new_content, end="", flush=True)
-                    last_printed_length[turn["role"]] = len(content)
+        # Get the latest assistant message (currently streaming)
+        _user_msg, assistant_msg = display_hist[-1]
 
-    # Add final newline if any assistant response was printed
-    if last_printed_length:
-        print()  # Final newline after streaming completes
+        if not assistant_msg:
+            continue
+
+        # Extract model name and content from Markdown-formatted response
+        # Format: "**Gemini:**\nActual content" or "**ChatGPT:**\nContent"
+        if assistant_msg.startswith("**Gemini:**"):
+            model_name = "Gemini"
+            full_content = assistant_msg[len("**Gemini:**\n") :]
+        elif assistant_msg.startswith("**ChatGPT:**"):
+            model_name = "ChatGPT"
+            full_content = assistant_msg[len("**ChatGPT:**\n") :]
+        else:
+            # Fallback for unexpected format
+            model_name = "Assistant"
+            full_content = assistant_msg
+
+        # Print only the new part (incremental streaming)
+        if len(full_content) > last_content_length:
+            new_content = full_content[last_content_length:]
+
+            # Print model label only on first chunk
+            if last_content_length == 0:
+                print(f"[{model_name}]: ", end="", flush=True)
+
+            print(new_content, end="", flush=True)
+            last_content_length = len(full_content)
+
+    # Add final newline after streaming completes
+    if last_content_length > 0:
+        print()
 
     return display_hist, logic_hist
 
