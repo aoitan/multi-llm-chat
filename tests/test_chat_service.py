@@ -128,12 +128,25 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         assert final_logic[1]["role"] == "gemini"
         assert final_logic[2]["role"] == "chatgpt"
 
-    def test_process_message_no_mention_raises_error(self):
-        """Should raise error for messages without mention"""
+    def test_process_message_no_mention_as_memo(self):
+        """Messages without mention should be added to history as memo (no LLM call)"""
         service = ChatService()
 
-        with self.assertRaises(ValueError):
-            list(service.process_message("no mention here"))
+        results = list(service.process_message("This is a memo"))
+
+        # Should yield once (user message added to history)
+        assert len(results) == 1
+        final_display, final_logic = results[0]
+
+        # User message should be in history
+        assert len(final_logic) == 1
+        assert final_logic[0]["role"] == "user"
+        assert final_logic[0]["content"] == "This is a memo"
+
+        # Display should show user message with no response
+        assert len(final_display) == 1
+        assert final_display[0][0] == "This is a memo"
+        assert final_display[0][1] is None
 
 
 class TestChatServiceHistorySnapshot(unittest.TestCase):

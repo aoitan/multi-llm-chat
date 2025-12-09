@@ -69,18 +69,17 @@ class ChatService:
 
         Yields:
             tuple: (display_history, logic_history) after each update
-
-        Raises:
-            ValueError: If message doesn't contain valid mention
         """
         mention = self.parse_mention(user_message)
-        if mention is None:
-            raise ValueError("Message must contain @gemini, @chatgpt, or @all mention")
 
         # Add user message to histories
         self.logic_history.append({"role": "user", "content": user_message})
         self.display_history.append([user_message, None])
         yield self.display_history, self.logic_history
+
+        # If no mention, treat as memo (no LLM call)
+        if mention is None:
+            return
 
         # For @all, create snapshot so both LLMs see same history
         history_snapshot = (

@@ -290,13 +290,8 @@ def respond(user_message, display_history, logic_history, system_prompt, user_id
         system_prompt=system_prompt,
     )
 
-    try:
-        for updated_display, updated_logic in service.process_message(user_message):
-            yield updated_display, updated_display, updated_logic
-    except ValueError as e:
-        # Handle missing mention error
-        display_history.append([user_message, f"[System: {str(e)}]"])
-        yield display_history, display_history, logic_history
+    for updated_display, updated_logic in service.process_message(user_message):
+        yield updated_display, updated_display, updated_logic
 
 
 def check_history_buttons_enabled(user_id):
