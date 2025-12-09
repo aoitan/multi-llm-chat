@@ -11,8 +11,9 @@ def _chatgpt_stream(*_args, **_kwargs):
     return iter(["Mocked ChatGPT Response"])
 
 
-def test_repl_exit_commands():
+def test_repl_exit_commands(monkeypatch):
     """CLI should exit on 'exit' or 'quit' commands"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
     with patch("builtins.input", side_effect=["hello", "exit"]):
         with patch("builtins.print"):
             cli.main()
@@ -105,9 +106,16 @@ def test_system_command_token_limit_exceeded():
     assert any("警告" in str(call) and "上限" in str(call) for call in mock_print.call_args_list)
 
 
-def test_history_management_user_input():
+def test_history_management_user_input(monkeypatch):
     """CLI should properly manage history with user inputs"""
-    test_inputs = ["hello gemini", "@gemini how are you?", "just a thought", "exit"]
+    # Set user ID via env var to avoid consuming first input
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "hello gemini",
+        "@gemini how are you?",
+        "just a thought",
+        "exit",
+    ]
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print"):
@@ -195,8 +203,9 @@ def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
             assert history[-1]["content"] == "hello"
 
 
-def test_unknown_command_error():
+def test_unknown_command_error(monkeypatch):
     """CLI should display error message for unknown commands"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
     test_inputs = [
         "/unknown command",
         "exit",

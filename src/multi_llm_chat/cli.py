@@ -9,7 +9,7 @@ from .history import HistoryStore, get_llm_response, reset_history, sanitize_nam
 
 
 def _process_service_stream(service, user_message):
-    """Process ChatService stream and print responses for CLI.
+    """Process ChatService stream and print responses for CLI with real-time streaming.
 
     Args:
         service: ChatService instance
@@ -19,35 +19,33 @@ def _process_service_stream(service, user_message):
         tuple: (display_history, logic_history) after processing
     """
     display_hist, logic_hist = [], []
+    last_printed_length = {}  # Track printed length per model to enable incremental printing
 
-    try:
-        # Process message through ChatService
-        # We iterate through all yields to get the final state
-        for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
-            # ChatService yields intermediate states during streaming
-            # We only need the final values after the loop completes
-            pass
+    # Process message through ChatService with streaming
+    for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
+        # Print only new content from assistant responses in real-time
+        # Use logic_history to avoid Markdown formatting issues
+        # (display_hist not used in loop body, but needed for return value)
+        for turn in logic_hist:
+            if turn["role"] in ("gemini", "chatgpt"):
+                model_name = turn["role"].capitalize()
+                content = turn["content"]
+                
+                # Print only the new part (incremental streaming)
+                printed_so_far = last_printed_length.get(turn["role"], 0)
+                if len(content) > printed_so_far:
+                    new_content = content[printed_so_far:]
+                    
+                    # Print model label only on first chunk
+                    if printed_so_far == 0:
+                        print(f"[{model_name}]: ", end="", flush=True)
+                    
+                    print(new_content, end="", flush=True)
+                    last_printed_length[turn["role"]] = len(content)
 
-        # After stream completes, print all assistant responses
-        if display_hist:
-            for _user_msg, assistant_msg in display_hist:
-                if assistant_msg and assistant_msg.strip():
-                    # Determine which model responded
-                    model_name = "Assistant"
-                    if logic_hist:
-                        for turn in reversed(logic_hist):
-                            if (
-                                turn["role"] in ("gemini", "chatgpt")
-                                and turn["content"] == assistant_msg
-                            ):
-                                model_name = turn["role"].capitalize()
-                                break
-                    print(f"[{model_name}]: {assistant_msg}")
-    except ValueError as e:
-        # Handle memo input (no mention) - ChatService raises ValueError
-        # Just keep the user message in history without LLM response
-        print(f"[Memo]: {str(e)}")
-        logic_hist = service.logic_history
+    # Add final newline if any assistant response was printed
+    if last_printed_length:
+        print()  # Final newline after streaming completes
 
     return display_hist, logic_hist
 
