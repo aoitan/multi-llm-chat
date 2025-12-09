@@ -218,28 +218,35 @@ def get_history_list(user_id):
         return []
 
 
-def _build_history_operation_updates(user_id, display_hist, logic_hist, sys_prompt, status):
-    """Build consistent UI update dictionary after history operations
+def _build_history_operation_updates(
+    user_id, display_hist, logic_hist, sys_prompt, status, *, update_dropdown=True
+):
+    """履歴操作後のUI更新dictを構築する
 
-    This helper consolidates common UI update logic used across multiple event handlers
-    (load history, new chat, save history) to reduce code duplication.
+    このヘルパーは、複数のイベントハンドラ（履歴の読み込み、新規チャット）で
+    共通して使用されるUI更新ロジックを集約し、コードの重複を削減します。
+    Note: 保存操作では現在使用されていません。
 
     Args:
-        user_id: User ID
-        display_hist: Display history
-        logic_hist: Logic history
-        sys_prompt: System prompt
-        status: Status message to display
+        user_id: ユーザーID
+        display_hist: 表示用の履歴
+        logic_hist: ロジック用の履歴
+        sys_prompt: システムプロンプト
+        status: 表示するステータスメッセージ
+        update_dropdown: Trueの場合、履歴ドロップダウンを更新する (default: True)
 
     Returns:
-        dict: Dictionary with keys matching Gradio output components
+        dict: Gradioの出力コンポーネントのキーと一致する辞書
     """
     # Update token display and send button state
     token_display_value = update_token_display(sys_prompt, logic_hist)
     send_button_state = check_send_button_with_user_id(user_id, sys_prompt, logic_hist)
 
-    # Get updated history list
-    history_choices = get_history_list(user_id)
+    # Get updated history list if needed
+    history_dropdown_update = gr.update()
+    if update_dropdown:
+        history_choices = get_history_list(user_id)
+        history_dropdown_update = gr.update(choices=history_choices)
 
     return {
         "chatbot_ui": display_hist,
@@ -249,7 +256,7 @@ def _build_history_operation_updates(user_id, display_hist, logic_hist, sys_prom
         "history_status": status,
         "token_display": token_display_value,
         "send_button": send_button_state,
-        "history_dropdown": gr.update(choices=history_choices),
+        "history_dropdown": history_dropdown_update,
     }
 
 
@@ -839,9 +846,9 @@ with gr.Blocks() as demo:
         # No unsaved content, start new chat directly
         display_hist, logic_hist, sys_prompt, status = new_chat_action()
 
-        # Use helper to build consistent UI updates
+        # Use helper to build consistent UI updates (no dropdown update needed for new chat)
         updates = _build_history_operation_updates(
-            user_id, display_hist, logic_hist, sys_prompt, status
+            user_id, display_hist, logic_hist, sys_prompt, status, update_dropdown=False
         )
 
         return (
@@ -852,6 +859,7 @@ with gr.Blocks() as demo:
             updates["history_status"],
             updates["token_display"],
             updates["send_button"],
+            updates["history_dropdown"],
             *hide_confirmation(),
         )
 
@@ -865,6 +873,7 @@ with gr.Blocks() as demo:
         history_status,
         token_display,
         send_button,
+        history_dropdown,
         confirmation_dialog,
         confirmation_message,
         confirmation_state,
