@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import patch
 
-from multi_llm_chat.chat_logic import ChatService
+from multi_llm_chat.chat_logic import ChatService, parse_mention
 
 
 class TestChatServiceBasics(unittest.TestCase):
@@ -42,37 +42,27 @@ class TestChatServiceMessageParsing(unittest.TestCase):
 
     def test_parse_mention_gemini(self):
         """Should detect @gemini mention"""
-        service = ChatService()
-        mention = service.parse_mention("@gemini tell me about Python")
-
+        mention = parse_mention("@gemini tell me about Python")
         assert mention == "gemini"
 
     def test_parse_mention_chatgpt(self):
         """Should detect @chatgpt mention"""
-        service = ChatService()
-        mention = service.parse_mention("@chatgpt explain async")
-
+        mention = parse_mention("@chatgpt explain async")
         assert mention == "chatgpt"
 
     def test_parse_mention_all(self):
         """Should detect @all mention"""
-        service = ChatService()
-        mention = service.parse_mention("@all compare these two")
-
+        mention = parse_mention("@all compare these two")
         assert mention == "all"
 
     def test_parse_mention_none(self):
         """Should return None for messages without mentions"""
-        service = ChatService()
-        mention = service.parse_mention("regular message")
-
+        mention = parse_mention("regular message")
         assert mention is None
 
     def test_parse_mention_ignores_whitespace(self):
         """Should handle leading/trailing whitespace"""
-        service = ChatService()
-        mention = service.parse_mention("  @gemini  ")
-
+        mention = parse_mention("  @gemini  ")
         assert mention == "gemini"
 
 

@@ -1,5 +1,4 @@
 # Backward compatibility layer - delegates to new core and cli modules
-from .cli import main as _cli_main
 from .core import (
     CHATGPT_MODEL,
     GEMINI_MODEL,
@@ -14,6 +13,25 @@ from .core import (
 )
 from .history import get_llm_response
 from .history import reset_history as _reset_history
+
+
+def parse_mention(message):
+    """Parse mention from user message
+
+    Args:
+        message: User message string
+
+    Returns:
+        str or None: "gemini", "chatgpt", "all", or None if no mention
+    """
+    msg_stripped = message.strip()
+    if msg_stripped.startswith("@gemini"):
+        return "gemini"
+    elif msg_stripped.startswith("@chatgpt"):
+        return "chatgpt"
+    elif msg_stripped.startswith("@all"):
+        return "all"
+    return None
 
 
 class ChatService:
@@ -41,24 +59,6 @@ class ChatService:
         self.logic_history = logic_history if logic_history is not None else []
         self.system_prompt = system_prompt
 
-    def parse_mention(self, message):
-        """Parse mention from user message
-
-        Args:
-            message: User message string
-
-        Returns:
-            str or None: "gemini", "chatgpt", "all", or None if no mention
-        """
-        msg_stripped = message.strip()
-        if msg_stripped.startswith("@gemini"):
-            return "gemini"
-        elif msg_stripped.startswith("@chatgpt"):
-            return "chatgpt"
-        elif msg_stripped.startswith("@all"):
-            return "all"
-        return None
-
     def process_message(self, user_message):
         """Process user message and generate LLM responses
 
@@ -70,7 +70,7 @@ class ChatService:
         Yields:
             tuple: (display_history, logic_history) after each update
         """
-        mention = self.parse_mention(user_message)
+        mention = parse_mention(user_message)
 
         # Add user message to histories
         self.logic_history.append({"role": "user", "content": user_message})
@@ -144,6 +144,8 @@ class ChatService:
 
 def main():
     """Backward compatible main function that returns only history"""
+    from .cli import main as _cli_main
+
     history, _system_prompt = _cli_main()
     return history
 
@@ -155,6 +157,7 @@ def reset_history():
 
 __all__ = [
     "ChatService",
+    "parse_mention",
     "main",
     "reset_history",
     "call_gemini_api",
