@@ -264,7 +264,7 @@ def _build_history_operation_updates(
 def respond(user_message, display_history, logic_history, system_prompt, user_id):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
-    
+
     Note: This is a thin wrapper around ChatService for UI compatibility.
     The actual business logic has been moved to ChatService in chat_logic.py
     to eliminate duplication between CLI and WebUI.
@@ -282,14 +282,14 @@ def respond(user_message, display_history, logic_history, system_prompt, user_id
         display_history.append([user_message, "[System: ユーザーIDを入力してください]"])
         yield display_history, display_history, logic_history
         return
-    
+
     # Delegate to ChatService for business logic
     service = ChatService(
         display_history=display_history,
         logic_history=logic_history,
         system_prompt=system_prompt,
     )
-    
+
     try:
         for updated_display, updated_logic in service.process_message(user_message):
             yield updated_display, updated_display, updated_logic
