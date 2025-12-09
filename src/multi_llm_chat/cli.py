@@ -4,35 +4,52 @@ import sys
 import pyperclip
 
 from . import core
-from .chat_logic import parse_mention
+from .chat_logic import ChatService
 from .history import HistoryStore, get_llm_response, reset_history, sanitize_name
 
 
-def _clone_history(history):
-    """Create a shallow copy of the conversation history."""
-    return [entry.copy() for entry in history]
-
-
-def _process_response_stream(stream, model_name):
-    """Helper function to process and print response streams from LLMs."""
-    full_response = ""
-    print(f"[{model_name.capitalize()}]: ", end="", flush=True)
-
-    for chunk in stream:
-        text = core.extract_text_from_chunk(chunk, model_name)
-        if text:
-            print(text, end="", flush=True)
-            full_response += text
-
-    print()
-    if not full_response.strip():
-        print(
-            f"[System: {model_name.capitalize()}からの応答がありませんでした。"
-            f"プロンプトがブロックされた可能性があります。]",
-            flush=True,
-        )
-
-    return full_response
+def _process_service_stream(service, user_message):
+    """Process ChatService stream and print responses for CLI.
+    
+    Args:
+        service: ChatService instance
+        user_message: User's input message
+    
+    Returns:
+        tuple: (display_history, logic_history) after processing
+    """
+    display_hist, logic_hist = [], []
+    
+    try:
+        # Process message through ChatService
+        # We iterate through all yields to get the final state
+        for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
+            # ChatService yields intermediate states during streaming
+            # We only need the final values after the loop completes
+            pass
+        
+        # After stream completes, print all assistant responses
+        if display_hist:
+            for _user_msg, assistant_msg in display_hist:
+                if assistant_msg and assistant_msg.strip():
+                    # Determine which model responded
+                    model_name = "Assistant"
+                    if logic_hist:
+                        for turn in reversed(logic_hist):
+                            if (
+                                turn["role"] in ("gemini", "chatgpt")
+                                and turn["content"] == assistant_msg
+                            ):
+                                model_name = turn["role"].capitalize()
+                                break
+                    print(f"[{model_name}]: {assistant_msg}")
+    except ValueError as e:
+        # Handle memo input (no mention) - ChatService raises ValueError
+        # Just keep the user message in history without LLM response
+        print(f"[Memo]: {str(e)}")
+        logic_hist = service.logic_history
+    
+    return display_hist, logic_hist
 
 
 def _handle_system_command(args, system_prompt, current_model=None):
@@ -309,35 +326,17 @@ def main():
                 )
             continue
 
-        # Parse mention to determine which LLM to call
-        mention = parse_mention(prompt)
-
-        # Add user message to history
-        history.append({"role": "user", "content": prompt})
+        # Use ChatService for message processing (Issue #62)
+        # ChatService handles mention parsing, LLM routing, and history updates
+        # CLI display_history is not used (only logic_history for API format)
+        service = ChatService(
+            display_history=[],  # CLI doesn't use Gradio-style display history
+            logic_history=history,
+            system_prompt=system_prompt,
+        )
+        
+        # Process message through ChatService and handle CLI-specific display
+        _, history = _process_service_stream(service, prompt)
         is_dirty = True
-
-        # If no mention, treat as memo (no LLM call)
-        if mention is None:
-            pass
-        # For @all, create history snapshot so both LLMs see same context
-        elif mention == "all":
-            shared_history = _clone_history(history)
-
-            gemini_stream = core.call_gemini_api(shared_history, system_prompt)
-            response_g = _process_response_stream(gemini_stream, "gemini")
-            history.append({"role": "gemini", "content": response_g})
-
-            chatgpt_stream = core.call_chatgpt_api(shared_history, system_prompt)
-            response_c = _process_response_stream(chatgpt_stream, "chatgpt")
-            history.append({"role": "chatgpt", "content": response_c})
-        # Single LLM calls
-        elif mention == "gemini":
-            gemini_stream = core.call_gemini_api(history, system_prompt)
-            response_g = _process_response_stream(gemini_stream, "gemini")
-            history.append({"role": "gemini", "content": response_g})
-        elif mention == "chatgpt":
-            chatgpt_stream = core.call_chatgpt_api(history, system_prompt)
-            response_c = _process_response_stream(chatgpt_stream, "chatgpt")
-            history.append({"role": "chatgpt", "content": response_c})
 
     return history, system_prompt

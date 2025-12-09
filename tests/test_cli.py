@@ -35,7 +35,7 @@ def test_system_command_set():
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
                 history, system_prompt = cli.main()
 
     assert system_prompt == "You are a helpful assistant."
@@ -111,8 +111,12 @@ def test_history_management_user_input():
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
-                with patch("multi_llm_chat.core.call_chatgpt_api", side_effect=_chatgpt_stream):
+            with patch(
+                "multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream
+            ):
+                with patch(
+                    "multi_llm_chat.chat_logic.call_chatgpt_api", side_effect=_chatgpt_stream
+                ):
                     history, _ = cli.main()
 
     assert len(history) == 4
@@ -126,8 +130,8 @@ def test_history_management_user_input():
     assert history[3]["content"] == "just a thought"
 
 
-@patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream)
-@patch("multi_llm_chat.core.call_chatgpt_api", side_effect=_chatgpt_stream)
+@patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream)
+@patch("multi_llm_chat.chat_logic.call_chatgpt_api", side_effect=_chatgpt_stream)
 def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
     """CLI should route mentions correctly to appropriate LLMs"""
     # Test @gemini
@@ -303,7 +307,7 @@ def test_copy_command_copies_latest_response(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
                 with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
                     cli.main()
 
@@ -322,7 +326,7 @@ def test_copy_command_handles_invalid_index(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
                 with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
                     cli.main()
 
@@ -360,7 +364,7 @@ def test_copy_command_requires_integer(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
                 with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
                     cli.main()
 
@@ -379,7 +383,7 @@ def test_copy_command_handles_negative_index(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.core.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
                 with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
                     cli.main()
 
@@ -388,3 +392,32 @@ def test_copy_command_handles_negative_index(monkeypatch):
         "見つかりません" in str(call) or "index=-1" in str(call)
         for call in mock_print.call_args_list
     )
+
+
+def test_cli_uses_chat_service_for_message_processing(monkeypatch):
+    """CLI should use ChatService for business logic (Issue #62)"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+    test_inputs = [
+        "@gemini Hello",  # Actual message
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=test_inputs):
+        with patch("builtins.print"):
+            with patch("multi_llm_chat.chat_logic.ChatService.process_message") as mock_process:
+                # Mock the generator to yield display and logic history
+                mock_process.return_value = iter([
+                    (
+                        [["Hello", "Hi there"]],
+                        [
+                            {"role": "user", "content": "Hello"},
+                            {"role": "gemini", "content": "Hi there"},
+                        ],
+                    )
+                ])
+                cli.main()
+
+    # Verify ChatService.process_message was called for the actual message
+    mock_process.assert_called_once()
+    args = mock_process.call_args[0]
+    assert args[0] == "@gemini Hello"  # user_message
