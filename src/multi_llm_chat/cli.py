@@ -30,16 +30,16 @@ def _process_service_stream(service, user_message):
             if turn["role"] in ("gemini", "chatgpt"):
                 model_name = turn["role"].capitalize()
                 content = turn["content"]
-                
+
                 # Print only the new part (incremental streaming)
                 printed_so_far = last_printed_length.get(turn["role"], 0)
                 if len(content) > printed_so_far:
                     new_content = content[printed_so_far:]
-                    
+
                     # Print model label only on first chunk
                     if printed_so_far == 0:
                         print(f"[{model_name}]: ", end="", flush=True)
-                    
+
                     print(new_content, end="", flush=True)
                     last_printed_length[turn["role"]] = len(content)
 
