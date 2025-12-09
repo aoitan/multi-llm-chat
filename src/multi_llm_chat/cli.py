@@ -10,16 +10,16 @@ from .history import HistoryStore, get_llm_response, reset_history, sanitize_nam
 
 def _process_service_stream(service, user_message):
     """Process ChatService stream and print responses for CLI.
-    
+
     Args:
         service: ChatService instance
         user_message: User's input message
-    
+
     Returns:
         tuple: (display_history, logic_history) after processing
     """
     display_hist, logic_hist = [], []
-    
+
     try:
         # Process message through ChatService
         # We iterate through all yields to get the final state
@@ -27,7 +27,7 @@ def _process_service_stream(service, user_message):
             # ChatService yields intermediate states during streaming
             # We only need the final values after the loop completes
             pass
-        
+
         # After stream completes, print all assistant responses
         if display_hist:
             for _user_msg, assistant_msg in display_hist:
@@ -48,7 +48,7 @@ def _process_service_stream(service, user_message):
         # Just keep the user message in history without LLM response
         print(f"[Memo]: {str(e)}")
         logic_hist = service.logic_history
-    
+
     return display_hist, logic_hist
 
 
@@ -334,7 +334,7 @@ def main():
             logic_history=history,
             system_prompt=system_prompt,
         )
-        
+
         # Process message through ChatService and handle CLI-specific display
         _, history = _process_service_stream(service, prompt)
         is_dirty = True

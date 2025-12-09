@@ -111,9 +111,7 @@ def test_history_management_user_input():
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print"):
-            with patch(
-                "multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream
-            ):
+            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
                 with patch(
                     "multi_llm_chat.chat_logic.call_chatgpt_api", side_effect=_chatgpt_stream
                 ):
@@ -406,15 +404,17 @@ def test_cli_uses_chat_service_for_message_processing(monkeypatch):
         with patch("builtins.print"):
             with patch("multi_llm_chat.chat_logic.ChatService.process_message") as mock_process:
                 # Mock the generator to yield display and logic history
-                mock_process.return_value = iter([
-                    (
-                        [["Hello", "Hi there"]],
-                        [
-                            {"role": "user", "content": "Hello"},
-                            {"role": "gemini", "content": "Hi there"},
-                        ],
-                    )
-                ])
+                mock_process.return_value = iter(
+                    [
+                        (
+                            [["Hello", "Hi there"]],
+                            [
+                                {"role": "user", "content": "Hello"},
+                                {"role": "gemini", "content": "Hi there"},
+                            ],
+                        )
+                    ]
+                )
                 cli.main()
 
     # Verify ChatService.process_message was called for the actual message

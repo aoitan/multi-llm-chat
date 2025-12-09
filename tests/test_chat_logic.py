@@ -31,9 +31,7 @@ def test_history_management_user_input():
     with patch("builtins.input", side_effect=test_inputs + ["exit"]):
         with patch("builtins.print"):  # Mock print to avoid console output
             # Mock API calls to control history length
-            with patch(
-                "multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream
-            ):
+            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
                 with patch(
                     "multi_llm_chat.chat_logic.call_chatgpt_api", side_effect=_chatgpt_stream
                 ):
