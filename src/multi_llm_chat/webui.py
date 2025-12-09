@@ -5,6 +5,7 @@ import gradio as gr
 from gradio_client import utils as gradio_utils
 
 from . import core
+from .chat_logic import ChatService
 from .history import HistoryStore
 
 # Constants
@@ -263,6 +264,10 @@ def _build_history_operation_updates(
 def respond(user_message, display_history, logic_history, system_prompt, user_id):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
+    
+    Note: This is a thin wrapper around ChatService for UI compatibility.
+    The actual business logic has been moved to ChatService in chat_logic.py
+    to eliminate duplication between CLI and WebUI.
 
     Args:
         user_message: User's input message
@@ -277,61 +282,20 @@ def respond(user_message, display_history, logic_history, system_prompt, user_id
         display_history.append([user_message, "[System: ユーザーIDを入力してください]"])
         yield display_history, display_history, logic_history
         return
-
-    def _stream_response(model_name, stream):
-        full_response = ""
-        for chunk in stream:
-            text = core.extract_text_from_chunk(chunk, model_name)
-            if text:
-                full_response += text
-                display_history[-1][1] += text
-                yield display_history, display_history, logic_history
-        return full_response
-
-    # 1. ユーザーメッセージを両方の履歴に追加
-    logic_history.append({"role": "user", "content": user_message})
-    display_history.append([user_message, None])
-    yield display_history, display_history, logic_history
-
-    # 2. メンションを解析
-    mention = ""
-    msg_stripped = user_message.strip()
-    if msg_stripped.startswith("@gemini"):
-        mention = "gemini"
-    elif msg_stripped.startswith("@chatgpt"):
-        mention = "chatgpt"
-    elif msg_stripped.startswith("@all"):
-        mention = "all"
-
-    history_snapshot = [entry.copy() for entry in logic_history] if mention == "all" else None
-
-    # 3. Geminiへの応答処理
-    if mention in ["gemini", "all"]:
-        display_history[-1][1] = "**Gemini:**\n"
-        gemini_input_history = history_snapshot or logic_history
-        gemini_stream = core.call_gemini_api(gemini_input_history, system_prompt)
-        full_response_g = yield from _stream_response("gemini", gemini_stream)
-
-        logic_history.append({"role": "gemini", "content": full_response_g})
-        if not full_response_g.strip():
-            display_history[-1][1] = "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
-        yield display_history, display_history, logic_history
-
-    # 4. ChatGPTへの応答処理
-    if mention in ["chatgpt", "all"]:
-        # @all の場合、UIの重複を避けるため、プロンプトなしで新しい行を追加
-        if mention == "all":
-            display_history.append([None, "**ChatGPT:**\n"])
-        else:
-            display_history[-1][1] = "**ChatGPT:**\n"
-
-        chatgpt_input_history = history_snapshot or logic_history
-        chatgpt_stream = core.call_chatgpt_api(chatgpt_input_history, system_prompt)
-        full_response_c = yield from _stream_response("chatgpt", chatgpt_stream)
-
-        logic_history.append({"role": "chatgpt", "content": full_response_c})
-        if not full_response_c.strip():
-            display_history[-1][1] = "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
+    
+    # Delegate to ChatService for business logic
+    service = ChatService(
+        display_history=display_history,
+        logic_history=logic_history,
+        system_prompt=system_prompt,
+    )
+    
+    try:
+        for updated_display, updated_logic in service.process_message(user_message):
+            yield updated_display, updated_display, updated_logic
+    except ValueError as e:
+        # Handle missing mention error
+        display_history.append([user_message, f"[System: {str(e)}]"])
         yield display_history, display_history, logic_history
 
 

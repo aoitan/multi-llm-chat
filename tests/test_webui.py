@@ -103,7 +103,7 @@ def test_system_prompt_included_in_chat():
     """Chat function should include system prompt when calling LLM"""
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.core.call_gemini_api") as mock_api:
+    with patch("multi_llm_chat.chat_logic.call_gemini_api") as mock_api:
         mock_api.return_value = iter([type("Chunk", (), {"text": "Response"})()])
 
         # Simulate calling respond function
