@@ -4,6 +4,7 @@ import sys
 import pyperclip
 
 from . import core
+from .chat_logic import parse_mention
 from .history import HistoryStore, get_llm_response, reset_history, sanitize_name
 
 
@@ -308,36 +309,35 @@ def main():
                 )
             continue
 
+        # Parse mention to determine which LLM to call
+        mention = parse_mention(prompt)
+
+        # Add user message to history
         history.append({"role": "user", "content": prompt})
         is_dirty = True
 
-        if prompt.startswith("@gemini"):
-            gemini_stream = core.call_gemini_api(history, system_prompt)
-            response_g = _process_response_stream(gemini_stream, "gemini")
-            history.append({"role": "gemini", "content": response_g})
-            is_dirty = True
-
-        elif prompt.startswith("@chatgpt"):
-            chatgpt_stream = core.call_chatgpt_api(history, system_prompt)
-            response_c = _process_response_stream(chatgpt_stream, "chatgpt")
-            history.append({"role": "chatgpt", "content": response_c})
-            is_dirty = True
-
-        elif prompt.startswith("@all"):
+        # If no mention, treat as memo (no LLM call)
+        if mention is None:
+            pass
+        # For @all, create history snapshot so both LLMs see same context
+        elif mention == "all":
             shared_history = _clone_history(history)
 
             gemini_stream = core.call_gemini_api(shared_history, system_prompt)
             response_g = _process_response_stream(gemini_stream, "gemini")
             history.append({"role": "gemini", "content": response_g})
-            is_dirty = True
 
             chatgpt_stream = core.call_chatgpt_api(shared_history, system_prompt)
             response_c = _process_response_stream(chatgpt_stream, "chatgpt")
             history.append({"role": "chatgpt", "content": response_c})
-            is_dirty = True
-
-        else:
-            # Thinking memo
-            pass
+        # Single LLM calls
+        elif mention == "gemini":
+            gemini_stream = core.call_gemini_api(history, system_prompt)
+            response_g = _process_response_stream(gemini_stream, "gemini")
+            history.append({"role": "gemini", "content": response_g})
+        elif mention == "chatgpt":
+            chatgpt_stream = core.call_chatgpt_api(history, system_prompt)
+            response_c = _process_response_stream(chatgpt_stream, "chatgpt")
+            history.append({"role": "chatgpt", "content": response_c})
 
     return history, system_prompt
