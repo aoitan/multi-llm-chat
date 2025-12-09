@@ -9,11 +9,15 @@ Multi-LLM Chatは、複数のLLM（Gemini、ChatGPT）との対話を統一的�
 ```mermaid
 graph TB
     subgraph UI["ユーザーインターフェース層"]
-        WebUI["webui.py<br/>Gradio UI<br/>- Chat UI<br/>- System Prompt<br/>- Token Display"]
+        WebUI["webui.py<br/>Gradio UI<br/>- Chat UI<br/>- System Prompt<br/>- Token Display<br/>- History Panel"]
         CLI["cli.py<br/>REPL Loop<br/>- /system<br/>- @mentions<br/>- Commands"]
     end
     
-    subgraph Core["コアロジック層"]
+    subgraph Service["ビジネスロジック層 (Epic 017)"]
+        ChatService["ChatService (chat_logic.py)<br/>- parse_mention()<br/>- process_message()<br/>- LLMルーティング<br/>- 履歴管理"]
+    end
+    
+    subgraph Core["コアロジック層 (低レベルAPI)"]
         CorePy["core.py"]
         API["API管理<br/>- load_api_key()<br/>- _get_gemini_model()<br/>- _get_openai_client()"]
         Req["リクエスト準備<br/>- prepare_request()<br/>- get_token_info()"]
@@ -21,36 +25,47 @@ graph TB
         Call["API呼び出し<br/>- call_gemini_api()<br/>- call_chatgpt_api()"]
     end
     
-    subgraph External["外部APIサービス層"]
+    subgraph Persistence["永続化層 (Epic 017)"]
+        HistoryStore["HistoryStore (history.py)<br/>- save_history()<br/>- load_history()<br/>- list_histories()"]
+    end
+    
+    subgraph External["外部サービス層"]
         Gemini["Google Gemini API"]
         ChatGPT["OpenAI ChatGPT API"]
+        FileSystem["File System<br/>(chat_histories/)"]
     end
     
     subgraph Compat["後方互換性レイヤー（オプション）"]
         AppPy["app.py → webui へ再エクスポート"]
-        ChatLogic["chat_logic.py → core + cli へ再エクスポート"]
+        ChatLogic["chat_logic.py → 再エクスポート:<br/>- ChatService (新)<br/>- core.* (旧)<br/>- main() (旧CLI)"]
     end
     
-    WebUI --> CorePy
-    CLI --> CorePy
+    WebUI --> ChatService
+    CLI --> ChatService
+    WebUI --> HistoryStore
+    ChatService --> CorePy
     CorePy --> API
     CorePy --> Req
     CorePy --> Fmt
     CorePy --> Call
     Call --> Gemini
     Call --> ChatGPT
+    HistoryStore --> FileSystem
     AppPy -.-> WebUI
+    ChatLogic -.-> ChatService
     ChatLogic -.-> CorePy
     ChatLogic -.-> CLI
 ```
 
 ## モジュール設計
 
-### 1. コアロジック層: `src/multi_llm_chat/core.py`
+### 1. コアロジック層
 
-**責務**: UIに依存しない共通ロジック
+#### 1.1 `src/multi_llm_chat/core.py`
 
-#### 主要機能
+**責務**: UIに依存しない低レベルAPIロジック
+
+##### 主要機能
 
 | 機能カテゴリ | 関数/変数 | 説明 |
 |------------|----------|------|
@@ -66,10 +81,42 @@ graph TB
 | | `call_chatgpt_api(history, system_prompt=None)` | ChatGPT APIをストリーミング呼び出し |
 | **ユーティリティ** | `list_gemini_models()` | 利用可能なGeminiモデルを一覧表示 |
 
-#### 設計原則
+##### 設計原則
 - **UI非依存**: `print()`や`input()`を使わない（例外: デバッグ用`list_gemini_models()`）
 - **ステートレス**: 関数は引数から全ての情報を受け取る
 - **キャッシング**: APIクライアントはモジュールレベルでキャッシュ
+
+#### 1.2 `src/multi_llm_chat/chat_logic.py` (Epic 017追加)
+
+**責務**: ビジネスロジック層 - メンション解析、LLMルーティング、履歴管理
+
+##### `ChatService`クラス
+
+チャットセッションを管理し、UI層（CLI/WebUI）からビジネスロジックを分離するサービスクラス。
+
+| 機能カテゴリ | メソッド | 説明 |
+|------------|---------|------|
+| **初期化** | `__init__(display_history, logic_history, system_prompt)` | セッション状態を保持（display: UI用、logic: API用） |
+| **メンション解析** | `parse_mention(message)` | `@gemini`, `@chatgpt`, `@all`を検出（モジュール関数） |
+| **メッセージ処理** | `process_message(user_message)` | メンション解析→LLM呼び出し→履歴更新（ジェネレータ） |
+| **LLM呼び出し** | `_process_gemini(message)`, `_process_chatgpt(message)` | 各LLMへのAPI呼び出しとストリーミング処理 |
+
+##### 設計の特徴
+
+- **UI形式の分離**: 
+  - `display_history`: UI表示用（Gradio Chatbot形式: `[[user, assistant], ...]`）
+  - `logic_history`: API呼び出し用（`[{"role": "user", "content": "..."}, ...]`）
+- **`@all`処理**: 
+  - 履歴スナップショットを作成し、GeminiとChatGPTに同一の文脈を提供
+  - 両者の応答を順次（Gemini→ChatGPT）追加
+- **ストリーミング対応**: `yield`で中間状態を返し、リアルタイム表示を実現
+- **エラーハンドリング**: メンション欠落時は早期リターン（CLIではメモとして処理）
+
+##### 後方互換性レイヤー
+
+`chat_logic.py`は以下の再エクスポートも提供:
+- `main()`: 旧CLI実装（`cli.py`への移行推奨）
+- `core.*`: `core.py`の全関数（既存コードとの互換性維持）
 
 ### 2. ユーザーインターフェース層
 

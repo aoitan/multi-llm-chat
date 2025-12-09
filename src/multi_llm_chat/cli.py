@@ -4,35 +4,81 @@ import sys
 import pyperclip
 
 from . import core
-from .chat_logic import parse_mention
+from .chat_logic import ChatService
 from .history import HistoryStore, get_llm_response, reset_history, sanitize_name
 
 
-def _clone_history(history):
-    """Create a shallow copy of the conversation history."""
-    return [entry.copy() for entry in history]
+def _process_service_stream(service, user_message):
+    """Process ChatService stream and print responses for CLI with real-time streaming.
 
+    Args:
+        service: ChatService instance
+        user_message: User's input message
 
-def _process_response_stream(stream, model_name):
-    """Helper function to process and print response streams from LLMs."""
-    full_response = ""
-    print(f"[{model_name.capitalize()}]: ", end="", flush=True)
+    Returns:
+        tuple: (display_history, logic_history) after processing
+    """
+    display_hist, logic_hist = [], []
+    last_printed_idx = 0  # Track how many exchanges have been fully printed
+    last_content_length = 0  # Track printed content length for current streaming message
+    last_model_name = None  # Track model name to detect switches (for @all)
 
-    for chunk in stream:
-        text = core.extract_text_from_chunk(chunk, model_name)
-        if text:
-            print(text, end="", flush=True)
-            full_response += text
+    # Process message through ChatService with streaming
+    for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
+        # Print only new content from display_history (incremental streaming)
+        # display_history format: [[user_msg, assistant_msg], ...]
 
-    print()
-    if not full_response.strip():
-        print(
-            f"[System: {model_name.capitalize()}からの応答がありませんでした。"
-            f"プロンプトがブロックされた可能性があります。]",
-            flush=True,
-        )
+        if not display_hist:
+            continue
 
-    return full_response
+        # Check if there's a new exchange (new user message added)
+        if len(display_hist) > last_printed_idx:
+            # New exchange started - reset content length tracker
+            last_content_length = 0
+            last_printed_idx = len(display_hist)
+
+        # Get the latest assistant message (currently streaming)
+        _user_msg, assistant_msg = display_hist[-1]
+
+        if not assistant_msg:
+            continue
+
+        # Extract model name and content from Markdown-formatted response
+        # Format: "**Gemini:**\nActual content" or "**ChatGPT:**\nContent"
+        if assistant_msg.startswith("**Gemini:**"):
+            model_name = "Gemini"
+            full_content = assistant_msg[len("**Gemini:**\n") :]
+        elif assistant_msg.startswith("**ChatGPT:**"):
+            model_name = "ChatGPT"
+            full_content = assistant_msg[len("**ChatGPT:**\n") :]
+        else:
+            # Fallback for unexpected format
+            model_name = "Assistant"
+            full_content = assistant_msg
+
+        # Detect model switch (e.g., @all: Gemini -> ChatGPT)
+        if last_model_name is not None and model_name != last_model_name:
+            # Add newline to separate different models' responses
+            print()
+            last_content_length = 0
+
+        # Print only the new part (incremental streaming)
+        if len(full_content) > last_content_length:
+            new_content = full_content[last_content_length:]
+
+            # Print model label only on first chunk
+            if last_content_length == 0:
+                print(f"[{model_name}]: ", end="", flush=True)
+                last_model_name = model_name
+
+            print(new_content, end="", flush=True)
+            last_content_length = len(full_content)
+
+    # Add final newline after streaming completes
+    if last_content_length > 0:
+        print()
+
+    return display_hist, logic_hist
 
 
 def _handle_system_command(args, system_prompt, current_model=None):
@@ -309,35 +355,17 @@ def main():
                 )
             continue
 
-        # Parse mention to determine which LLM to call
-        mention = parse_mention(prompt)
+        # Use ChatService for message processing (Issue #62)
+        # ChatService handles mention parsing, LLM routing, and history updates
+        # CLI display_history is not used (only logic_history for API format)
+        service = ChatService(
+            display_history=[],  # CLI doesn't use Gradio-style display history
+            logic_history=history,
+            system_prompt=system_prompt,
+        )
 
-        # Add user message to history
-        history.append({"role": "user", "content": prompt})
+        # Process message through ChatService and handle CLI-specific display
+        _, history = _process_service_stream(service, prompt)
         is_dirty = True
-
-        # If no mention, treat as memo (no LLM call)
-        if mention is None:
-            pass
-        # For @all, create history snapshot so both LLMs see same context
-        elif mention == "all":
-            shared_history = _clone_history(history)
-
-            gemini_stream = core.call_gemini_api(shared_history, system_prompt)
-            response_g = _process_response_stream(gemini_stream, "gemini")
-            history.append({"role": "gemini", "content": response_g})
-
-            chatgpt_stream = core.call_chatgpt_api(shared_history, system_prompt)
-            response_c = _process_response_stream(chatgpt_stream, "chatgpt")
-            history.append({"role": "chatgpt", "content": response_c})
-        # Single LLM calls
-        elif mention == "gemini":
-            gemini_stream = core.call_gemini_api(history, system_prompt)
-            response_g = _process_response_stream(gemini_stream, "gemini")
-            history.append({"role": "gemini", "content": response_g})
-        elif mention == "chatgpt":
-            chatgpt_stream = core.call_chatgpt_api(history, system_prompt)
-            response_c = _process_response_stream(chatgpt_stream, "chatgpt")
-            history.append({"role": "chatgpt", "content": response_c})
 
     return history, system_prompt
