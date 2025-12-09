@@ -21,6 +21,7 @@ def _process_service_stream(service, user_message):
     display_hist, logic_hist = [], []
     last_printed_idx = 0  # Track how many exchanges have been fully printed
     last_content_length = 0  # Track printed content length for current streaming message
+    last_model_name = None  # Track model name to detect switches (for @all)
 
     # Process message through ChatService with streaming
     for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
@@ -55,6 +56,12 @@ def _process_service_stream(service, user_message):
             model_name = "Assistant"
             full_content = assistant_msg
 
+        # Detect model switch (e.g., @all: Gemini -> ChatGPT)
+        if last_model_name is not None and model_name != last_model_name:
+            # Add newline to separate different models' responses
+            print()
+            last_content_length = 0
+
         # Print only the new part (incremental streaming)
         if len(full_content) > last_content_length:
             new_content = full_content[last_content_length:]
@@ -62,6 +69,7 @@ def _process_service_stream(service, user_message):
             # Print model label only on first chunk
             if last_content_length == 0:
                 print(f"[{model_name}]: ", end="", flush=True)
+                last_model_name = model_name
 
             print(new_content, end="", flush=True)
             last_content_length = len(full_content)
