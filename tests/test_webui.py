@@ -426,6 +426,31 @@ def test_load_history_action_loads_from_file():
         assert "読み込み" in status or "test_history" in status
 
 
+def test_load_history_action_adds_llm_labels():
+    """load_history_action should prepend LLM names when rebuilding display history"""
+    with patch("multi_llm_chat.webui.HistoryStore") as MockStore:
+        mock_store = MockStore.return_value
+        mock_store.load_history.return_value = {
+            "system_prompt": "Test prompt",
+            "turns": [
+                {"role": "user", "content": "@all Hello"},
+                {"role": "gemini", "content": "Gemini response"},
+                {"role": "chatgpt", "content": "ChatGPT response"},
+            ],
+        }
+
+        display_hist, logic_hist, sys_prompt, status = webui.load_history_action(
+            "test_user", "test_history"
+        )
+
+        assert sys_prompt == "Test prompt"
+        assert status.startswith("✅")
+        assert display_hist == [
+            ["@all Hello", "**Gemini:**\nGemini response\n\n**ChatGPT:**\nChatGPT response"]
+        ]
+        assert logic_hist == mock_store.load_history.return_value["turns"]
+
+
 def test_new_chat_action_resets_state():
     """new_chat_action should reset all state"""
     display_hist, logic_hist, sys_prompt, status = webui.new_chat_action()
