@@ -34,6 +34,13 @@ def parse_mention(message):
     return None
 
 
+ASSISTANT_LABELS = {
+    "assistant": "**Assistant:**\n",
+    "gemini": "**Gemini:**\n",
+    "chatgpt": "**ChatGPT:**\n",
+}
+
+
 class ChatService:
     """Business logic layer for chat operations
 
@@ -88,7 +95,8 @@ class ChatService:
 
         # Process Gemini
         if mention in ["gemini", "all"]:
-            self.display_history[-1][1] = "**Gemini:**\n"
+            gemini_label = ASSISTANT_LABELS["gemini"]
+            self.display_history[-1][1] = gemini_label
             gemini_input_history = history_snapshot or self.logic_history
             gemini_stream = call_gemini_api(gemini_input_history, self.system_prompt)
 
@@ -103,17 +111,18 @@ class ChatService:
             self.logic_history.append({"role": "gemini", "content": full_response})
             if not full_response.strip():
                 self.display_history[-1][1] = (
-                    "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
+                    f"{gemini_label}[System: Geminiからの応答がありませんでした]"
                 )
             yield self.display_history, self.logic_history
 
         # Process ChatGPT
         if mention in ["chatgpt", "all"]:
+            chatgpt_label = ASSISTANT_LABELS["chatgpt"]
             # For @all, add new display row to avoid prompt duplication
             if mention == "all":
-                self.display_history.append([None, "**ChatGPT:**\n"])
+                self.display_history.append([None, chatgpt_label])
             else:
-                self.display_history[-1][1] = "**ChatGPT:**\n"
+                self.display_history[-1][1] = chatgpt_label
 
             chatgpt_input_history = history_snapshot or self.logic_history
             chatgpt_stream = call_chatgpt_api(chatgpt_input_history, self.system_prompt)
@@ -129,7 +138,7 @@ class ChatService:
             self.logic_history.append({"role": "chatgpt", "content": full_response})
             if not full_response.strip():
                 self.display_history[-1][1] = (
-                    "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
+                    f"{chatgpt_label}[System: ChatGPTからの応答がありませんでした]"
                 )
             yield self.display_history, self.logic_history
 
