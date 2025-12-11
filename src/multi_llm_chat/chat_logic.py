@@ -6,7 +6,6 @@ from .core import (
     OPENAI_API_KEY,
     call_chatgpt_api,
     call_gemini_api,
-    extract_text_from_chunk,
     format_history_for_chatgpt,
     format_history_for_gemini,
     list_gemini_models,
