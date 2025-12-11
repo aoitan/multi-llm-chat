@@ -30,6 +30,7 @@ class TestLLMProviderFactory(unittest.TestCase):
 class TestGeminiProvider(unittest.TestCase):
     """Test GeminiProvider implementation"""
 
+    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
     def test_call_api_basic(self, mock_genai):
         """GeminiProvider.call_api should return a generator"""
@@ -72,6 +73,7 @@ class TestGeminiProvider(unittest.TestCase):
 class TestChatGPTProvider(unittest.TestCase):
     """Test ChatGPTProvider implementation"""
 
+    @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.openai.OpenAI")
     def test_call_api_basic(self, mock_openai_class):
         """ChatGPTProvider.call_api should return a generator"""

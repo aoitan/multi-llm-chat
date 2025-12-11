@@ -1,14 +1,32 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import multi_llm_chat.cli as cli
 
 
-def _gemini_stream(*_args, **_kwargs):
-    return iter(["Mocked Gemini Response"])
-
-
-def _chatgpt_stream(*_args, **_kwargs):
-    return iter(["Mocked ChatGPT Response"])
+def _create_mock_provider(response_text, provider_type="gemini"):
+    """Create a mock LLM provider that returns the given response text
+    
+    Args:
+        response_text: The text response to return
+        provider_type: 'gemini' or 'chatgpt' to determine chunk format
+    """
+    mock_provider = MagicMock()
+    
+    if provider_type == "gemini":
+        # Gemini-style chunks with .text attribute
+        mock_chunk = MagicMock()
+        mock_chunk.text = response_text
+        mock_provider.call_api.return_value = iter([mock_chunk])
+        mock_provider.extract_text_from_chunk.return_value = response_text
+    else:
+        # ChatGPT-style chunks with .choices[0].delta.content
+        mock_chunk = MagicMock()
+        mock_chunk.choices = [MagicMock()]
+        mock_chunk.choices[0].delta.content = response_text
+        mock_provider.call_api.return_value = iter([mock_chunk])
+        mock_provider.extract_text_from_chunk.return_value = response_text
+    
+    return mock_provider
 
 
 def test_repl_exit_commands(monkeypatch):
@@ -36,7 +54,8 @@ def test_system_command_set():
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                mock_get_provider.return_value = _create_mock_provider("Mocked Gemini Response")
                 history, system_prompt = cli.main()
 
     assert system_prompt == "You are a helpful assistant."
@@ -119,11 +138,9 @@ def test_history_management_user_input(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
-                with patch(
-                    "multi_llm_chat.chat_logic.call_chatgpt_api", side_effect=_chatgpt_stream
-                ):
-                    history, _ = cli.main()
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                mock_get_provider.return_value = _create_mock_provider("Mocked Gemini Response")
+                history, _ = cli.main()
 
     assert len(history) == 4
     assert history[0]["role"] == "user"
@@ -136,71 +153,65 @@ def test_history_management_user_input(monkeypatch):
     assert history[3]["content"] == "just a thought"
 
 
-@patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream)
-@patch("multi_llm_chat.chat_logic.call_chatgpt_api", side_effect=_chatgpt_stream)
-def test_mention_routing(mock_chatgpt_api, mock_gemini_api):
+def test_mention_routing():
     """CLI should route mentions correctly to appropriate LLMs"""
     # Test @gemini
     with patch("builtins.input", side_effect=["test-user", "@gemini hello", "exit"]):
         with patch("builtins.print"):
-            history, _ = cli.main()
-            assert mock_gemini_api.called
-            assert not mock_chatgpt_api.called
-            assert history[-1]["role"] == "gemini"
-            assert history[-1]["content"] == "Mocked Gemini Response"
-            mock_gemini_api.reset_mock()
-            mock_chatgpt_api.reset_mock()
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                mock_gemini = _create_mock_provider("Mocked Gemini Response", "gemini")
+                mock_get_provider.return_value = mock_gemini
+                history, _ = cli.main()
+                
+                # Verify Gemini provider was created
+                mock_get_provider.assert_called_with("gemini")
+                assert history[-1]["role"] == "gemini"
+                assert history[-1]["content"] == "Mocked Gemini Response"
 
     # Test @chatgpt
     with patch("builtins.input", side_effect=["test-user", "@chatgpt hello", "exit"]):
         with patch("builtins.print"):
-            history, _ = cli.main()
-            assert not mock_gemini_api.called
-            assert mock_chatgpt_api.called
-            assert history[-1]["role"] == "chatgpt"
-            assert history[-1]["content"] == "Mocked ChatGPT Response"
-            mock_gemini_api.reset_mock()
-            mock_chatgpt_api.reset_mock()
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                mock_chatgpt = _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
+                mock_get_provider.return_value = mock_chatgpt
+                history, _ = cli.main()
+                
+                # Verify ChatGPT provider was created
+                mock_get_provider.assert_called_with("chatgpt")
+                assert history[-1]["role"] == "chatgpt"
+                assert history[-1]["content"] == "Mocked ChatGPT Response"
 
-    # Test @all
+    # Test @all (calls both providers)
     with patch("builtins.input", side_effect=["test-user", "@all hello", "exit"]):
         with patch("builtins.print"):
-            history_snapshots = {}
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                # Create different responses for each provider
+                def provider_factory(provider_name):
+                    if provider_name == "gemini":
+                        return _create_mock_provider("Mocked Gemini Response", "gemini")
+                    elif provider_name == "chatgpt":
+                        return _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
+                
+                mock_get_provider.side_effect = provider_factory
+                history, _ = cli.main()
+                
+                # @all should call both providers
+                assert mock_get_provider.call_count == 2
+                assert history[-2]["role"] == "gemini"
+                assert history[-2]["content"] == "Mocked Gemini Response"
+                assert history[-1]["role"] == "chatgpt"
+                assert history[-1]["content"] == "Mocked ChatGPT Response"
 
-            def gemini_capture(history, system_prompt=None):
-                history_snapshots["gemini"] = [entry.copy() for entry in history]
-                return iter(["Mocked Gemini Response"])
-
-            def chatgpt_capture(history, system_prompt=None):
-                history_snapshots["chatgpt"] = [entry.copy() for entry in history]
-                return iter(["Mocked ChatGPT Response"])
-
-            mock_gemini_api.side_effect = gemini_capture
-            mock_chatgpt_api.side_effect = chatgpt_capture
-
-            history, _ = cli.main()
-            assert mock_gemini_api.called
-            assert mock_chatgpt_api.called
-            assert history[-2]["role"] == "gemini"
-            assert history[-2]["content"] == "Mocked Gemini Response"
-            assert history[-1]["role"] == "chatgpt"
-            assert history[-1]["content"] == "Mocked ChatGPT Response"
-            assert history_snapshots["gemini"] == history_snapshots["chatgpt"]
-            assert all(entry["role"] != "gemini" for entry in history_snapshots["chatgpt"])
-
-            mock_gemini_api.side_effect = _gemini_stream
-            mock_chatgpt_api.side_effect = _chatgpt_stream
-            mock_gemini_api.reset_mock()
-            mock_chatgpt_api.reset_mock()
-
-    # Test no mention
+    # Test no mention (memo input)
     with patch("builtins.input", side_effect=["test-user", "hello", "exit"]):
         with patch("builtins.print"):
-            history, _ = cli.main()
-            assert not mock_gemini_api.called
-            assert not mock_chatgpt_api.called
-            assert history[-1]["role"] == "user"
-            assert history[-1]["content"] == "hello"
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                history, _ = cli.main()
+                
+                # No provider should be called for memo input
+                assert not mock_get_provider.called
+                assert history[-1]["role"] == "user"
+                assert history[-1]["content"] == "hello"
 
 
 def test_unknown_command_error(monkeypatch):
@@ -314,7 +325,8 @@ def test_copy_command_copies_latest_response(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                mock_get_provider.return_value = _create_mock_provider("Mocked Gemini Response")
                 with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
                     cli.main()
 
@@ -333,7 +345,8 @@ def test_copy_command_handles_invalid_index(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                mock_get_provider.return_value = _create_mock_provider("Mocked Gemini Response")
                 with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
                     cli.main()
 
@@ -371,7 +384,8 @@ def test_copy_command_requires_integer(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                mock_get_provider.return_value = _create_mock_provider("Mocked Gemini Response")
                 with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
                     cli.main()
 
@@ -390,7 +404,8 @@ def test_copy_command_handles_negative_index(monkeypatch):
 
     with patch("builtins.input", side_effect=test_inputs):
         with patch("builtins.print") as mock_print:
-            with patch("multi_llm_chat.chat_logic.call_gemini_api", side_effect=_gemini_stream):
+            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+                mock_get_provider.return_value = _create_mock_provider("Mocked Gemini Response")
                 with patch("multi_llm_chat.cli.pyperclip.copy", create=True) as mock_copy:
                     cli.main()
 

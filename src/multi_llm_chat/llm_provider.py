@@ -87,6 +87,9 @@ class GeminiProvider(LLMProvider):
         if not GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY is not set")
 
+        # Import here to avoid circular dependency
+        from multi_llm_chat.core import format_history_for_gemini
+
         # Create model with system instruction if provided
         if system_prompt and system_prompt.strip():
             model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_prompt)
@@ -95,15 +98,8 @@ class GeminiProvider(LLMProvider):
                 self._model = genai.GenerativeModel(GEMINI_MODEL)
             model = self._model
 
-        # Convert history format for Gemini
-        gemini_history = []
-        for turn in history:
-            role = turn["role"]
-            content = turn["content"]
-            # Map LLM-specific roles to Gemini's format
-            if role in ("gemini", "chatgpt"):
-                role = "model"
-            gemini_history.append({"role": role, "parts": [content]})
+        # Filter history to only include user and Gemini messages
+        gemini_history = format_history_for_gemini(history)
 
         # Call API with streaming
         response = model.generate_content(gemini_history, stream=True)
@@ -134,19 +130,17 @@ class ChatGPTProvider(LLMProvider):
         if not OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is not set")
 
+        # Import here to avoid circular dependency
+        from multi_llm_chat.core import format_history_for_chatgpt
+
         # Build messages for OpenAI format
         messages = []
         if system_prompt and system_prompt.strip():
             messages.append({"role": "system", "content": system_prompt})
 
-        # Convert history format for ChatGPT
-        for turn in history:
-            role = turn["role"]
-            content = turn["content"]
-            # Map LLM-specific roles to OpenAI's format
-            if role in ("gemini", "chatgpt"):
-                role = "assistant"
-            messages.append({"role": role, "content": content})
+        # Filter history to only include user and ChatGPT messages
+        chatgpt_history = format_history_for_chatgpt(history)
+        messages.extend(chatgpt_history)
 
         # Call API with streaming
         stream = self._client.chat.completions.create(

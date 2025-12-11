@@ -91,23 +91,30 @@ class ChatService:
             self.display_history[-1][1] = "**Gemini:**\n"
             gemini_input_history = history_snapshot or self.logic_history
             
-            # Use provider abstraction
-            provider = get_provider("gemini")
-            gemini_stream = provider.call_api(gemini_input_history, self.system_prompt)
+            try:
+                # Use provider abstraction
+                provider = get_provider("gemini")
+                gemini_stream = provider.call_api(gemini_input_history, self.system_prompt)
 
-            full_response = ""
-            for chunk in gemini_stream:
-                text = provider.extract_text_from_chunk(chunk)
-                if text:
-                    full_response += text
-                    self.display_history[-1][1] += text
-                    yield self.display_history, self.logic_history
+                full_response = ""
+                for chunk in gemini_stream:
+                    text = provider.extract_text_from_chunk(chunk)
+                    if text:
+                        full_response += text
+                        self.display_history[-1][1] += text
+                        yield self.display_history, self.logic_history
 
-            self.logic_history.append({"role": "gemini", "content": full_response})
-            if not full_response.strip():
-                self.display_history[-1][1] = (
-                    "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
-                )
+                self.logic_history.append({"role": "gemini", "content": full_response})
+                if not full_response.strip():
+                    self.display_history[-1][1] = (
+                        "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
+                    )
+            except ValueError as e:
+                # Handle API key errors gracefully
+                error_msg = f"[System: エラー - {str(e)}]"
+                self.display_history[-1][1] = f"**Gemini:**\n{error_msg}"
+                self.logic_history.append({"role": "gemini", "content": error_msg})
+            
             yield self.display_history, self.logic_history
 
         # Process ChatGPT
@@ -120,23 +127,30 @@ class ChatService:
 
             chatgpt_input_history = history_snapshot or self.logic_history
             
-            # Use provider abstraction
-            provider = get_provider("chatgpt")
-            chatgpt_stream = provider.call_api(chatgpt_input_history, self.system_prompt)
+            try:
+                # Use provider abstraction
+                provider = get_provider("chatgpt")
+                chatgpt_stream = provider.call_api(chatgpt_input_history, self.system_prompt)
 
-            full_response = ""
-            for chunk in chatgpt_stream:
-                text = provider.extract_text_from_chunk(chunk)
-                if text:
-                    full_response += text
-                    self.display_history[-1][1] += text
-                    yield self.display_history, self.logic_history
+                full_response = ""
+                for chunk in chatgpt_stream:
+                    text = provider.extract_text_from_chunk(chunk)
+                    if text:
+                        full_response += text
+                        self.display_history[-1][1] += text
+                        yield self.display_history, self.logic_history
 
-            self.logic_history.append({"role": "chatgpt", "content": full_response})
-            if not full_response.strip():
-                self.display_history[-1][1] = (
-                    "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
-                )
+                self.logic_history.append({"role": "chatgpt", "content": full_response})
+                if not full_response.strip():
+                    self.display_history[-1][1] = (
+                        "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
+                    )
+            except ValueError as e:
+                # Handle API key errors gracefully
+                error_msg = f"[System: エラー - {str(e)}]"
+                self.display_history[-1][1] = f"**ChatGPT:**\n{error_msg}"
+                self.logic_history.append({"role": "chatgpt", "content": error_msg})
+            
             yield self.display_history, self.logic_history
 
     def set_system_prompt(self, prompt):
