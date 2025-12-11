@@ -1,7 +1,7 @@
 """Tests for ChatService - business logic layer for chat operations"""
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from multi_llm_chat.chat_logic import ChatService, parse_mention
 
@@ -69,10 +69,18 @@ class TestChatServiceMessageParsing(unittest.TestCase):
 class TestChatServiceProcessMessage(unittest.TestCase):
     """Test main message processing logic"""
 
-    @patch("multi_llm_chat.chat_logic.call_gemini_api")
-    def test_process_message_gemini(self, mock_gemini):
+    @patch("multi_llm_chat.chat_logic.get_provider")
+    def test_process_message_gemini(self, mock_get_provider):
         """Should call Gemini API for @gemini mention"""
-        mock_gemini.return_value = iter(["Test ", "response"])
+        # Setup mock provider
+        mock_provider = MagicMock()
+        mock_chunk1 = MagicMock()
+        mock_chunk1.text = "Test "
+        mock_chunk2 = MagicMock()
+        mock_chunk2.text = "response"
+        mock_provider.call_api.return_value = iter([mock_chunk1, mock_chunk2])
+        mock_provider.extract_text_from_chunk.side_effect = lambda chunk: chunk.text
+        mock_get_provider.return_value = mock_provider
 
         service = ChatService()
         results = list(service.process_message("@gemini hello"))
@@ -87,10 +95,20 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         assert final_logic[1]["role"] == "gemini"
         assert "Test response" in final_logic[1]["content"]
 
-    @patch("multi_llm_chat.chat_logic.call_chatgpt_api")
-    def test_process_message_chatgpt(self, mock_chatgpt):
+    @patch("multi_llm_chat.chat_logic.get_provider")
+    def test_process_message_chatgpt(self, mock_get_provider):
         """Should call ChatGPT API for @chatgpt mention"""
-        mock_chatgpt.return_value = iter(["Hello ", "world"])
+        # Setup mock provider
+        mock_provider = MagicMock()
+        mock_chunk1 = MagicMock()
+        mock_chunk1.choices = [MagicMock()]
+        mock_chunk1.choices[0].delta.content = "Hello "
+        mock_chunk2 = MagicMock()
+        mock_chunk2.choices = [MagicMock()]
+        mock_chunk2.choices[0].delta.content = "world"
+        mock_provider.call_api.return_value = iter([mock_chunk1, mock_chunk2])
+        mock_provider.extract_text_from_chunk.side_effect = ["Hello ", "world"]
+        mock_get_provider.return_value = mock_provider
 
         service = ChatService()
         results = list(service.process_message("@chatgpt hi"))
@@ -101,12 +119,25 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         assert final_logic[1]["role"] == "chatgpt"
         assert "Hello world" in final_logic[1]["content"]
 
-    @patch("multi_llm_chat.chat_logic.call_gemini_api")
-    @patch("multi_llm_chat.chat_logic.call_chatgpt_api")
-    def test_process_message_all(self, mock_chatgpt, mock_gemini):
+    @patch("multi_llm_chat.chat_logic.get_provider")
+    def test_process_message_all(self, mock_get_provider):
         """Should call both APIs for @all mention"""
-        mock_gemini.return_value = iter(["Gemini response"])
-        mock_chatgpt.return_value = iter(["ChatGPT response"])
+        # Setup mock providers for both calls
+        mock_gemini_provider = MagicMock()
+        mock_gemini_chunk = MagicMock()
+        mock_gemini_chunk.text = "Gemini response"
+        mock_gemini_provider.call_api.return_value = iter([mock_gemini_chunk])
+        mock_gemini_provider.extract_text_from_chunk.return_value = "Gemini response"
+
+        mock_chatgpt_provider = MagicMock()
+        mock_chatgpt_chunk = MagicMock()
+        mock_chatgpt_chunk.choices = [MagicMock()]
+        mock_chatgpt_chunk.choices[0].delta.content = "ChatGPT response"
+        mock_chatgpt_provider.call_api.return_value = iter([mock_chatgpt_chunk])
+        mock_chatgpt_provider.extract_text_from_chunk.return_value = "ChatGPT response"
+
+        # Return different providers for gemini and chatgpt
+        mock_get_provider.side_effect = [mock_gemini_provider, mock_chatgpt_provider]
 
         service = ChatService()
         results = list(service.process_message("@all compare"))
@@ -142,22 +173,34 @@ class TestChatServiceProcessMessage(unittest.TestCase):
 class TestChatServiceHistorySnapshot(unittest.TestCase):
     """Test history snapshot logic for @all"""
 
-    @patch("multi_llm_chat.chat_logic.call_gemini_api")
-    @patch("multi_llm_chat.chat_logic.call_chatgpt_api")
-    def test_all_uses_same_history_snapshot(self, mock_chatgpt, mock_gemini):
+    @patch("multi_llm_chat.chat_logic.get_provider")
+    def test_all_uses_same_history_snapshot(self, mock_get_provider):
         """@all should use identical history for both LLMs"""
         captured_histories = []
 
-        def capture_gemini(history, system_prompt):
-            captured_histories.append(("gemini", [h.copy() for h in history]))
-            return iter(["Gemini"])
+        def create_mock_provider(provider_name):
+            mock_provider = MagicMock()
+            
+            def capture_call_api(history, system_prompt=None):
+                captured_histories.append((provider_name, [h.copy() for h in history]))
+                mock_chunk = MagicMock()
+                if provider_name == "gemini":
+                    mock_chunk.text = "Gemini"
+                    mock_provider.extract_text_from_chunk.return_value = "Gemini"
+                else:
+                    mock_chunk.choices = [MagicMock()]
+                    mock_chunk.choices[0].delta.content = "ChatGPT"
+                    mock_provider.extract_text_from_chunk.return_value = "ChatGPT"
+                return iter([mock_chunk])
+            
+            mock_provider.call_api.side_effect = capture_call_api
+            return mock_provider
 
-        def capture_chatgpt(history, system_prompt):
-            captured_histories.append(("chatgpt", [h.copy() for h in history]))
-            return iter(["ChatGPT"])
-
-        mock_gemini.side_effect = capture_gemini
-        mock_chatgpt.side_effect = capture_chatgpt
+        # Return different providers for each call
+        mock_get_provider.side_effect = [
+            create_mock_provider("gemini"),
+            create_mock_provider("chatgpt")
+        ]
 
         service = ChatService()
         list(service.process_message("@all test"))
@@ -176,16 +219,21 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
 class TestChatServiceSystemPrompt(unittest.TestCase):
     """Test system prompt handling"""
 
-    @patch("multi_llm_chat.chat_logic.call_gemini_api")
-    def test_system_prompt_passed_to_api(self, mock_gemini):
+    @patch("multi_llm_chat.chat_logic.get_provider")
+    def test_system_prompt_passed_to_api(self, mock_get_provider):
         """System prompt should be passed to LLM API"""
-        mock_gemini.return_value = iter(["Response"])
+        mock_provider = MagicMock()
+        mock_chunk = MagicMock()
+        mock_chunk.text = "Response"
+        mock_provider.call_api.return_value = iter([mock_chunk])
+        mock_provider.extract_text_from_chunk.return_value = "Response"
+        mock_get_provider.return_value = mock_provider
 
         service = ChatService(system_prompt="You are a helpful assistant")
         list(service.process_message("@gemini hello"))
 
-        # Check that system prompt was passed (2nd positional arg)
-        call_args = mock_gemini.call_args
+        # Check that system prompt was passed (2nd positional argument)
+        call_args = mock_provider.call_api.call_args
         assert call_args[0][1] == "You are a helpful assistant"
 
     def test_update_system_prompt(self):

@@ -4,15 +4,13 @@ from .core import (
     GEMINI_MODEL,
     GOOGLE_API_KEY,
     OPENAI_API_KEY,
-    call_chatgpt_api,
-    call_gemini_api,
-    extract_text_from_chunk,
     format_history_for_chatgpt,
     format_history_for_gemini,
     list_gemini_models,
 )
 from .history import get_llm_response
 from .history import reset_history as _reset_history
+from .llm_provider import get_provider
 
 
 def parse_mention(message):
@@ -90,11 +88,14 @@ class ChatService:
         if mention in ["gemini", "all"]:
             self.display_history[-1][1] = "**Gemini:**\n"
             gemini_input_history = history_snapshot or self.logic_history
-            gemini_stream = call_gemini_api(gemini_input_history, self.system_prompt)
+            
+            # Use provider abstraction
+            provider = get_provider("gemini")
+            gemini_stream = provider.call_api(gemini_input_history, self.system_prompt)
 
             full_response = ""
             for chunk in gemini_stream:
-                text = extract_text_from_chunk(chunk, "gemini")
+                text = provider.extract_text_from_chunk(chunk)
                 if text:
                     full_response += text
                     self.display_history[-1][1] += text
@@ -116,11 +117,14 @@ class ChatService:
                 self.display_history[-1][1] = "**ChatGPT:**\n"
 
             chatgpt_input_history = history_snapshot or self.logic_history
-            chatgpt_stream = call_chatgpt_api(chatgpt_input_history, self.system_prompt)
+            
+            # Use provider abstraction
+            provider = get_provider("chatgpt")
+            chatgpt_stream = provider.call_api(chatgpt_input_history, self.system_prompt)
 
             full_response = ""
             for chunk in chatgpt_stream:
-                text = extract_text_from_chunk(chunk, "chatgpt")
+                text = provider.extract_text_from_chunk(chunk)
                 if text:
                     full_response += text
                     self.display_history[-1][1] += text
