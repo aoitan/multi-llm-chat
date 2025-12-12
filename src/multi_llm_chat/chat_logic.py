@@ -34,6 +34,13 @@ def parse_mention(message):
     return None
 
 
+ASSISTANT_LABELS = {
+    "assistant": "**Assistant:**\n",
+    "gemini": "**Gemini:**\n",
+    "chatgpt": "**ChatGPT:**\n",
+}
+
+
 class ChatService:
     """Business logic layer for chat operations
 
@@ -88,7 +95,8 @@ class ChatService:
 
         # Process Gemini
         if mention in ["gemini", "all"]:
-            self.display_history[-1][1] = "**Gemini:**\n"
+            gemini_label = ASSISTANT_LABELS["gemini"]
+            self.display_history[-1][1] = gemini_label
             gemini_input_history = history_snapshot or self.logic_history
 
             try:
@@ -124,11 +132,12 @@ class ChatService:
 
         # Process ChatGPT
         if mention in ["chatgpt", "all"]:
+            chatgpt_label = ASSISTANT_LABELS["chatgpt"]
             # For @all, add new display row to avoid prompt duplication
             if mention == "all":
-                self.display_history.append([None, "**ChatGPT:**\n"])
+                self.display_history.append([None, chatgpt_label])
             else:
-                self.display_history[-1][1] = "**ChatGPT:**\n"
+                self.display_history[-1][1] = chatgpt_label
 
             chatgpt_input_history = history_snapshot or self.logic_history
 

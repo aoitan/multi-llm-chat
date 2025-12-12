@@ -10,6 +10,11 @@ from .history import HistoryStore
 
 # Constants
 ASSISTANT_ROLES = ("assistant", "gemini", "chatgpt")
+ASSISTANT_LABELS = {
+    "assistant": "**Assistant:**\n",
+    "gemini": "**Gemini:**\n",
+    "chatgpt": "**ChatGPT:**\n",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -137,13 +142,15 @@ def load_history_action(user_id, history_name):
             elif turn["role"] in ASSISTANT_ROLES and display_history:
                 # Add assistant/LLM response to the last turn
                 # For @all mentions, multiple assistant responses exist - append them
+                prefix = ASSISTANT_LABELS.get(turn["role"], "")
+                formatted_content = f"{prefix}{turn['content']}" if prefix else turn["content"]
                 current_response = display_history[-1][1]
                 if current_response:
                     # Already has a response, append the new one
-                    display_history[-1][1] = current_response + "\n\n" + turn["content"]
+                    display_history[-1][1] = current_response + "\n\n" + formatted_content
                 else:
                     # First response for this user message
-                    display_history[-1][1] = turn["content"]
+                    display_history[-1][1] = formatted_content
 
         return (
             display_history,
