@@ -156,12 +156,13 @@ class LLMProvider(ABC):
         pass
 
     @abstractmethod
-    def get_token_info(self, text, history=None):
+    def get_token_info(self, text, history=None, model_name=None):
         """Get token usage information
 
         Args:
             text: Text to analyze
             history: Optional conversation history
+            model_name: Optional specific model name (uses default if None)
 
         Returns:
             dict: Token information with keys 'input_tokens', 'max_tokens'
@@ -268,11 +269,14 @@ class GeminiProvider(LLMProvider):
         """Extract text from Gemini response chunk"""
         return getattr(chunk, "text", "")
 
-    def get_token_info(self, text, history=None):
+    def get_token_info(self, text, history=None, model_name=None):
         """Get token information for Gemini
 
         Uses estimation with buffer factor for Gemini models.
         """
+        # Use provided model name or fall back to default
+        effective_model = model_name if model_name else GEMINI_MODEL
+
         # Calculate tokens for system prompt/text
         token_count = int(_estimate_tokens(text) * 1.2)  # 20% buffer
 
@@ -285,7 +289,7 @@ class GeminiProvider(LLMProvider):
                     token_count += int(_estimate_tokens(content) * 1.2)
 
         # Get max context length for this model
-        max_context = _get_max_context_length(GEMINI_MODEL)
+        max_context = _get_max_context_length(effective_model)
 
         return {
             "input_tokens": token_count,
@@ -359,18 +363,20 @@ class ChatGPTProvider(LLMProvider):
                 return delta_content
         return ""
 
-    def get_token_info(self, text, history=None):
+    def get_token_info(self, text, history=None, model_name=None):
         """Get token information for ChatGPT
 
         Uses tiktoken for accurate counting if available, falls back to estimation.
         """
+        # Use provided model name or fall back to default
+        effective_model = model_name if model_name else CHATGPT_MODEL
         token_count = 0
 
         # Use tiktoken for accurate counting if available
         if TIKTOKEN_AVAILABLE:
             try:
                 # Map model name to tiktoken encoding
-                model_lower = CHATGPT_MODEL.lower()
+                model_lower = effective_model.lower()
                 if "gpt-4o" in model_lower or "gpt-4-turbo" in model_lower:
                     encoding = tiktoken.get_encoding("o200k_base")
                 elif "gpt-4" in model_lower:
@@ -381,8 +387,8 @@ class ChatGPTProvider(LLMProvider):
                 # Count system prompt/text tokens
                 token_count = len(encoding.encode(text))
 
-                # Add message overhead (4 tokens per message)
-                token_count += 4
+                # Add message overhead (3 tokens per message for OpenAI spec)
+                token_count += 3
 
                 # Add history tokens if provided (only count user and chatgpt messages)
                 if history:
@@ -390,7 +396,7 @@ class ChatGPTProvider(LLMProvider):
                         role = entry.get("role", "")
                         if role in {"user", "chatgpt"}:
                             content = entry.get("content", "")
-                            token_count += len(encoding.encode(content)) + 4
+                            token_count += len(encoding.encode(content)) + 3
 
             except Exception:
                 # Fall back to estimation if tiktoken fails
@@ -408,7 +414,7 @@ class ChatGPTProvider(LLMProvider):
                         token_count += int(_estimate_tokens(entry.get("content", "")) * 1.2)
 
         # Get max context length for this model
-        max_context = _get_max_context_length(CHATGPT_MODEL)
+        max_context = _get_max_context_length(effective_model)
 
         return {
             "input_tokens": token_count,

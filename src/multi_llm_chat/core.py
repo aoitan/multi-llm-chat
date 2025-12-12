@@ -1,5 +1,4 @@
 import hashlib
-import logging
 import os
 from collections import OrderedDict
 
@@ -8,7 +7,7 @@ import openai
 from dotenv import load_dotenv
 
 try:
-    import tiktoken
+    import tiktoken  # noqa: F401
 
     TIKTOKEN_AVAILABLE = True
 except ImportError:
@@ -166,6 +165,9 @@ def _estimate_tokens(text):
 def get_token_info(text, model_name, history=None):
     """Get token information for the given text and model
 
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should use provider.get_token_info() directly.
+
     Args:
         text: System prompt text
         model_name: Model to use for context length calculation
@@ -174,38 +176,25 @@ def get_token_info(text, model_name, history=None):
     Returns:
         dict with token_count, max_context_length, and is_estimated
     """
-    # Use calculate_tokens for accurate/buffered counting
-    token_count = calculate_tokens(text, model_name)
+    from multi_llm_chat.llm_provider import get_provider
 
-    # Determine model type for filtering
+    # Determine provider from model name
     model_lower = model_name.lower()
+    if "gpt" in model_lower or "chatgpt" in model_lower:
+        provider_name = "chatgpt"
+    else:
+        provider_name = "gemini"
 
-    # Add history tokens if provided (filter by model)
-    if history:
-        # Determine which roles to count based on model
-        if "gpt" in model_lower:
-            # For ChatGPT: count user and chatgpt messages only
-            relevant_roles = {"user", "chatgpt"}
-        else:
-            # For Gemini: count user and gemini messages only
-            relevant_roles = {"user", "gemini"}
+    # Get provider and delegate token calculation with actual model name
+    provider = get_provider(provider_name)
+    result = provider.get_token_info(text, history, model_name=model_name)
 
-        for entry in history:
-            role = entry.get("role", "")
-            if role in relevant_roles:
-                content = entry.get("content", "")
-                token_count += calculate_tokens(content, model_name)
-
-    # Use environment-based max context length (from get_max_context_length)
-    # This ensures consistency with context compression logic
-    max_context = get_max_context_length(model_name)
-
-    # Check if using tiktoken (accurate) or estimation
-    is_estimated = "gpt" not in model_lower or not TIKTOKEN_AVAILABLE
+    # Add is_estimated flag for backward compatibility
+    is_estimated = provider_name == "gemini" or not TIKTOKEN_AVAILABLE
 
     return {
-        "token_count": token_count,
-        "max_context_length": max_context,
+        "token_count": result["input_tokens"],
+        "max_context_length": result["max_tokens"],
         "is_estimated": is_estimated,
     }
 
@@ -319,10 +308,8 @@ def extract_text_from_chunk(chunk, model_name):
 def get_max_context_length(model_name):
     """Get maximum context length for the specified model
 
-    Reads from environment variables with fallback to model defaults:
-    1. Model-specific: GEMINI_MAX_CONTEXT_LENGTH, CHATGPT_MAX_CONTEXT_LENGTH
-    2. Generic: DEFAULT_MAX_CONTEXT_LENGTH
-    3. Model built-in defaults (based on model capabilities)
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should use llm_provider._get_max_context_length() directly.
 
     Args:
         model_name: Model identifier
@@ -330,68 +317,16 @@ def get_max_context_length(model_name):
     Returns:
         Maximum context length in tokens
     """
-    model_lower = model_name.lower()
+    from multi_llm_chat.llm_provider import _get_max_context_length
 
-    # Check for model-specific environment variable (read dynamically)
-    if "gemini" in model_lower:
-        gemini_max = os.getenv("GEMINI_MAX_CONTEXT_LENGTH")
-        if gemini_max:
-            try:
-                return int(gemini_max)
-            except ValueError:
-                logging.warning(f"Invalid GEMINI_MAX_CONTEXT_LENGTH: {gemini_max}. Using default.")
-
-    if "gpt" in model_lower:
-        chatgpt_max = os.getenv("CHATGPT_MAX_CONTEXT_LENGTH")
-        if chatgpt_max:
-            try:
-                return int(chatgpt_max)
-            except ValueError:
-                logging.warning(
-                    f"Invalid CHATGPT_MAX_CONTEXT_LENGTH: {chatgpt_max}. Using default."
-                )
-
-    # Fall back to default (also read dynamically)
-    default_max = os.getenv("DEFAULT_MAX_CONTEXT_LENGTH")
-    if default_max:
-        try:
-            return int(default_max)
-        except ValueError:
-            logging.warning(f"Invalid DEFAULT_MAX_CONTEXT_LENGTH: {default_max}. Using default.")
-
-    # Built-in model-specific defaults (based on model capabilities)
-    # Pattern matching is ordered from most specific to least specific
-    MODEL_DEFAULTS = [
-        # Gemini models - specific variants first
-        ("gemini-2.0-flash", 1048576),
-        ("gemini-exp-1206", 1048576),
-        ("gemini-1.5-pro", 2097152),
-        ("gemini-1.5-flash", 1048576),
-        ("gemini-pro", 32760),
-        ("gemini", 32760),  # Conservative default for unknown Gemini
-        # GPT models - specific variants first
-        ("gpt-4o", 128000),
-        ("gpt-4-turbo", 128000),
-        ("gpt-4-1106", 128000),
-        ("gpt-4", 8192),  # Base GPT-4
-        ("gpt-3.5-turbo-16k", 16385),
-        ("gpt-3.5", 4096),
-    ]
-
-    # Find first matching pattern
-    for pattern, context_length in MODEL_DEFAULTS:
-        if pattern in model_lower:
-            return context_length
-
-    # Final fallback
-    return 4096
+    return _get_max_context_length(model_name)
 
 
 def calculate_tokens(text, model_name):
     """Calculate token count for text using model-appropriate method
 
-    - OpenAI models: Use tiktoken for accurate counting (includes message overhead)
-    - Other models: Use estimation with buffer factor
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should use provider.get_token_info() directly.
 
     Args:
         text: Text to tokenize
@@ -400,47 +335,19 @@ def calculate_tokens(text, model_name):
     Returns:
         Token count (int)
     """
+    from multi_llm_chat.llm_provider import get_provider
+
+    # Determine provider from model name
     model_lower = model_name.lower()
+    if "gpt" in model_lower or "chatgpt" in model_lower:
+        provider_name = "chatgpt"
+    else:
+        provider_name = "gemini"
 
-    # Use tiktoken for OpenAI models if available
-    if "gpt" in model_lower and TIKTOKEN_AVAILABLE:
-        try:
-            # Map model name to tiktoken encoding
-            if "gpt-4o" in model_lower or "gpt-4-turbo" in model_lower:
-                encoding = tiktoken.get_encoding("o200k_base")
-            elif "gpt-4" in model_lower:
-                encoding = tiktoken.encoding_for_model("gpt-4")
-            elif "gpt-3.5" in model_lower:
-                encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
-            else:
-                # Fallback to cl100k_base (used by legacy gpt-4, gpt-3.5-turbo)
-                encoding = tiktoken.get_encoding("cl100k_base")
-
-            content_tokens = len(encoding.encode(text))
-
-            # Add per-message overhead for Chat Completions format
-            # OpenAI guidance: ~3 tokens per message for role, separators, etc.
-            # https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
-            message_overhead = 3
-
-            return content_tokens + message_overhead
-        except Exception:
-            # Fall back to estimation if tiktoken fails
-            pass
-
-    # Use estimation with buffer factor for other models
-    try:
-        buffer_factor = float(os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "1.2"))
-    except ValueError as e:
-        invalid_value = os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR")
-        logging.warning(
-            f"Invalid TOKEN_ESTIMATION_BUFFER_FACTOR: {invalid_value}. "
-            f"Using default 1.2. Error: {e}"
-        )
-        buffer_factor = 1.2
-
-    base_estimate = _estimate_tokens(text)
-    return int(base_estimate * buffer_factor)
+    # Get provider and calculate tokens for single message with actual model name
+    provider = get_provider(provider_name)
+    result = provider.get_token_info(text, history=None, model_name=model_name)
+    return result["input_tokens"]
 
 
 def prune_history_sliding_window(history, max_tokens, model_name, system_prompt=None):
