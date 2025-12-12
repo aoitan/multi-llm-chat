@@ -7,6 +7,7 @@ making it easy to add new providers without modifying existing code.
 import hashlib
 import logging
 import os
+import threading
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 
@@ -27,6 +28,23 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
+
+
+def _get_buffer_factor():
+    """Get token estimation buffer factor from environment variable
+
+    Returns:
+        float: Buffer factor (default: 1.2)
+    """
+    try:
+        return float(os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "1.2"))
+    except ValueError as e:
+        invalid_value = os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR")
+        logging.warning(
+            f"Invalid TOKEN_ESTIMATION_BUFFER_FACTOR: {invalid_value}. "
+            f"Using default 1.2. Error: {e}"
+        )
+        return 1.2
 
 
 def _estimate_tokens(text):
@@ -216,7 +234,8 @@ class GeminiProvider(LLMProvider):
                 # Move to end (most recently used)
                 self._models_cache.move_to_end(prompt_hash)
                 return cached_model
-            # Hash collision - evict and recreate
+            # Hash collision detected - explicitly evict old entry
+            del self._models_cache[prompt_hash]
 
         # Create new model and add to cache
         model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_prompt)
@@ -272,13 +291,16 @@ class GeminiProvider(LLMProvider):
     def get_token_info(self, text, history=None, model_name=None):
         """Get token information for Gemini
 
-        Uses estimation with buffer factor for Gemini models.
+        Uses estimation with buffer factor (from TOKEN_ESTIMATION_BUFFER_FACTOR env var).
         """
         # Use provided model name or fall back to default
         effective_model = model_name if model_name else GEMINI_MODEL
 
+        # Get buffer factor from environment variable
+        buffer_factor = _get_buffer_factor()
+
         # Calculate tokens for system prompt/text
-        token_count = int(_estimate_tokens(text) * 1.2)  # 20% buffer
+        token_count = int(_estimate_tokens(text) * buffer_factor)
 
         # Add history tokens if provided (only count user and gemini messages)
         if history:
@@ -286,7 +308,7 @@ class GeminiProvider(LLMProvider):
                 role = entry.get("role", "")
                 if role in {"user", "gemini"}:
                     content = entry.get("content", "")
-                    token_count += int(_estimate_tokens(content) * 1.2)
+                    token_count += int(_estimate_tokens(content) * buffer_factor)
 
         # Get max context length for this model
         max_context = _get_max_context_length(effective_model)
@@ -400,18 +422,24 @@ class ChatGPTProvider(LLMProvider):
 
             except Exception:
                 # Fall back to estimation if tiktoken fails
-                token_count = int(_estimate_tokens(text) * 1.2)
+                buffer_factor = _get_buffer_factor()
+                token_count = int(_estimate_tokens(text) * buffer_factor)
                 if history:
                     for entry in history:
                         if entry.get("role") in {"user", "chatgpt"}:
-                            token_count += int(_estimate_tokens(entry.get("content", "")) * 1.2)
+                            token_count += int(
+                                _estimate_tokens(entry.get("content", "")) * buffer_factor
+                            )
         else:
             # Use estimation with buffer
-            token_count = int(_estimate_tokens(text) * 1.2)
+            buffer_factor = _get_buffer_factor()
+            token_count = int(_estimate_tokens(text) * buffer_factor)
             if history:
                 for entry in history:
                     if entry.get("role") in {"user", "chatgpt"}:
-                        token_count += int(_estimate_tokens(entry.get("content", "")) * 1.2)
+                        token_count += int(
+                            _estimate_tokens(entry.get("content", "")) * buffer_factor
+                        )
 
         # Get max context length for this model
         max_context = _get_max_context_length(effective_model)
@@ -427,12 +455,14 @@ _PROVIDERS = {"gemini": GeminiProvider, "chatgpt": ChatGPTProvider}
 
 # Cache provider instances for reuse
 _PROVIDER_INSTANCES = {}
+_provider_lock = threading.Lock()
 
 
 def get_provider(provider_name):
-    """Factory function to get a provider instance
+    """Factory function to get a provider instance (thread-safe)
 
     Returns cached instance if available to reuse API clients and models.
+    Thread-safe for concurrent access in WebUI environment.
 
     Args:
         provider_name: Name of the provider ('gemini', 'chatgpt', etc.)
@@ -446,9 +476,10 @@ def get_provider(provider_name):
     if provider_name not in _PROVIDERS:
         raise ValueError(f"Unknown LLM provider: {provider_name}")
 
-    # Return cached instance if exists
-    if provider_name not in _PROVIDER_INSTANCES:
-        provider_class = _PROVIDERS[provider_name]
-        _PROVIDER_INSTANCES[provider_name] = provider_class()
+    # Thread-safe check-and-create pattern
+    with _provider_lock:
+        if provider_name not in _PROVIDER_INSTANCES:
+            provider_class = _PROVIDERS[provider_name]
+            _PROVIDER_INSTANCES[provider_name] = provider_class()
 
     return _PROVIDER_INSTANCES[provider_name]
