@@ -128,6 +128,21 @@ def format_history_for_chatgpt(history):
     return ChatGPTProvider.format_history(history)
 
 
+def _get_provider_name_from_model(model_name):
+    """Get provider name from model name
+
+    Args:
+        model_name: Model identifier
+
+    Returns:
+        str: Provider name ("gemini" or "chatgpt")
+    """
+    model_lower = model_name.lower()
+    if "gpt" in model_lower or "chatgpt" in model_lower:
+        return "chatgpt"
+    return "gemini"
+
+
 def _estimate_tokens(text):
     """Estimate token count for mixed English/Japanese text
 
@@ -179,11 +194,7 @@ def get_token_info(text, model_name, history=None):
     from multi_llm_chat.llm_provider import get_provider
 
     # Determine provider from model name
-    model_lower = model_name.lower()
-    if "gpt" in model_lower or "chatgpt" in model_lower:
-        provider_name = "chatgpt"
-    else:
-        provider_name = "gemini"
+    provider_name = _get_provider_name_from_model(model_name)
 
     # Get provider and delegate token calculation with actual model name
     provider = get_provider(provider_name)
@@ -292,7 +303,7 @@ def extract_text_from_chunk(chunk, model_name):
     from multi_llm_chat.llm_provider import get_provider
 
     try:
-        provider_name = "gemini" if "gemini" in model_name.lower() else "chatgpt"
+        provider_name = _get_provider_name_from_model(model_name)
         provider = get_provider(provider_name)
         return provider.extract_text_from_chunk(chunk)
     except Exception:
@@ -338,11 +349,7 @@ def calculate_tokens(text, model_name):
     from multi_llm_chat.llm_provider import get_provider
 
     # Determine provider from model name
-    model_lower = model_name.lower()
-    if "gpt" in model_lower or "chatgpt" in model_lower:
-        provider_name = "chatgpt"
-    else:
-        provider_name = "gemini"
+    provider_name = _get_provider_name_from_model(model_name)
 
     # Get provider and calculate tokens for single message with actual model name
     provider = get_provider(provider_name)

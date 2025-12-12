@@ -393,8 +393,9 @@ class ChatGPTProvider(LLMProvider):
         # Use provided model name or fall back to default
         effective_model = model_name if model_name else CHATGPT_MODEL
         token_count = 0
+        use_estimation = not TIKTOKEN_AVAILABLE
 
-        # Use tiktoken for accurate counting if available
+        # Try tiktoken for accurate counting if available
         if TIKTOKEN_AVAILABLE:
             try:
                 # Map model name to tiktoken encoding
@@ -422,16 +423,10 @@ class ChatGPTProvider(LLMProvider):
 
             except Exception:
                 # Fall back to estimation if tiktoken fails
-                buffer_factor = _get_buffer_factor()
-                token_count = int(_estimate_tokens(text) * buffer_factor)
-                if history:
-                    for entry in history:
-                        if entry.get("role") in {"user", "chatgpt"}:
-                            token_count += int(
-                                _estimate_tokens(entry.get("content", "")) * buffer_factor
-                            )
-        else:
-            # Use estimation with buffer
+                use_estimation = True
+
+        # Use estimation with buffer (if tiktoken unavailable or failed)
+        if use_estimation:
             buffer_factor = _get_buffer_factor()
             token_count = int(_estimate_tokens(text) * buffer_factor)
             if history:

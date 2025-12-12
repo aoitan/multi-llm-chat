@@ -66,6 +66,24 @@ class ChatService:
         self.logic_history = logic_history if logic_history is not None else []
         self.system_prompt = system_prompt
 
+    def _handle_api_error(self, error, provider_name):
+        """Handle API errors in a consistent way
+
+        Args:
+            error: Exception that occurred
+            provider_name: Name of the provider ("gemini" or "chatgpt")
+        """
+        provider_title = provider_name.capitalize()
+        if isinstance(error, ValueError):
+            # API key errors
+            error_msg = f"[System: エラー - {str(error)}]"
+        else:
+            # Other API errors (network, blocked prompts, etc.)
+            error_msg = f"[System: {provider_title} APIエラー - {str(error)}]"
+
+        self.display_history[-1][1] = f"**{provider_title}:**\n{error_msg}"
+        self.logic_history.append({"role": provider_name, "content": error_msg})
+
     def process_message(self, user_message):
         """Process user message and generate LLM responses
 
@@ -117,16 +135,8 @@ class ChatService:
                     self.display_history[-1][1] = (
                         "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
                     )
-            except ValueError as e:
-                # Handle API key errors gracefully
-                error_msg = f"[System: エラー - {str(e)}]"
-                self.display_history[-1][1] = f"**Gemini:**\n{error_msg}"
-                self.logic_history.append({"role": "gemini", "content": error_msg})
-            except Exception as e:
-                # Handle network errors, blocked prompts, and other API errors
-                error_msg = f"[System: Gemini APIエラー - {str(e)}]"
-                self.display_history[-1][1] = f"**Gemini:**\n{error_msg}"
-                self.logic_history.append({"role": "gemini", "content": error_msg})
+            except (ValueError, Exception) as e:
+                self._handle_api_error(e, "gemini")
 
             yield self.display_history, self.logic_history
 
@@ -159,16 +169,8 @@ class ChatService:
                     self.display_history[-1][1] = (
                         "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
                     )
-            except ValueError as e:
-                # Handle API key errors gracefully
-                error_msg = f"[System: エラー - {str(e)}]"
-                self.display_history[-1][1] = f"**ChatGPT:**\n{error_msg}"
-                self.logic_history.append({"role": "chatgpt", "content": error_msg})
-            except Exception as e:
-                # Handle network errors, blocked prompts, and other API errors
-                error_msg = f"[System: ChatGPT APIエラー - {str(e)}]"
-                self.display_history[-1][1] = f"**ChatGPT:**\n{error_msg}"
-                self.logic_history.append({"role": "chatgpt", "content": error_msg})
+            except (ValueError, Exception) as e:
+                self._handle_api_error(e, "chatgpt")
 
             yield self.display_history, self.logic_history
 
