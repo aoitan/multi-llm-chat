@@ -136,71 +136,67 @@ def test_format_history_for_chatgpt():
 
 
 def test_call_gemini_api_with_system_prompt():
-    """call_gemini_api should pass system_prompt to cached model"""
+    """call_gemini_api should delegate to GeminiProvider with system prompt"""
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.core._get_gemini_model") as mock_get_model:
-        mock_instance = Mock()
-        mock_instance.generate_content.return_value = iter([Mock(text="Response")])
-        mock_get_model.return_value = mock_instance
+    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+        mock_provider = Mock()
+        mock_provider.call_api.return_value = iter([Mock(text="Response")])
+        mock_get_provider.return_value = mock_provider
 
         list(core.call_gemini_api(history, system_prompt))
 
-        mock_get_model.assert_called_once_with(system_prompt)
+        mock_get_provider.assert_called_once_with("gemini")
+        mock_provider.call_api.assert_called_once_with(history, system_prompt)
 
 
 def test_call_gemini_api_without_system_prompt():
-    """call_gemini_api should use cached model when no system_prompt"""
+    """call_gemini_api should delegate to GeminiProvider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.core._get_gemini_model") as mock_get_model:
-        mock_model = Mock()
-        mock_model.generate_content.return_value = iter([Mock(text="Response")])
-        mock_get_model.return_value = mock_model
+    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+        mock_provider = Mock()
+        mock_provider.call_api.return_value = iter([Mock(text="Response")])
+        mock_get_provider.return_value = mock_provider
 
         list(core.call_gemini_api(history))
 
-        mock_get_model.assert_called_once_with(None)
+        mock_get_provider.assert_called_once_with("gemini")
+        mock_provider.call_api.assert_called_once_with(history, None)
 
 
 def test_call_chatgpt_api_with_system_prompt():
-    """call_chatgpt_api should prepend system message to history"""
+    """call_chatgpt_api should delegate to ChatGPTProvider with system prompt"""
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.core._get_openai_client") as mock_get_client:
-        mock_client = Mock()
+    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+        mock_provider = Mock()
         mock_stream = Mock()
-        mock_stream.model_dump.return_value = {}
-        mock_client.chat.completions.create.return_value = iter([mock_stream])
-        mock_get_client.return_value = mock_client
+        mock_provider.call_api.return_value = iter([mock_stream])
+        mock_get_provider.return_value = mock_provider
 
         list(core.call_chatgpt_api(history, system_prompt))
 
-        call_args = mock_client.chat.completions.create.call_args
-        messages = call_args[1]["messages"]
-        assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == system_prompt
-        assert messages[1]["role"] == "user"
+        mock_get_provider.assert_called_once_with("chatgpt")
+        mock_provider.call_api.assert_called_once_with(history, system_prompt)
 
 
 def test_call_chatgpt_api_without_system_prompt():
-    """call_chatgpt_api should not add system message when no system_prompt"""
+    """call_chatgpt_api should delegate to ChatGPTProvider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.core._get_openai_client") as mock_get_client:
-        mock_client = Mock()
+    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+        mock_provider = Mock()
         mock_stream = Mock()
-        mock_client.chat.completions.create.return_value = iter([mock_stream])
-        mock_get_client.return_value = mock_client
+        mock_provider.call_api.return_value = iter([mock_stream])
+        mock_get_provider.return_value = mock_provider
 
         list(core.call_chatgpt_api(history))
 
-        call_args = mock_client.chat.completions.create.call_args
-        messages = call_args[1]["messages"]
-        assert messages[0]["role"] == "user"
-        assert len(messages) == 1
+        mock_get_provider.assert_called_once_with("chatgpt")
+        mock_provider.call_api.assert_called_once_with(history, None)
 
 
 def test_format_history_for_chatgpt_preserves_system_role():
@@ -323,16 +319,27 @@ def test_extract_text_from_chunk_chatgpt_list():
 
 
 def test_extract_text_from_chunk_fallback():
-    """extract_text_from_chunk should fall back to string representation"""
-    # Test with plain string
-    chunk = "Plain string chunk"
-    result = core.extract_text_from_chunk(chunk, "gemini")
-    assert result == "Plain string chunk"
+    """extract_text_from_chunk should delegate to provider and fall back to string"""
+    # Test with plain string (fallback case - provider fails, falls back to string)
+    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+        mock_provider = Mock()
+        # Provider fails to extract, triggering fallback
+        mock_provider.extract_text_from_chunk.side_effect = Exception("extraction failed")
+        mock_get_provider.return_value = mock_provider
+
+        chunk = "Plain string chunk"
+        result = core.extract_text_from_chunk(chunk, "gemini")
+        assert result == "Plain string chunk"
 
     # Test with invalid chunk (should return empty string)
-    chunk = type("Invalid", (), {})()
-    result = core.extract_text_from_chunk(chunk, "gemini")
-    assert result == ""
+    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+        mock_provider = Mock()
+        mock_provider.extract_text_from_chunk.side_effect = Exception("extraction failed")
+        mock_get_provider.return_value = mock_provider
+
+        chunk = type("Invalid", (), {})()
+        result = core.extract_text_from_chunk(chunk, "gemini")
+        assert result == ""
 
 
 def test_format_history_for_gemini_filters_chatgpt_responses():

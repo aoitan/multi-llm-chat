@@ -6,13 +6,13 @@ from .core import (
     OPENAI_API_KEY,
     call_chatgpt_api,
     call_gemini_api,
-    extract_text_from_chunk,
     format_history_for_chatgpt,
     format_history_for_gemini,
     list_gemini_models,
 )
 from .history import get_llm_response
 from .history import reset_history as _reset_history
+from .llm_provider import get_provider
 
 
 def parse_mention(message):
@@ -66,6 +66,24 @@ class ChatService:
         self.logic_history = logic_history if logic_history is not None else []
         self.system_prompt = system_prompt
 
+    def _handle_api_error(self, error, provider_name):
+        """Handle API errors in a consistent way
+
+        Args:
+            error: Exception that occurred
+            provider_name: Name of the provider ("gemini" or "chatgpt")
+        """
+        provider_title = provider_name.capitalize()
+        if isinstance(error, ValueError):
+            # API key errors
+            error_msg = f"[System: エラー - {str(error)}]"
+        else:
+            # Other API errors (network, blocked prompts, etc.)
+            error_msg = f"[System: {provider_title} APIエラー - {str(error)}]"
+
+        self.display_history[-1][1] = f"**{provider_title}:**\n{error_msg}"
+        self.logic_history.append({"role": provider_name, "content": error_msg})
+
     def process_message(self, user_message):
         """Process user message and generate LLM responses
 
@@ -98,21 +116,28 @@ class ChatService:
             gemini_label = ASSISTANT_LABELS["gemini"]
             self.display_history[-1][1] = gemini_label
             gemini_input_history = history_snapshot or self.logic_history
-            gemini_stream = call_gemini_api(gemini_input_history, self.system_prompt)
 
-            full_response = ""
-            for chunk in gemini_stream:
-                text = extract_text_from_chunk(chunk, "gemini")
-                if text:
-                    full_response += text
-                    self.display_history[-1][1] += text
-                    yield self.display_history, self.logic_history
+            try:
+                # Use provider abstraction
+                provider = get_provider("gemini")
+                gemini_stream = provider.call_api(gemini_input_history, self.system_prompt)
 
-            self.logic_history.append({"role": "gemini", "content": full_response})
-            if not full_response.strip():
-                self.display_history[-1][1] = (
-                    f"{gemini_label}[System: Geminiからの応答がありませんでした]"
-                )
+                full_response = ""
+                for chunk in gemini_stream:
+                    text = provider.extract_text_from_chunk(chunk)
+                    if text:
+                        full_response += text
+                        self.display_history[-1][1] += text
+                        yield self.display_history, self.logic_history
+
+                self.logic_history.append({"role": "gemini", "content": full_response})
+                if not full_response.strip():
+                    self.display_history[-1][1] = (
+                        "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
+                    )
+            except (ValueError, Exception) as e:
+                self._handle_api_error(e, "gemini")
+
             yield self.display_history, self.logic_history
 
         # Process ChatGPT
@@ -125,21 +150,28 @@ class ChatService:
                 self.display_history[-1][1] = chatgpt_label
 
             chatgpt_input_history = history_snapshot or self.logic_history
-            chatgpt_stream = call_chatgpt_api(chatgpt_input_history, self.system_prompt)
 
-            full_response = ""
-            for chunk in chatgpt_stream:
-                text = extract_text_from_chunk(chunk, "chatgpt")
-                if text:
-                    full_response += text
-                    self.display_history[-1][1] += text
-                    yield self.display_history, self.logic_history
+            try:
+                # Use provider abstraction
+                provider = get_provider("chatgpt")
+                chatgpt_stream = provider.call_api(chatgpt_input_history, self.system_prompt)
 
-            self.logic_history.append({"role": "chatgpt", "content": full_response})
-            if not full_response.strip():
-                self.display_history[-1][1] = (
-                    f"{chatgpt_label}[System: ChatGPTからの応答がありませんでした]"
-                )
+                full_response = ""
+                for chunk in chatgpt_stream:
+                    text = provider.extract_text_from_chunk(chunk)
+                    if text:
+                        full_response += text
+                        self.display_history[-1][1] += text
+                        yield self.display_history, self.logic_history
+
+                self.logic_history.append({"role": "chatgpt", "content": full_response})
+                if not full_response.strip():
+                    self.display_history[-1][1] = (
+                        "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
+                    )
+            except (ValueError, Exception) as e:
+                self._handle_api_error(e, "chatgpt")
+
             yield self.display_history, self.logic_history
 
     def set_system_prompt(self, prompt):

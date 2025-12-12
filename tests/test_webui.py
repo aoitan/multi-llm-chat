@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import multi_llm_chat.webui as webui
 
@@ -103,8 +103,14 @@ def test_system_prompt_included_in_chat():
     """Chat function should include system prompt when calling LLM"""
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.chat_logic.call_gemini_api") as mock_api:
-        mock_api.return_value = iter([type("Chunk", (), {"text": "Response"})()])
+    with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+        # Create mock provider with response
+        mock_provider = MagicMock()
+        mock_chunk = MagicMock()
+        mock_chunk.text = "Response"
+        mock_provider.call_api.return_value = iter([mock_chunk])
+        mock_provider.extract_text_from_chunk.return_value = "Response"
+        mock_get_provider.return_value = mock_provider
 
         # Simulate calling respond function
         user_message = "@gemini Hello"
@@ -119,12 +125,15 @@ def test_system_prompt_included_in_chat():
         for _ in result_gen:
             pass
 
-        # Verify that call_gemini_api was called with system_prompt
-        mock_api.assert_called()
-        call_args = mock_api.call_args
-        # System prompt is passed as second positional argument
-        assert len(call_args.args) == 2
-        assert call_args.args[1] == system_prompt
+        # Verify that get_provider was called for gemini
+        mock_get_provider.assert_called_with("gemini")
+        # Verify that call_api was called with system_prompt
+        mock_provider.call_api.assert_called_once()
+        # Check that system_prompt was passed (as second positional argument)
+        call_args = mock_provider.call_api.call_args
+        # call_args[0] is the tuple of positional arguments
+        assert len(call_args[0]) == 2  # (history, system_prompt)
+        assert call_args[0][1] == system_prompt  # Second arg is system_prompt
 
 
 # Task 017-A-1: WebUI 履歴パネルUIの構築

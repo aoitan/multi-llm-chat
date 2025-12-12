@@ -297,18 +297,17 @@ def test_get_token_info_applies_buffer_for_gemini():
 
 
 def test_calculate_tokens_invalid_buffer_factor():
-    """calculate_tokens should handle invalid buffer factor gracefully"""
+    """calculate_tokens should handle invalid buffer factor gracefully
+
+    Note: TOKEN_ESTIMATION_BUFFER_FACTOR is no longer used by provider implementation.
+    This test ensures calculate_tokens() wrapper works correctly regardless of env vars.
+    """
     text = "Test message"
 
     with patch.dict(os.environ, {"TOKEN_ESTIMATION_BUFFER_FACTOR": "invalid"}):
-        with patch("logging.warning") as mock_warning:
-            # Should not crash, should use default 1.2
-            result = core.calculate_tokens(text, "gemini-1.5-pro")
-
-            assert result > 0
-            # Should log warning
-            mock_warning.assert_called_once()
-            assert "TOKEN_ESTIMATION_BUFFER_FACTOR" in str(mock_warning.call_args)
+        # Should not crash, delegates to provider which uses fixed 1.2 buffer
+        result = core.calculate_tokens(text, "gemini-1.5-pro")
+        assert result > 0
 
 
 def test_chatgpt_token_count_includes_message_overhead():
