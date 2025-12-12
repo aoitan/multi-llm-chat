@@ -180,7 +180,7 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
 
         def create_mock_provider(provider_name):
             mock_provider = MagicMock()
-            
+
             def capture_call_api(history, system_prompt=None):
                 captured_histories.append((provider_name, [h.copy() for h in history]))
                 mock_chunk = MagicMock()
@@ -192,14 +192,14 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
                     mock_chunk.choices[0].delta.content = "ChatGPT"
                     mock_provider.extract_text_from_chunk.return_value = "ChatGPT"
                 return iter([mock_chunk])
-            
+
             mock_provider.call_api.side_effect = capture_call_api
             return mock_provider
 
         # Return different providers for each call
         mock_get_provider.side_effect = [
             create_mock_provider("gemini"),
-            create_mock_provider("chatgpt")
+            create_mock_provider("chatgpt"),
         ]
 
         service = ChatService()
@@ -242,6 +242,78 @@ class TestChatServiceSystemPrompt(unittest.TestCase):
         service.set_system_prompt("New prompt")
 
         assert service.system_prompt == "New prompt"
+
+
+class TestChatServiceErrorHandling(unittest.TestCase):
+    """Test error handling for LLM API failures"""
+
+    @patch("multi_llm_chat.chat_logic.get_provider")
+    def test_network_error_handling(self, mock_get_provider):
+        """Network errors should be caught and added to history as error message"""
+        mock_provider = MagicMock()
+        mock_provider.call_api.side_effect = ConnectionError("Network error")
+        mock_get_provider.return_value = mock_provider
+
+        service = ChatService()
+        results = list(service.process_message("@gemini hello"))
+
+        # Should yield error message
+        assert len(results) > 0
+        final_display, final_logic = results[-1]
+
+        # Error message should be in display history
+        assert len(final_display) == 1
+        assert "hello" in final_display[0][0]
+        assert "[System: Gemini APIエラー" in final_display[0][1]
+        assert "Network error" in final_display[0][1]
+
+    @patch("multi_llm_chat.chat_logic.get_provider")
+    def test_api_error_handling(self, mock_get_provider):
+        """API errors should be caught and added to history as error message"""
+        mock_provider = MagicMock()
+        mock_provider.call_api.side_effect = ValueError("API key missing")
+        mock_get_provider.return_value = mock_provider
+
+        service = ChatService()
+        results = list(service.process_message("@chatgpt test"))
+
+        # Should yield error message
+        assert len(results) > 0
+        final_display, final_logic = results[-1]
+
+        # Error message should be in display history
+        assert "[System: エラー" in final_display[0][1]
+        assert "API key missing" in final_display[0][1]
+
+    @patch("multi_llm_chat.chat_logic.get_provider")
+    def test_all_handles_partial_failure(self, mock_get_provider):
+        """@all should handle when one LLM succeeds and one fails"""
+        # Gemini succeeds, ChatGPT fails
+        mock_gemini = MagicMock()
+        mock_chunk = MagicMock()
+        mock_chunk.text = "Gemini response"
+        mock_gemini.call_api.return_value = iter([mock_chunk])
+        mock_gemini.extract_text_from_chunk.return_value = "Gemini response"
+
+        mock_chatgpt = MagicMock()
+        mock_chatgpt.call_api.side_effect = RuntimeError("ChatGPT API error")
+
+        mock_get_provider.side_effect = [mock_gemini, mock_chatgpt]
+
+        service = ChatService()
+        results = list(service.process_message("@all hello"))
+
+        # Should get results
+        assert len(results) > 0
+        final_display, final_logic = results[-1]
+
+        # Should have Gemini success and ChatGPT error
+        assert len(final_display) >= 1
+        # Check that error message is present (with actual error format)
+        error_found = any(
+            "[System:" in msg[1] and "エラー" in msg[1] for msg in final_display if msg[1]
+        )
+        assert error_found
 
 
 if __name__ == "__main__":

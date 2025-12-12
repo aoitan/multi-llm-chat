@@ -5,13 +5,13 @@ import multi_llm_chat.cli as cli
 
 def _create_mock_provider(response_text, provider_type="gemini"):
     """Create a mock LLM provider that returns the given response text
-    
+
     Args:
         response_text: The text response to return
         provider_type: 'gemini' or 'chatgpt' to determine chunk format
     """
     mock_provider = MagicMock()
-    
+
     if provider_type == "gemini":
         # Gemini-style chunks with .text attribute
         mock_chunk = MagicMock()
@@ -25,7 +25,7 @@ def _create_mock_provider(response_text, provider_type="gemini"):
         mock_chunk.choices[0].delta.content = response_text
         mock_provider.call_api.return_value = iter([mock_chunk])
         mock_provider.extract_text_from_chunk.return_value = response_text
-    
+
     return mock_provider
 
 
@@ -162,7 +162,7 @@ def test_mention_routing():
                 mock_gemini = _create_mock_provider("Mocked Gemini Response", "gemini")
                 mock_get_provider.return_value = mock_gemini
                 history, _ = cli.main()
-                
+
                 # Verify Gemini provider was created
                 mock_get_provider.assert_called_with("gemini")
                 assert history[-1]["role"] == "gemini"
@@ -175,7 +175,7 @@ def test_mention_routing():
                 mock_chatgpt = _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
                 mock_get_provider.return_value = mock_chatgpt
                 history, _ = cli.main()
-                
+
                 # Verify ChatGPT provider was created
                 mock_get_provider.assert_called_with("chatgpt")
                 assert history[-1]["role"] == "chatgpt"
@@ -191,10 +191,10 @@ def test_mention_routing():
                         return _create_mock_provider("Mocked Gemini Response", "gemini")
                     elif provider_name == "chatgpt":
                         return _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
-                
+
                 mock_get_provider.side_effect = provider_factory
                 history, _ = cli.main()
-                
+
                 # @all should call both providers
                 assert mock_get_provider.call_count == 2
                 assert history[-2]["role"] == "gemini"
@@ -207,7 +207,7 @@ def test_mention_routing():
         with patch("builtins.print"):
             with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
                 history, _ = cli.main()
-                
+
                 # No provider should be called for memo input
                 assert not mock_get_provider.called
                 assert history[-1]["role"] == "user"

@@ -104,6 +104,28 @@ class TestChatGPTProvider(unittest.TestCase):
         result = provider.extract_text_from_chunk(chunk)
         assert result == "Hello, world!"
 
+    def test_extract_text_from_chunk_list_format(self):
+        """ChatGPTProvider should handle list format in delta.content"""
+        provider = ChatGPTProvider()
+        chunk = MagicMock()
+        chunk.choices = [MagicMock()]
+        # Simulate list format response (e.g., from function calls)
+        chunk.choices[0].delta.content = ["Part 1", "Part 2"]
+
+        result = provider.extract_text_from_chunk(chunk)
+        # Should join list elements without space to preserve JSON structure
+        assert result == "Part 1Part 2"
+
+    def test_extract_text_from_chunk_none_content(self):
+        """ChatGPTProvider should return empty string for None content"""
+        provider = ChatGPTProvider()
+        chunk = MagicMock()
+        chunk.choices = [MagicMock()]
+        chunk.choices[0].delta.content = None
+
+        result = provider.extract_text_from_chunk(chunk)
+        assert result == ""
+
     def test_get_token_info_returns_dict(self):
         """ChatGPTProvider should return token info dictionary"""
         provider = ChatGPTProvider()
@@ -112,3 +134,25 @@ class TestChatGPTProvider(unittest.TestCase):
         assert isinstance(result, dict)
         assert "input_tokens" in result
         assert "max_tokens" in result
+
+
+class TestProviderCaching(unittest.TestCase):
+    """Test provider instance caching"""
+
+    def test_get_provider_caches_instances(self):
+        """get_provider should return same instance for same provider name"""
+        provider1 = get_provider("gemini")
+        provider2 = get_provider("gemini")
+
+        # Should return the same cached instance
+        assert provider1 is provider2
+
+    def test_get_provider_different_providers(self):
+        """get_provider should return different instances for different providers"""
+        gemini_provider = get_provider("gemini")
+        chatgpt_provider = get_provider("chatgpt")
+
+        # Should return different instances
+        assert gemini_provider is not chatgpt_provider
+        assert isinstance(gemini_provider, GeminiProvider)
+        assert isinstance(chatgpt_provider, ChatGPTProvider)

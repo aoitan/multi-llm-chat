@@ -90,7 +90,7 @@ class ChatService:
         if mention in ["gemini", "all"]:
             self.display_history[-1][1] = "**Gemini:**\n"
             gemini_input_history = history_snapshot or self.logic_history
-            
+
             try:
                 # Use provider abstraction
                 provider = get_provider("gemini")
@@ -114,7 +114,12 @@ class ChatService:
                 error_msg = f"[System: エラー - {str(e)}]"
                 self.display_history[-1][1] = f"**Gemini:**\n{error_msg}"
                 self.logic_history.append({"role": "gemini", "content": error_msg})
-            
+            except Exception as e:
+                # Handle network errors, blocked prompts, and other API errors
+                error_msg = f"[System: Gemini APIエラー - {str(e)}]"
+                self.display_history[-1][1] = f"**Gemini:**\n{error_msg}"
+                self.logic_history.append({"role": "gemini", "content": error_msg})
+
             yield self.display_history, self.logic_history
 
         # Process ChatGPT
@@ -126,7 +131,7 @@ class ChatService:
                 self.display_history[-1][1] = "**ChatGPT:**\n"
 
             chatgpt_input_history = history_snapshot or self.logic_history
-            
+
             try:
                 # Use provider abstraction
                 provider = get_provider("chatgpt")
@@ -150,7 +155,12 @@ class ChatService:
                 error_msg = f"[System: エラー - {str(e)}]"
                 self.display_history[-1][1] = f"**ChatGPT:**\n{error_msg}"
                 self.logic_history.append({"role": "chatgpt", "content": error_msg})
-            
+            except Exception as e:
+                # Handle network errors, blocked prompts, and other API errors
+                error_msg = f"[System: ChatGPT APIエラー - {str(e)}]"
+                self.display_history[-1][1] = f"**ChatGPT:**\n{error_msg}"
+                self.logic_history.append({"role": "chatgpt", "content": error_msg})
+
             yield self.display_history, self.logic_history
 
     def set_system_prompt(self, prompt):

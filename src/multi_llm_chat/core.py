@@ -110,40 +110,23 @@ def _get_openai_client():
 def format_history_for_gemini(history):
     """Convert history to Gemini API format
 
-    Filters out responses from other LLMs (e.g., ChatGPT) to avoid
-    sending Gemini messages it didn't generate, which would create
-    a self-contradictory conversation.
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should use GeminiProvider.format_history() directly.
     """
-    gemini_history = []
-    for entry in history:
-        role = entry["role"]
-        # Only include user messages and Gemini's own responses
-        if role == "user":
-            gemini_history.append({"role": "user", "parts": [entry["content"]]})
-        elif role == "gemini":
-            gemini_history.append({"role": "model", "parts": [entry["content"]]})
-        # Skip chatgpt, system, and other roles - they shouldn't be sent to Gemini
-    return gemini_history
+    from multi_llm_chat.llm_provider import GeminiProvider
+
+    return GeminiProvider.format_history(history)
 
 
 def format_history_for_chatgpt(history):
     """Convert history to ChatGPT API format
 
-    Filters out responses from other LLMs (e.g., Gemini) to avoid
-    sending ChatGPT messages it didn't generate, which would create
-    a self-contradictory conversation.
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should use ChatGPTProvider.format_history() directly.
     """
-    chatgpt_history = []
-    for entry in history:
-        role = entry["role"]
-        if role == "system":
-            chatgpt_history.append({"role": "system", "content": entry["content"]})
-        elif role == "user":
-            chatgpt_history.append({"role": "user", "content": entry["content"]})
-        elif role == "chatgpt":
-            chatgpt_history.append({"role": "assistant", "content": entry["content"]})
-        # Skip gemini and other roles - they shouldn't be sent to ChatGPT
-    return chatgpt_history
+    from multi_llm_chat.llm_provider import ChatGPTProvider
+
+    return ChatGPTProvider.format_history(history)
 
 
 def _estimate_tokens(text):
@@ -258,21 +241,18 @@ def list_gemini_models():
 
 
 def call_gemini_api(history, system_prompt=None):
-    """Call Gemini API with optional system prompt"""
-    # Use cached model with system prompt
-    model = _get_gemini_model(system_prompt)
+    """Call Gemini API with optional system prompt
 
-    if not model:
-        yield ("Gemini API Error: GOOGLE_API_KEY not found in environment variables or .env file.")
-        return
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should use llm_provider.get_provider("gemini") instead.
+    """
+    from multi_llm_chat.llm_provider import get_provider
 
     try:
-        gemini_history = format_history_for_gemini(history)
-        response_stream = model.generate_content(gemini_history, stream=True)
-        for chunk in response_stream:
-            yield chunk
-    except genai.types.BlockedPromptException as e:
-        yield f"Gemini API Error: Prompt was blocked due to safety concerns. Details: {e}"
+        provider = get_provider("gemini")
+        yield from provider.call_api(history, system_prompt)
+    except ValueError as e:
+        yield f"Gemini API Error: {e}"
     except Exception as e:
         error_msg = f"Gemini API Error: An unexpected error occurred: {e}"
         print(error_msg)
@@ -285,23 +265,18 @@ def call_gemini_api(history, system_prompt=None):
 
 
 def call_chatgpt_api(history, system_prompt=None):
-    """Call ChatGPT API with optional system prompt"""
+    """Call ChatGPT API with optional system prompt
+
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should use llm_provider.get_provider("chatgpt") instead.
+    """
+    from multi_llm_chat.llm_provider import get_provider
+
     try:
-        client = _get_openai_client()
-        if client is None:
-            yield "ChatGPT API Error: OPENAI_API_KEYが設定されていません。"
-            return
-
-        # Use prepare_request to create the base history
-        prepared_history = prepare_request(history, system_prompt, "chatgpt")
-        # Format the entire history for the API
-        formatted_history = format_history_for_chatgpt(prepared_history)
-
-        response_stream = client.chat.completions.create(
-            model=CHATGPT_MODEL, messages=formatted_history, stream=True
-        )
-        for chunk in response_stream:
-            yield chunk
+        provider = get_provider("chatgpt")
+        yield from provider.call_api(history, system_prompt)
+    except ValueError as e:
+        yield f"ChatGPT API Error: {e}"
     except openai.APIError as e:
         yield f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
     except openai.APITimeoutError as e:
@@ -315,7 +290,8 @@ def call_chatgpt_api(history, system_prompt=None):
 def extract_text_from_chunk(chunk, model_name):
     """Extract text content from API response chunk
 
-    Handles different response formats from Gemini and ChatGPT APIs.
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should use provider.extract_text_from_chunk() directly.
 
     Args:
         chunk: Response chunk from LLM API
@@ -324,25 +300,17 @@ def extract_text_from_chunk(chunk, model_name):
     Returns:
         Extracted text string, or empty string if extraction fails
     """
-    text = ""
+    from multi_llm_chat.llm_provider import get_provider
+
     try:
-        if model_name == "gemini":
-            text = chunk.text
-        elif model_name == "chatgpt":
-            delta_content = chunk.choices[0].delta.content
-            # Handle both string and list responses from OpenAI API
-            if isinstance(delta_content, list):
-                text = "".join(
-                    part.text if hasattr(part, "text") else str(part) for part in delta_content
-                )
-            elif delta_content is not None:
-                text = delta_content
-    except (AttributeError, IndexError, TypeError, ValueError):
+        provider_name = "gemini" if "gemini" in model_name.lower() else "chatgpt"
+        provider = get_provider(provider_name)
+        return provider.extract_text_from_chunk(chunk)
+    except Exception:
         # Fallback: treat chunk as string if extraction fails
         if isinstance(chunk, str):
-            text = chunk
-
-    return text
+            return chunk
+        return ""
 
 
 # Context compression and token guard rail functions
