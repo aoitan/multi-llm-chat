@@ -74,12 +74,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         """Should call Gemini API for @gemini mention"""
         # Setup mock provider
         mock_provider = MagicMock()
-        mock_chunk1 = MagicMock()
-        mock_chunk1.text = "Test "
-        mock_chunk2 = MagicMock()
-        mock_chunk2.text = "response"
-        mock_provider.call_api.return_value = iter([mock_chunk1, mock_chunk2])
-        mock_provider.extract_text_from_chunk.side_effect = lambda chunk: chunk.text
+        mock_provider.stream_text_events.return_value = iter(["Test ", "response"])
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
@@ -100,14 +95,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         """Should call ChatGPT API for @chatgpt mention"""
         # Setup mock provider
         mock_provider = MagicMock()
-        mock_chunk1 = MagicMock()
-        mock_chunk1.choices = [MagicMock()]
-        mock_chunk1.choices[0].delta.content = "Hello "
-        mock_chunk2 = MagicMock()
-        mock_chunk2.choices = [MagicMock()]
-        mock_chunk2.choices[0].delta.content = "world"
-        mock_provider.call_api.return_value = iter([mock_chunk1, mock_chunk2])
-        mock_provider.extract_text_from_chunk.side_effect = ["Hello ", "world"]
+        mock_provider.stream_text_events.return_value = iter(["Hello ", "world"])
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
@@ -124,17 +112,10 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         """Should call both APIs for @all mention"""
         # Setup mock providers for both calls
         mock_gemini_provider = MagicMock()
-        mock_gemini_chunk = MagicMock()
-        mock_gemini_chunk.text = "Gemini response"
-        mock_gemini_provider.call_api.return_value = iter([mock_gemini_chunk])
-        mock_gemini_provider.extract_text_from_chunk.return_value = "Gemini response"
+        mock_gemini_provider.stream_text_events.return_value = iter(["Gemini response"])
 
         mock_chatgpt_provider = MagicMock()
-        mock_chatgpt_chunk = MagicMock()
-        mock_chatgpt_chunk.choices = [MagicMock()]
-        mock_chatgpt_chunk.choices[0].delta.content = "ChatGPT response"
-        mock_chatgpt_provider.call_api.return_value = iter([mock_chatgpt_chunk])
-        mock_chatgpt_provider.extract_text_from_chunk.return_value = "ChatGPT response"
+        mock_chatgpt_provider.stream_text_events.return_value = iter(["ChatGPT response"])
 
         # Return different providers for gemini and chatgpt
         mock_create_provider.side_effect = [mock_gemini_provider, mock_chatgpt_provider]
@@ -181,19 +162,11 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
         def create_mock_provider(provider_name):
             mock_provider = MagicMock()
 
-            def capture_call_api(history, system_prompt=None):
+            def capture_stream(history, system_prompt=None):
                 captured_histories.append((provider_name, [h.copy() for h in history]))
-                mock_chunk = MagicMock()
-                if provider_name == "gemini":
-                    mock_chunk.text = "Gemini"
-                    mock_provider.extract_text_from_chunk.return_value = "Gemini"
-                else:
-                    mock_chunk.choices = [MagicMock()]
-                    mock_chunk.choices[0].delta.content = "ChatGPT"
-                    mock_provider.extract_text_from_chunk.return_value = "ChatGPT"
-                return iter([mock_chunk])
+                return iter(["Gemini" if provider_name == "gemini" else "ChatGPT"])
 
-            mock_provider.call_api.side_effect = capture_call_api
+            mock_provider.stream_text_events.side_effect = capture_stream
             return mock_provider
 
         # Return different providers for each call
@@ -223,17 +196,14 @@ class TestChatServiceSystemPrompt(unittest.TestCase):
     def test_system_prompt_passed_to_api(self, mock_create_provider):
         """System prompt should be passed to LLM API"""
         mock_provider = MagicMock()
-        mock_chunk = MagicMock()
-        mock_chunk.text = "Response"
-        mock_provider.call_api.return_value = iter([mock_chunk])
-        mock_provider.extract_text_from_chunk.return_value = "Response"
+        mock_provider.stream_text_events.return_value = iter(["Response"])
         mock_create_provider.return_value = mock_provider
 
         service = ChatService(system_prompt="You are a helpful assistant")
         list(service.process_message("@gemini hello"))
 
         # Check that system prompt was passed (2nd positional argument)
-        call_args = mock_provider.call_api.call_args
+        call_args = mock_provider.stream_text_events.call_args
         assert call_args[0][1] == "You are a helpful assistant"
 
     def test_update_system_prompt(self):
@@ -251,7 +221,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
     def test_network_error_handling(self, mock_create_provider):
         """Network errors should be caught and added to history as error message"""
         mock_provider = MagicMock()
-        mock_provider.call_api.side_effect = ConnectionError("Network error")
+        mock_provider.stream_text_events.side_effect = ConnectionError("Network error")
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
@@ -271,7 +241,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
     def test_api_error_handling(self, mock_create_provider):
         """API errors should be caught and added to history as error message"""
         mock_provider = MagicMock()
-        mock_provider.call_api.side_effect = ValueError("API key missing")
+        mock_provider.stream_text_events.side_effect = ValueError("API key missing")
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
@@ -290,13 +260,10 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         """@all should handle when one LLM succeeds and one fails"""
         # Gemini succeeds, ChatGPT fails
         mock_gemini = MagicMock()
-        mock_chunk = MagicMock()
-        mock_chunk.text = "Gemini response"
-        mock_gemini.call_api.return_value = iter([mock_chunk])
-        mock_gemini.extract_text_from_chunk.return_value = "Gemini response"
+        mock_gemini.stream_text_events.return_value = iter(["Gemini response"])
 
         mock_chatgpt = MagicMock()
-        mock_chatgpt.call_api.side_effect = RuntimeError("ChatGPT API error")
+        mock_chatgpt.stream_text_events.side_effect = RuntimeError("ChatGPT API error")
 
         mock_create_provider.side_effect = [mock_gemini, mock_chatgpt]
 

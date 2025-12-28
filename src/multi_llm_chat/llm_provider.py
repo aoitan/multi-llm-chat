@@ -187,6 +187,21 @@ class LLMProvider(ABC):
         """
         pass
 
+    def stream_text_events(self, history, system_prompt=None):
+        """Stream normalized text events from provider-specific chunks.
+
+        Args:
+            history: List of conversation history dicts with 'role' and 'content'
+            system_prompt: Optional system instruction
+
+        Yields:
+            str: Text segments extracted from provider-specific chunks
+        """
+        for chunk in self.call_api(history, system_prompt):
+            text = self.extract_text_from_chunk(chunk)
+            if text:
+                yield text
+
 
 class GeminiProvider(LLMProvider):
     """Google Gemini LLM provider with thread-safe LRU caching for models"""

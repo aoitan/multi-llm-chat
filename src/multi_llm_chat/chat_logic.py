@@ -150,17 +150,13 @@ class ChatService:
 
             try:
                 # Use injected provider instance
-                gemini_stream = self.gemini_provider.call_api(
-                    gemini_input_history, self.system_prompt
-                )
-
                 full_response = ""
-                for chunk in gemini_stream:
-                    text = self.gemini_provider.extract_text_from_chunk(chunk)
-                    if text:
-                        full_response += text
-                        self.display_history[-1][1] += text
-                        yield self.display_history, self.logic_history
+                for text in self.gemini_provider.stream_text_events(
+                    gemini_input_history, self.system_prompt
+                ):
+                    full_response += text
+                    self.display_history[-1][1] += text
+                    yield self.display_history, self.logic_history
 
                 self.logic_history.append({"role": "gemini", "content": full_response})
                 if not full_response.strip():
@@ -185,17 +181,13 @@ class ChatService:
 
             try:
                 # Use injected provider instance
-                chatgpt_stream = self.chatgpt_provider.call_api(
-                    chatgpt_input_history, self.system_prompt
-                )
-
                 full_response = ""
-                for chunk in chatgpt_stream:
-                    text = self.chatgpt_provider.extract_text_from_chunk(chunk)
-                    if text:
-                        full_response += text
-                        self.display_history[-1][1] += text
-                        yield self.display_history, self.logic_history
+                for text in self.chatgpt_provider.stream_text_events(
+                    chatgpt_input_history, self.system_prompt
+                ):
+                    full_response += text
+                    self.display_history[-1][1] += text
+                    yield self.display_history, self.logic_history
 
                 self.logic_history.append({"role": "chatgpt", "content": full_response})
                 if not full_response.strip():
