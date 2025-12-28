@@ -455,13 +455,38 @@ class ChatGPTProvider(LLMProvider):
 # Provider registry
 _PROVIDERS = {"gemini": GeminiProvider, "chatgpt": ChatGPTProvider}
 
-# Cache provider instances for reuse
+# Cache provider instances for reuse (DEPRECATED: Use create_provider instead)
 _PROVIDER_INSTANCES = {}
 _provider_lock = threading.Lock()
 
 
+def create_provider(provider_name):
+    """Factory function to create a new provider instance
+
+    Creates a fresh provider instance for session-scoped usage.
+    Each call returns a new instance with isolated state (cache, clients).
+
+    Args:
+        provider_name: Name of the provider ('gemini', 'chatgpt', etc.)
+
+    Returns:
+        LLMProvider: New instance of the requested provider
+
+    Raises:
+        ValueError: If provider_name is not registered
+    """
+    if provider_name not in _PROVIDERS:
+        raise ValueError(f"Unknown LLM provider: {provider_name}")
+
+    provider_class = _PROVIDERS[provider_name]
+    return provider_class()
+
+
 def get_provider(provider_name):
     """Factory function to get a provider instance (thread-safe)
+
+    DEPRECATED: This function returns a global shared instance.
+    New code should use create_provider() for session-scoped providers.
 
     Returns cached instance if available to reuse API clients and models.
     Thread-safe for concurrent access in WebUI environment.

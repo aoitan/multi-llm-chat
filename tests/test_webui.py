@@ -103,14 +103,14 @@ def test_system_prompt_included_in_chat():
     """Chat function should include system prompt when calling LLM"""
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+    with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
         # Create mock provider with response
         mock_provider = MagicMock()
         mock_chunk = MagicMock()
         mock_chunk.text = "Response"
         mock_provider.call_api.return_value = iter([mock_chunk])
         mock_provider.extract_text_from_chunk.return_value = "Response"
-        mock_get_provider.return_value = mock_provider
+        mock_create_provider.return_value = mock_provider
 
         # Simulate calling respond function
         user_message = "@gemini Hello"
@@ -126,7 +126,7 @@ def test_system_prompt_included_in_chat():
             pass
 
         # Verify that get_provider was called for gemini
-        mock_get_provider.assert_called_with("gemini")
+        mock_create_provider.assert_called_with("gemini")
         # Verify that call_api was called with system_prompt
         mock_provider.call_api.assert_called_once()
         # Check that system_prompt was passed (as second positional argument)

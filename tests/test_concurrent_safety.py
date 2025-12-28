@@ -4,13 +4,15 @@ These tests verify that:
 1. Multiple threads can safely call Gemini with different system prompts
 2. ChatGPT client can handle concurrent requests
 3. Model cache operations are thread-safe
+4. Session-scoped providers are isolated from each other
 """
 
 import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
-from multi_llm_chat.llm_provider import ChatGPTProvider, GeminiProvider
+from multi_llm_chat.chat_logic import ChatService
+from multi_llm_chat.llm_provider import ChatGPTProvider, GeminiProvider, create_provider
 
 
 class TestGeminiConcurrentSafety(unittest.TestCase):
@@ -236,6 +238,90 @@ class TestChatGPTConcurrentSafety(unittest.TestCase):
         # Verify no errors
         self.assertEqual(len(errors), 0, f"Errors during concurrent requests: {errors}")
         self.assertEqual(len(results), 10, "Not all requests completed")
+
+
+class TestSessionScopedProviders(unittest.TestCase):
+    """Test session-scoped provider isolation"""
+
+    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
+    def test_session_isolated_providers(self, mock_genai):
+        """Test that different sessions have isolated provider instances"""
+        # Setup mock
+        mock_model_class = MagicMock()
+        mock_genai.GenerativeModel = mock_model_class
+
+        def create_mock_model(model_name, system_instruction=None):
+            mock_model = MagicMock()
+            # Each model has unique ID to track instance isolation
+            mock_model._test_id = id(mock_model)
+            mock_model.generate_content = MagicMock(return_value=iter([MagicMock(text="response")]))
+            return mock_model
+
+        mock_model_class.side_effect = create_mock_model
+
+        # Create two separate sessions (simulating two users)
+        session1_provider = create_provider("gemini")
+        session2_provider = create_provider("gemini")
+
+        # Verify they are different instances
+        self.assertIsNot(
+            session1_provider,
+            session2_provider,
+            "Sessions should have isolated provider instances",
+        )
+
+        # Verify each has independent cache
+        system_prompt = "You are a helpful assistant"
+
+        # Session 1 creates a model with this prompt
+        model1 = session1_provider._get_model(system_prompt)
+
+        # Session 2 creates a model with the same prompt
+        model2 = session2_provider._get_model(system_prompt)
+
+        # They should be different model instances (isolated caches)
+        self.assertIsNot(
+            model1,
+            model2,
+            "Each session should have its own cached models, not share them",
+        )
+
+    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
+    def test_provider_injection_in_chatservice(self, mock_genai):
+        """Test that ChatService accepts provider injection for DI"""
+        # Setup mock
+        mock_model_class = MagicMock()
+        mock_genai.GenerativeModel = mock_model_class
+
+        mock_model = MagicMock()
+        mock_model.generate_content = MagicMock(return_value=iter([MagicMock(text="response")]))
+        mock_model_class.return_value = mock_model
+
+        # Create a provider instance
+        provider_gemini = create_provider("gemini")
+
+        # Inject into ChatService
+        service = ChatService(gemini_provider=provider_gemini)
+
+        # Verify the service uses the injected provider
+        self.assertIs(
+            service.gemini_provider,
+            provider_gemini,
+            "ChatService should accept and use injected provider",
+        )
+
+        # Process a message to ensure it uses the injected provider
+        user_message = "@gemini Hello"
+        for _ in service.process_message(user_message):
+            pass
+
+        # Verify the injected provider's model was used
+        self.assertTrue(
+            mock_model.generate_content.called,
+            "Injected provider should be used for API calls",
+        )
 
 
 if __name__ == "__main__":
