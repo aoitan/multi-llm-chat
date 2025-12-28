@@ -344,9 +344,9 @@ def stream_text_events(history, provider_name, system_prompt=None):
     Yields:
         str: Normalized text chunks
     """
-    from multi_llm_chat.llm_provider import get_provider
+    from multi_llm_chat.llm_provider import create_provider
 
-    provider = get_provider(provider_name)
+    provider = create_provider(provider_name)
     yield from provider.stream_text_events(history, system_prompt)
 
 
