@@ -268,7 +268,7 @@ def _build_history_operation_updates(
     }
 
 
-def respond(user_message, display_history, logic_history, system_prompt, user_id):
+def respond(user_message, display_history, logic_history, system_prompt, user_id, chat_service):
     """
     ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
 
@@ -282,23 +282,30 @@ def respond(user_message, display_history, logic_history, system_prompt, user_id
         logic_history: Internal logic history
         system_prompt: System prompt text
         user_id: User ID (required - must not be empty)
+        chat_service: Session-scoped ChatService instance (from gr.State)
+
+    Yields:
+        tuple: (display_history, display_history, logic_history, chat_service)
     """
     # Validate user_id before processing
     if not user_id or not user_id.strip():
         # Return error message without calling LLM
         display_history.append([user_message, "[System: ユーザーIDを入力してください]"])
-        yield display_history, display_history, logic_history
+        yield display_history, display_history, logic_history, chat_service
         return
 
-    # Delegate to ChatService for business logic
-    service = ChatService(
-        display_history=display_history,
-        logic_history=logic_history,
-        system_prompt=system_prompt,
-    )
+    # Initialize or reuse ChatService (session-scoped for provider reuse)
+    # Reset service if history was cleared (e.g., new chat action)
+    if chat_service is None or not logic_history:
+        chat_service = ChatService()
 
-    for updated_display, updated_logic in service.process_message(user_message):
-        yield updated_display, updated_display, updated_logic
+    # Update service state with current histories and system prompt
+    chat_service.display_history = display_history
+    chat_service.logic_history = logic_history
+    chat_service.system_prompt = system_prompt
+
+    for updated_display, updated_logic in chat_service.process_message(user_message):
+        yield updated_display, updated_display, updated_logic, chat_service
 
 
 def check_history_buttons_enabled(user_id):
@@ -444,6 +451,9 @@ with gr.Blocks() as demo:
     # 履歴を管理するための非表示Stateコンポーネント
     display_history_state = gr.State([])
     logic_history_state = gr.State([])
+
+    # Session-scoped ChatService for provider reuse (Issue #58)
+    chat_service_state = gr.State(None)
 
     # UIコンポーネント
     chatbot_ui = gr.Chatbot(label="Conversation", height=600, show_copy_button=True)
@@ -866,8 +876,14 @@ with gr.Blocks() as demo:
         logic_history_state,
         system_prompt_input,
         user_id_input,
+        chat_service_state,
     ]
-    submit_outputs = [chatbot_ui, display_history_state, logic_history_state]
+    submit_outputs = [
+        chatbot_ui,
+        display_history_state,
+        logic_history_state,
+        chat_service_state,
+    ]
 
     # Update token display and send button state after response
     def update_token_and_button(user_id, logic, sys):

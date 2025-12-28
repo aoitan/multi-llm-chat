@@ -117,9 +117,14 @@ def test_system_prompt_included_in_chat():
         display_history = []
         logic_history = []
 
-        # Call respond with user_id
+        # Call respond with user_id and chat_service
         result_gen = webui.respond(
-            user_message, display_history, logic_history, system_prompt, user_id="test_user"
+            user_message,
+            display_history,
+            logic_history,
+            system_prompt,
+            user_id="test_user",
+            chat_service=None,
         )
         # Consume all yields
         for _ in result_gen:
@@ -262,7 +267,7 @@ def test_respond_rejects_empty_user_id():
 
     # Call respond with empty user_id
     result_gen = webui.respond(
-        user_message, display_history, logic_history, system_prompt, user_id=""
+        user_message, display_history, logic_history, system_prompt, user_id="", chat_service=None
     )
     # Consume all yields
     results = list(result_gen)
@@ -284,7 +289,12 @@ def test_respond_rejects_whitespace_user_id():
 
         # Call respond with whitespace user_id
         result_gen = webui.respond(
-            user_message, display_history, logic_history, system_prompt, user_id="   "
+            user_message,
+            display_history,
+            logic_history,
+            system_prompt,
+            user_id="   ",
+            chat_service=None,
         )
         results = list(result_gen)
 
