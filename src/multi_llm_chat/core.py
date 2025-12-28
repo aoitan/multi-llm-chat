@@ -191,13 +191,13 @@ def get_token_info(text, model_name, history=None):
     Returns:
         dict with token_count, max_context_length, and is_estimated
     """
-    from multi_llm_chat.llm_provider import get_provider
+    from multi_llm_chat.llm_provider import create_provider
 
     # Determine provider from model name
     provider_name = _get_provider_name_from_model(model_name)
 
-    # Get provider and delegate token calculation with actual model name
-    provider = get_provider(provider_name)
+    # Create new provider instance (no global state)
+    provider = create_provider(provider_name)
     result = provider.get_token_info(text, history, model_name=model_name)
 
     # Add is_estimated flag for backward compatibility
@@ -269,10 +269,10 @@ def call_gemini_api(history, system_prompt=None):
         stacklevel=2,
     )
 
-    from multi_llm_chat.llm_provider import get_provider
+    from multi_llm_chat.llm_provider import create_provider
 
     try:
-        provider = get_provider("gemini")
+        provider = create_provider("gemini")
         yield from provider.call_api(history, system_prompt)
     except ValueError as e:
         yield f"Gemini API Error: {e}"
@@ -316,10 +316,10 @@ def call_chatgpt_api(history, system_prompt=None):
         stacklevel=2,
     )
 
-    from multi_llm_chat.llm_provider import get_provider
+    from multi_llm_chat.llm_provider import create_provider
 
     try:
-        provider = get_provider("chatgpt")
+        provider = create_provider("chatgpt")
         yield from provider.call_api(history, system_prompt)
     except ValueError as e:
         yield f"ChatGPT API Error: {e}"
@@ -346,11 +346,11 @@ def extract_text_from_chunk(chunk, model_name):
     Returns:
         Extracted text string, or empty string if extraction fails
     """
-    from multi_llm_chat.llm_provider import get_provider
+    from multi_llm_chat.llm_provider import create_provider
 
     try:
         provider_name = _get_provider_name_from_model(model_name)
-        provider = get_provider(provider_name)
+        provider = create_provider(provider_name)
         return provider.extract_text_from_chunk(chunk)
     except Exception:
         # Fallback: treat chunk as string if extraction fails
@@ -392,13 +392,13 @@ def calculate_tokens(text, model_name):
     Returns:
         Token count (int)
     """
-    from multi_llm_chat.llm_provider import get_provider
+    from multi_llm_chat.llm_provider import create_provider
 
     # Determine provider from model name
     provider_name = _get_provider_name_from_model(model_name)
 
-    # Get provider and calculate tokens for single message with actual model name
-    provider = get_provider(provider_name)
+    # Create new provider and calculate tokens for single message with actual model name
+    provider = create_provider(provider_name)
     result = provider.get_token_info(text, history=None, model_name=model_name)
     return result["input_tokens"]
 

@@ -5,24 +5,51 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from multi_llm_chat.llm_provider import ChatGPTProvider, GeminiProvider, get_provider
+from multi_llm_chat.llm_provider import (
+    ChatGPTProvider,
+    GeminiProvider,
+    create_provider,
+    get_provider,
+)
 
 
 class TestLLMProviderFactory(unittest.TestCase):
-    """Test the provider factory function"""
+    """Test the provider factory functions"""
+
+    def test_create_provider_gemini(self):
+        """create_provider should return new GeminiProvider for 'gemini'"""
+        provider = create_provider("gemini")
+        assert isinstance(provider, GeminiProvider)
+
+    def test_create_provider_chatgpt(self):
+        """create_provider should return new ChatGPTProvider for 'chatgpt'"""
+        provider = create_provider("chatgpt")
+        assert isinstance(provider, ChatGPTProvider)
+
+    def test_create_provider_invalid(self):
+        """create_provider should raise ValueError for unknown provider"""
+        with pytest.raises(ValueError, match="Unknown LLM provider"):
+            create_provider("unknown")
+
+    def test_create_provider_returns_new_instances(self):
+        """create_provider should return new instance each time"""
+        provider1 = create_provider("gemini")
+        provider2 = create_provider("gemini")
+        # Should return different instances
+        assert provider1 is not provider2
 
     def test_get_provider_gemini(self):
-        """get_provider should return GeminiProvider for 'gemini'"""
+        """get_provider should return GeminiProvider for 'gemini' (DEPRECATED)"""
         provider = get_provider("gemini")
         assert isinstance(provider, GeminiProvider)
 
     def test_get_provider_chatgpt(self):
-        """get_provider should return ChatGPTProvider for 'chatgpt'"""
+        """get_provider should return ChatGPTProvider for 'chatgpt' (DEPRECATED)"""
         provider = get_provider("chatgpt")
         assert isinstance(provider, ChatGPTProvider)
 
     def test_get_provider_invalid(self):
-        """get_provider should raise ValueError for unknown provider"""
+        """get_provider should raise ValueError for unknown provider (DEPRECATED)"""
         with pytest.raises(ValueError, match="Unknown LLM provider"):
             get_provider("unknown")
 

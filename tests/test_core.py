@@ -140,14 +140,14 @@ def test_call_gemini_api_with_system_prompt():
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.call_api.return_value = iter([Mock(text="Response")])
-        mock_get_provider.return_value = mock_provider
+        mock_create_provider.return_value = mock_provider
 
         list(core.call_gemini_api(history, system_prompt))
 
-        mock_get_provider.assert_called_once_with("gemini")
+        mock_create_provider.assert_called_once_with("gemini")
         mock_provider.call_api.assert_called_once_with(history, system_prompt)
 
 
@@ -155,14 +155,14 @@ def test_call_gemini_api_without_system_prompt():
     """call_gemini_api should delegate to GeminiProvider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.call_api.return_value = iter([Mock(text="Response")])
-        mock_get_provider.return_value = mock_provider
+        mock_create_provider.return_value = mock_provider
 
         list(core.call_gemini_api(history))
 
-        mock_get_provider.assert_called_once_with("gemini")
+        mock_create_provider.assert_called_once_with("gemini")
         mock_provider.call_api.assert_called_once_with(history, None)
 
 
@@ -171,15 +171,15 @@ def test_call_chatgpt_api_with_system_prompt():
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_stream = Mock()
         mock_provider.call_api.return_value = iter([mock_stream])
-        mock_get_provider.return_value = mock_provider
+        mock_create_provider.return_value = mock_provider
 
         list(core.call_chatgpt_api(history, system_prompt))
 
-        mock_get_provider.assert_called_once_with("chatgpt")
+        mock_create_provider.assert_called_once_with("chatgpt")
         mock_provider.call_api.assert_called_once_with(history, system_prompt)
 
 
@@ -187,15 +187,15 @@ def test_call_chatgpt_api_without_system_prompt():
     """call_chatgpt_api should delegate to ChatGPTProvider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_stream = Mock()
         mock_provider.call_api.return_value = iter([mock_stream])
-        mock_get_provider.return_value = mock_provider
+        mock_create_provider.return_value = mock_provider
 
         list(core.call_chatgpt_api(history))
 
-        mock_get_provider.assert_called_once_with("chatgpt")
+        mock_create_provider.assert_called_once_with("chatgpt")
         mock_provider.call_api.assert_called_once_with(history, None)
 
 
@@ -321,21 +321,21 @@ def test_extract_text_from_chunk_chatgpt_list():
 def test_extract_text_from_chunk_fallback():
     """extract_text_from_chunk should delegate to provider and fall back to string"""
     # Test with plain string (fallback case - provider fails, falls back to string)
-    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
         mock_provider = Mock()
         # Provider fails to extract, triggering fallback
         mock_provider.extract_text_from_chunk.side_effect = Exception("extraction failed")
-        mock_get_provider.return_value = mock_provider
+        mock_create_provider.return_value = mock_provider
 
         chunk = "Plain string chunk"
         result = core.extract_text_from_chunk(chunk, "gemini")
         assert result == "Plain string chunk"
 
     # Test with invalid chunk (should return empty string)
-    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.extract_text_from_chunk.side_effect = Exception("extraction failed")
-        mock_get_provider.return_value = mock_provider
+        mock_create_provider.return_value = mock_provider
 
         chunk = type("Invalid", (), {})()
         result = core.extract_text_from_chunk(chunk, "gemini")
