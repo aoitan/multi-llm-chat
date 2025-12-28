@@ -319,6 +319,9 @@ def main():
     system_prompt = ""
     is_dirty = False
 
+    # Create session-scoped ChatService for provider reuse
+    service = ChatService()
+
     while True:
         prompt = input("> ").strip()
 
@@ -357,12 +360,10 @@ def main():
 
         # Use ChatService for message processing (Issue #62)
         # ChatService handles mention parsing, LLM routing, and history updates
-        # CLI display_history is not used (only logic_history for API format)
-        service = ChatService(
-            display_history=[],  # CLI doesn't use Gradio-style display history
-            logic_history=history,
-            system_prompt=system_prompt,
-        )
+        # Update service state with current history and system prompt
+        service.display_history = []  # CLI doesn't use Gradio-style display history
+        service.logic_history = history
+        service.system_prompt = system_prompt
 
         # Process message through ChatService and handle CLI-specific display
         _, history = _process_service_stream(service, prompt)

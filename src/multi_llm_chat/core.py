@@ -243,8 +243,16 @@ def list_gemini_models():
 def call_gemini_api(history, system_prompt=None):
     """Call Gemini API with optional system prompt
 
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use llm_provider.get_provider("gemini") instead.
+    DEPRECATED: This function uses a global shared provider instance which may cause
+    prompt pollution in concurrent environments (e.g., Gradio sessions).
+
+    New code should use:
+    - For session-scoped: ChatService with injected providers
+    - For one-off calls: llm_provider.create_provider("gemini")
+
+    WARNING: Using this in multi-user environments may result in:
+    - System prompt leaking between users
+    - Cached models being shared across sessions
     """
     from multi_llm_chat.llm_provider import get_provider
 
@@ -267,8 +275,16 @@ def call_gemini_api(history, system_prompt=None):
 def call_chatgpt_api(history, system_prompt=None):
     """Call ChatGPT API with optional system prompt
 
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use llm_provider.get_provider("chatgpt") instead.
+    DEPRECATED: This function uses a global shared provider instance which may cause
+    prompt pollution in concurrent environments (e.g., Gradio sessions).
+
+    New code should use:
+    - For session-scoped: ChatService with injected providers
+    - For one-off calls: llm_provider.create_provider("chatgpt")
+
+    WARNING: Using this in multi-user environments may result in:
+    - System prompt leaking between users
+    - Client instances being shared across sessions
     """
     from multi_llm_chat.llm_provider import get_provider
 
