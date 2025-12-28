@@ -49,8 +49,8 @@ def test_history_management_user_input():
     with patch("builtins.input", side_effect=test_inputs + ["exit"]):
         with patch("builtins.print"):  # Mock print to avoid console output
             # Mock API calls to control history length
-            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
-                mock_get_provider.return_value = _create_mock_provider("Mocked Gemini Response")
+            with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
+                mock_create_provider.return_value = _create_mock_provider("Mocked Gemini Response")
                 history = chat_logic.main()
 
             # Expected history: user, user, gemini, user
@@ -70,33 +70,49 @@ def test_mention_routing():
     # Test @gemini
     with patch("builtins.input", side_effect=["test-user", "@gemini hello", "exit"]):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+            with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
                 mock_gemini = _create_mock_provider("Mocked Gemini Response", "gemini")
-                mock_get_provider.return_value = mock_gemini
+                mock_chatgpt = _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
+
+                def provider_factory(provider_name):
+                    if provider_name == "gemini":
+                        return mock_gemini
+                    elif provider_name == "chatgpt":
+                        return mock_chatgpt
+
+                mock_create_provider.side_effect = provider_factory
                 history = chat_logic.main()
 
                 # Verify Gemini provider was created
-                mock_get_provider.assert_called_with("gemini")
+                assert any(call[0][0] == "gemini" for call in mock_create_provider.call_args_list)
                 assert history[-1]["role"] == "gemini"
                 assert history[-1]["content"] == "Mocked Gemini Response"
 
     # Test @chatgpt
     with patch("builtins.input", side_effect=["test-user", "@chatgpt hello", "exit"]):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+            with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
+                mock_gemini = _create_mock_provider("Mocked Gemini Response", "gemini")
                 mock_chatgpt = _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
-                mock_get_provider.return_value = mock_chatgpt
+
+                def provider_factory(provider_name):
+                    if provider_name == "gemini":
+                        return mock_gemini
+                    elif provider_name == "chatgpt":
+                        return mock_chatgpt
+
+                mock_create_provider.side_effect = provider_factory
                 history = chat_logic.main()
 
                 # Verify ChatGPT provider was created
-                mock_get_provider.assert_called_with("chatgpt")
+                assert any(call[0][0] == "chatgpt" for call in mock_create_provider.call_args_list)
                 assert history[-1]["role"] == "chatgpt"
                 assert history[-1]["content"] == "Mocked ChatGPT Response"
 
     # Test @all (calls both providers)
     with patch("builtins.input", side_effect=["test-user", "@all hello", "exit"]):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.chat_logic.get_provider") as mock_get_provider:
+            with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
                 # Create different responses for each provider
                 def provider_factory(provider_name):
                     if provider_name == "gemini":
@@ -104,11 +120,12 @@ def test_mention_routing():
                     elif provider_name == "chatgpt":
                         return _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
 
-                mock_get_provider.side_effect = provider_factory
+                mock_create_provider.side_effect = provider_factory
                 history = chat_logic.main()
 
-                # @all should call both providers
-                assert mock_get_provider.call_count == 2
+                # @all should call both providers (2 for ChatService init)
+                # ChatService creates both providers on initialization
+                assert mock_create_provider.call_count == 2
                 assert history[-2]["role"] == "gemini"
                 assert history[-2]["content"] == "Mocked Gemini Response"
                 assert history[-1]["role"] == "chatgpt"

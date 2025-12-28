@@ -12,7 +12,7 @@ from .core import (
 )
 from .history import get_llm_response
 from .history import reset_history as _reset_history
-from .llm_provider import get_provider
+from .llm_provider import create_provider
 
 
 def parse_mention(message):
@@ -48,23 +48,54 @@ class ChatService:
     independent of UI implementation. This allows both CLI and WebUI to share
     the same business logic without duplication.
 
+    Supports dependency injection of LLM providers for testing and session isolation.
+
     Attributes:
         display_history: UI-friendly history format [[user_msg, assistant_msg], ...]
         logic_history: API-friendly history format [{"role": "user", "content": "..."}]
         system_prompt: System prompt text for LLM context
+        gemini_provider: Gemini LLM provider instance
+        chatgpt_provider: ChatGPT LLM provider instance
     """
 
-    def __init__(self, display_history=None, logic_history=None, system_prompt=""):
-        """Initialize ChatService with optional existing state
+    def __init__(
+        self,
+        display_history=None,
+        logic_history=None,
+        system_prompt="",
+        gemini_provider=None,
+        chatgpt_provider=None,
+    ):
+        """Initialize ChatService with optional existing state and providers
 
         Args:
             display_history: Optional existing display history
             logic_history: Optional existing logic history
             system_prompt: Optional system prompt (default: "")
+            gemini_provider: Optional Gemini provider instance (lazy-created if None)
+            chatgpt_provider: Optional ChatGPT provider instance (lazy-created if None)
         """
         self.display_history = display_history if display_history is not None else []
         self.logic_history = logic_history if logic_history is not None else []
         self.system_prompt = system_prompt
+
+        # Store injected providers or None for lazy initialization
+        self._gemini_provider = gemini_provider
+        self._chatgpt_provider = chatgpt_provider
+
+    @property
+    def gemini_provider(self):
+        """Lazy-initialized Gemini provider"""
+        if self._gemini_provider is None:
+            self._gemini_provider = create_provider("gemini")
+        return self._gemini_provider
+
+    @property
+    def chatgpt_provider(self):
+        """Lazy-initialized ChatGPT provider"""
+        if self._chatgpt_provider is None:
+            self._chatgpt_provider = create_provider("chatgpt")
+        return self._chatgpt_provider
 
     def _handle_api_error(self, error, provider_name):
         """Handle API errors in a consistent way
@@ -118,13 +149,14 @@ class ChatService:
             gemini_input_history = history_snapshot or self.logic_history
 
             try:
-                # Use provider abstraction
-                provider = get_provider("gemini")
-                gemini_stream = provider.call_api(gemini_input_history, self.system_prompt)
+                # Use injected provider instance
+                gemini_stream = self.gemini_provider.call_api(
+                    gemini_input_history, self.system_prompt
+                )
 
                 full_response = ""
                 for chunk in gemini_stream:
-                    text = provider.extract_text_from_chunk(chunk)
+                    text = self.gemini_provider.extract_text_from_chunk(chunk)
                     if text:
                         full_response += text
                         self.display_history[-1][1] += text
@@ -152,13 +184,14 @@ class ChatService:
             chatgpt_input_history = history_snapshot or self.logic_history
 
             try:
-                # Use provider abstraction
-                provider = get_provider("chatgpt")
-                chatgpt_stream = provider.call_api(chatgpt_input_history, self.system_prompt)
+                # Use injected provider instance
+                chatgpt_stream = self.chatgpt_provider.call_api(
+                    chatgpt_input_history, self.system_prompt
+                )
 
                 full_response = ""
                 for chunk in chatgpt_stream:
-                    text = provider.extract_text_from_chunk(chunk)
+                    text = self.chatgpt_provider.extract_text_from_chunk(chunk)
                     if text:
                         full_response += text
                         self.display_history[-1][1] += text
