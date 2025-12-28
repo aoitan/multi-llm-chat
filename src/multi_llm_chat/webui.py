@@ -481,6 +481,7 @@ with gr.Blocks() as demo:
             check_send_button_with_user_id(user_id, system_prompt, logic_history),  # send_button
             gr.update(interactive=enabled),  # reset_button
             gr.update(choices=history_choices),  # history_dropdown
+            None,  # Reset chat_service_state when user changes
         )
 
     user_id_input.change(
@@ -493,6 +494,7 @@ with gr.Blocks() as demo:
             send_button,
             reset_button,
             history_dropdown,
+            chat_service_state,
         ],
     )
 

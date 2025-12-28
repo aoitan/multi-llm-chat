@@ -243,17 +243,32 @@ def list_gemini_models():
 def call_gemini_api(history, system_prompt=None):
     """Call Gemini API with optional system prompt
 
-    DEPRECATED: This function uses a global shared provider instance which may cause
+    DEPRECATED (Will be removed in future version):
+    This function uses a global shared provider instance which causes
     prompt pollution in concurrent environments (e.g., Gradio sessions).
 
-    New code should use:
+    **DO NOT USE in production code.**
+
+    Migration path:
     - For session-scoped: ChatService with injected providers
     - For one-off calls: llm_provider.create_provider("gemini")
 
-    WARNING: Using this in multi-user environments may result in:
+    SECURITY WARNING: Using this in multi-user environments WILL result in:
     - System prompt leaking between users
     - Cached models being shared across sessions
+    - Race conditions in concurrent requests
+
+    This function is kept only for backward compatibility with existing tests.
     """
+    import warnings
+
+    warnings.warn(
+        "call_gemini_api() is deprecated and will be removed. "
+        "Use ChatService or create_provider() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     from multi_llm_chat.llm_provider import get_provider
 
     try:
@@ -275,17 +290,32 @@ def call_gemini_api(history, system_prompt=None):
 def call_chatgpt_api(history, system_prompt=None):
     """Call ChatGPT API with optional system prompt
 
-    DEPRECATED: This function uses a global shared provider instance which may cause
+    DEPRECATED (Will be removed in future version):
+    This function uses a global shared provider instance which causes
     prompt pollution in concurrent environments (e.g., Gradio sessions).
 
-    New code should use:
+    **DO NOT USE in production code.**
+
+    Migration path:
     - For session-scoped: ChatService with injected providers
     - For one-off calls: llm_provider.create_provider("chatgpt")
 
-    WARNING: Using this in multi-user environments may result in:
+    SECURITY WARNING: Using this in multi-user environments WILL result in:
     - System prompt leaking between users
     - Client instances being shared across sessions
+    - Race conditions in concurrent requests
+
+    This function is kept only for backward compatibility with existing tests.
     """
+    import warnings
+
+    warnings.warn(
+        "call_chatgpt_api() is deprecated and will be removed. "
+        "Use ChatService or create_provider() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     from multi_llm_chat.llm_provider import get_provider
 
     try:
