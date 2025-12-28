@@ -106,10 +106,7 @@ def test_system_prompt_included_in_chat():
     with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
         # Create mock provider with response
         mock_provider = MagicMock()
-        mock_chunk = MagicMock()
-        mock_chunk.text = "Response"
-        mock_provider.call_api.return_value = iter([mock_chunk])
-        mock_provider.extract_text_from_chunk.return_value = "Response"
+        mock_provider.stream_text_events.return_value = iter(["Response"])
         mock_create_provider.return_value = mock_provider
 
         # Simulate calling respond function
@@ -130,13 +127,12 @@ def test_system_prompt_included_in_chat():
         for _ in result_gen:
             pass
 
-        # Verify that get_provider was called for gemini
+        # Verify that create_provider was called for gemini
         mock_create_provider.assert_called_with("gemini")
-        # Verify that call_api was called with system_prompt
-        mock_provider.call_api.assert_called_once()
+        # Verify that stream_text_events was called with system_prompt
+        mock_provider.stream_text_events.assert_called_once()
         # Check that system_prompt was passed (as second positional argument)
-        call_args = mock_provider.call_api.call_args
-        # call_args[0] is the tuple of positional arguments
+        call_args = mock_provider.stream_text_events.call_args
         assert len(call_args[0]) == 2  # (history, system_prompt)
         assert call_args[0][1] == system_prompt  # Second arg is system_prompt
 

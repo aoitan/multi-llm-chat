@@ -199,6 +199,39 @@ def test_call_chatgpt_api_without_system_prompt():
         mock_provider.call_api.assert_called_once_with(history, None)
 
 
+def test_stream_text_events_with_system_prompt():
+    """stream_text_events should delegate to provider with system prompt"""
+    history = [{"role": "user", "content": "Hello"}]
+    system_prompt = "You are a helpful assistant."
+
+    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+        mock_provider = Mock()
+        mock_provider.stream_text_events.return_value = iter(["Response"])
+        mock_get_provider.return_value = mock_provider
+
+        result = list(core.stream_text_events(history, "gemini", system_prompt))
+
+        assert result == ["Response"]
+        mock_get_provider.assert_called_once_with("gemini")
+        mock_provider.stream_text_events.assert_called_once_with(history, system_prompt)
+
+
+def test_stream_text_events_without_system_prompt():
+    """stream_text_events should delegate to provider without system prompt"""
+    history = [{"role": "user", "content": "Hello"}]
+
+    with patch("multi_llm_chat.llm_provider.get_provider") as mock_get_provider:
+        mock_provider = Mock()
+        mock_provider.stream_text_events.return_value = iter(["Response"])
+        mock_get_provider.return_value = mock_provider
+
+        result = list(core.stream_text_events(history, "chatgpt"))
+
+        assert result == ["Response"]
+        mock_get_provider.assert_called_once_with("chatgpt")
+        mock_provider.stream_text_events.assert_called_once_with(history, None)
+
+
 def test_format_history_for_chatgpt_preserves_system_role():
     """format_history_for_chatgpt should preserve the 'system' role."""
     history = [

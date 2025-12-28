@@ -12,19 +12,7 @@ def _create_mock_provider(response_text, provider_type="gemini"):
     """
     mock_provider = MagicMock()
 
-    if provider_type == "gemini":
-        # Gemini-style chunks with .text attribute
-        mock_chunk = MagicMock()
-        mock_chunk.text = response_text
-        mock_provider.call_api.return_value = iter([mock_chunk])
-        mock_provider.extract_text_from_chunk.return_value = response_text
-    else:
-        # ChatGPT-style chunks with .choices[0].delta.content
-        mock_chunk = MagicMock()
-        mock_chunk.choices = [MagicMock()]
-        mock_chunk.choices[0].delta.content = response_text
-        mock_provider.call_api.return_value = iter([mock_chunk])
-        mock_provider.extract_text_from_chunk.return_value = response_text
+    mock_provider.stream_text_events.return_value = iter([response_text])
 
     return mock_provider
 

@@ -333,6 +333,23 @@ def call_chatgpt_api(history, system_prompt=None):
         yield f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
 
 
+def stream_text_events(history, provider_name, system_prompt=None):
+    """Stream normalized text events from a provider.
+
+    Args:
+        history: Conversation history for the request
+        provider_name: Provider identifier ("gemini" or "chatgpt")
+        system_prompt: Optional system instruction
+
+    Yields:
+        str: Normalized text chunks
+    """
+    from multi_llm_chat.llm_provider import get_provider
+
+    provider = get_provider(provider_name)
+    yield from provider.stream_text_events(history, system_prompt)
+
+
 def extract_text_from_chunk(chunk, model_name):
     """Extract text content from API response chunk
 

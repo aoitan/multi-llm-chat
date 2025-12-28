@@ -8,6 +8,7 @@ import pytest
 from multi_llm_chat.llm_provider import (
     ChatGPTProvider,
     GeminiProvider,
+    LLMProvider,
     create_provider,
     get_provider,
 )
@@ -183,3 +184,53 @@ class TestProviderCaching(unittest.TestCase):
         assert gemini_provider is not chatgpt_provider
         assert isinstance(gemini_provider, GeminiProvider)
         assert isinstance(chatgpt_provider, ChatGPTProvider)
+
+
+class DummyProvider(LLMProvider):
+    """Minimal provider for testing shared stream behavior."""
+
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    def call_api(self, history, system_prompt=None):
+        return iter(self._chunks)
+
+    def extract_text_from_chunk(self, chunk):
+        return chunk
+
+    def get_token_info(self, text, history=None, model_name=None):
+        return {"input_tokens": 0, "max_tokens": 0}
+
+
+def test_stream_text_events_filters_empty_strings():
+    """stream_text_events should skip empty strings from chunk extraction."""
+    provider = DummyProvider(["Hello", "", "world"])
+
+    result = list(provider.stream_text_events([], None))
+
+    assert result == ["Hello", "world"]
+
+
+class DummyProvider(LLMProvider):
+    """Minimal provider for testing shared stream behavior."""
+
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    def call_api(self, history, system_prompt=None):
+        return iter(self._chunks)
+
+    def extract_text_from_chunk(self, chunk):
+        return chunk
+
+    def get_token_info(self, text, history=None, model_name=None):
+        return {"input_tokens": 0, "max_tokens": 0}
+
+
+def test_stream_text_events_filters_empty_strings():
+    """stream_text_events should skip empty strings from chunk extraction."""
+    provider = DummyProvider(["Hello", "", "world"])
+
+    result = list(provider.stream_text_events([], None))
+
+    assert result == ["Hello", "world"]
