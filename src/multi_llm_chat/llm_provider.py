@@ -189,12 +189,13 @@ class LLMProvider(ABC):
 
 
 class GeminiProvider(LLMProvider):
-    """Google Gemini LLM provider with LRU caching for models"""
+    """Google Gemini LLM provider with thread-safe LRU caching for models"""
 
     def __init__(self):
         self._default_model = None
         self._models_cache = OrderedDict()  # LRU cache: hash -> (prompt, model)
         self._cache_max_size = 10  # Limit cache size to prevent memory leak
+        self._cache_lock = threading.Lock()  # Protect cache operations
         self._configure()
 
     def _configure(self):
@@ -210,7 +211,7 @@ class GeminiProvider(LLMProvider):
         return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
     def _get_model(self, system_prompt=None):
-        """Get or create a cached Gemini model instance with LRU eviction
+        """Get or create a cached Gemini model instance with thread-safe LRU eviction
 
         Args:
             system_prompt: Optional system instruction for the model
@@ -220,32 +221,34 @@ class GeminiProvider(LLMProvider):
         """
         # If no system prompt, use the default cached model
         if not system_prompt or not system_prompt.strip():
-            if self._default_model is None:
-                self._default_model = genai.GenerativeModel(GEMINI_MODEL)
-            return self._default_model
+            with self._cache_lock:
+                if self._default_model is None:
+                    self._default_model = genai.GenerativeModel(GEMINI_MODEL)
+                return self._default_model
 
         # For system prompts, use LRU cache with hash key
         prompt_hash = self._hash_prompt(system_prompt)
 
-        if prompt_hash in self._models_cache:
-            # Verify prompt hasn't changed (hash collision check)
-            cached_prompt, cached_model = self._models_cache[prompt_hash]
-            if cached_prompt == system_prompt:
-                # Move to end (most recently used)
-                self._models_cache.move_to_end(prompt_hash)
-                return cached_model
-            # Hash collision detected - explicitly evict old entry
-            del self._models_cache[prompt_hash]
+        with self._cache_lock:
+            if prompt_hash in self._models_cache:
+                # Verify prompt hasn't changed (hash collision check)
+                cached_prompt, cached_model = self._models_cache[prompt_hash]
+                if cached_prompt == system_prompt:
+                    # Move to end (most recently used)
+                    self._models_cache.move_to_end(prompt_hash)
+                    return cached_model
+                # Hash collision detected - explicitly evict old entry
+                del self._models_cache[prompt_hash]
 
-        # Create new model and add to cache
-        model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_prompt)
-        self._models_cache[prompt_hash] = (system_prompt, model)
+            # Create new model and add to cache
+            model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_prompt)
+            self._models_cache[prompt_hash] = (system_prompt, model)
 
-        # Evict oldest if cache is full
-        if len(self._models_cache) > self._cache_max_size:
-            self._models_cache.popitem(last=False)
+            # Evict oldest if cache is full
+            if len(self._models_cache) > self._cache_max_size:
+                self._models_cache.popitem(last=False)
 
-        return model
+            return model
 
     @staticmethod
     def format_history(history):
@@ -320,7 +323,11 @@ class GeminiProvider(LLMProvider):
 
 
 class ChatGPTProvider(LLMProvider):
-    """OpenAI ChatGPT LLM provider"""
+    """OpenAI ChatGPT LLM provider (thread-safe)
+
+    The OpenAI client is thread-safe, so concurrent requests can safely share
+    the same client instance without additional locking.
+    """
 
     def __init__(self):
         self._client = None
