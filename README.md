@@ -218,11 +218,16 @@ python chat_logic.py
 
 ```
 src/multi_llm_chat/
-├── core.py          # コアロジック（API呼び出し、履歴管理、トークン計算）
-├── cli.py           # CLIインターフェース（REPLループ、コマンド処理）
-├── webui.py         # Web UIインターフェース（Gradio）
-├── app.py           # 互換性レイヤー（webui への再エクスポート）
-└── chat_logic.py    # 互換性レイヤー（core + cli への再エクスポート）
+├── core.py          # 共通インターフェース（ファサード）
+├── token_utils.py   # トークン計算ユーティリティ
+├── history_utils.py # 履歴整形ユーティリティ
+├── compression.py   # 履歴圧縮ロジック
+├── validation.py    # 検証ロジック
+├── llm_provider.py  # LLMプロバイダー抽象化
+├── cli.py           # CLIインターフェース
+├── webui.py         # Web UIインターフェース
+├── app.py           # 互換性レイヤー
+└── chat_logic.py    # 互換性レイヤー
 ```
 
 詳細は[アーキテクチャ設計書](doc/architecture.md)を参照してください。

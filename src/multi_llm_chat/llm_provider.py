@@ -22,127 +22,15 @@ try:
 except ImportError:
     TIKTOKEN_AVAILABLE = False
 
+from google.generativeai.types import BlockedPromptException
+from .token_utils import get_buffer_factor, estimate_tokens, get_max_context_length
+
 load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
-
-
-def _get_buffer_factor():
-    """Get token estimation buffer factor from environment variable
-
-    Returns:
-        float: Buffer factor (default: 1.2)
-    """
-    try:
-        return float(os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "1.2"))
-    except ValueError as e:
-        invalid_value = os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR")
-        logging.warning(
-            f"Invalid TOKEN_ESTIMATION_BUFFER_FACTOR: {invalid_value}. "
-            f"Using default 1.2. Error: {e}"
-        )
-        return 1.2
-
-
-def _estimate_tokens(text):
-    """Estimate token count for mixed English/Japanese text
-
-    More accurate estimation that accounts for Japanese characters:
-    - ASCII/Latin: ~4 chars = 1 token
-    - Japanese (hiragana/katakana/kanji): ~1.5 chars = 1 token
-
-    Args:
-        text: Text to estimate
-
-    Returns:
-        Estimated token count
-    """
-    if not text:
-        return 0
-
-    # Count Japanese characters (Unicode ranges for CJK)
-    japanese_chars = sum(
-        1
-        for char in text
-        if "\u3040" <= char <= "\u309f"  # Hiragana
-        or "\u30a0" <= char <= "\u30ff"  # Katakana
-        or "\u4e00" <= char <= "\u9fff"  # Kanji
-        or "\uff00" <= char <= "\uffef"  # Full-width characters
-    )
-
-    ascii_chars = len(text) - japanese_chars
-
-    # Japanese: 1.5 chars ≈ 1 token, ASCII: 4 chars ≈ 1 token
-    estimated = (japanese_chars / 1.5) + (ascii_chars / 4.0)
-
-    return int(estimated)
-
-
-def _get_max_context_length(model_name):
-    """Get maximum context length for the specified model
-
-    Reads from environment variables with fallback to model defaults
-
-    Args:
-        model_name: Model identifier
-
-    Returns:
-        Maximum context length in tokens
-    """
-    model_lower = model_name.lower()
-
-    # Check for model-specific environment variable
-    if "gemini" in model_lower:
-        gemini_max = os.getenv("GEMINI_MAX_CONTEXT_LENGTH")
-        if gemini_max:
-            try:
-                return int(gemini_max)
-            except ValueError:
-                logging.warning(f"Invalid GEMINI_MAX_CONTEXT_LENGTH: {gemini_max}. Using default.")
-
-    if "gpt" in model_lower:
-        chatgpt_max = os.getenv("CHATGPT_MAX_CONTEXT_LENGTH")
-        if chatgpt_max:
-            try:
-                return int(chatgpt_max)
-            except ValueError:
-                logging.warning(
-                    f"Invalid CHATGPT_MAX_CONTEXT_LENGTH: {chatgpt_max}. Using default."
-                )
-
-    # Fall back to default
-    default_max = os.getenv("DEFAULT_MAX_CONTEXT_LENGTH")
-    if default_max:
-        try:
-            return int(default_max)
-        except ValueError:
-            logging.warning(f"Invalid DEFAULT_MAX_CONTEXT_LENGTH: {default_max}. Using default.")
-
-    # Built-in model-specific defaults
-    MODEL_DEFAULTS = [
-        ("gemini-2.0-flash", 1048576),
-        ("gemini-exp-1206", 1048576),
-        ("gemini-1.5-pro", 2097152),
-        ("gemini-1.5-flash", 1048576),
-        ("gemini-pro", 32760),
-        ("gemini", 32760),
-        ("gpt-4o", 128000),
-        ("gpt-4-turbo", 128000),
-        ("gpt-4-1106", 128000),
-        ("gpt-4", 8192),
-        ("gpt-3.5-turbo-16k", 16385),
-        ("gpt-3.5", 4096),
-    ]
-
-    # Find first matching pattern
-    for pattern, context_length in MODEL_DEFAULTS:
-        if pattern in model_lower:
-            return context_length
-
-    return 4096
 
 
 class LLMProvider(ABC):
@@ -297,10 +185,10 @@ class GeminiProvider(LLMProvider):
         effective_model = model_name if model_name else GEMINI_MODEL
 
         # Get buffer factor from environment variable
-        buffer_factor = _get_buffer_factor()
+        buffer_factor = get_buffer_factor()
 
         # Calculate tokens for system prompt/text
-        token_count = int(_estimate_tokens(text) * buffer_factor)
+        token_count = int(estimate_tokens(text) * buffer_factor)
 
         # Add history tokens if provided (only count user and gemini messages)
         if history:
@@ -308,10 +196,10 @@ class GeminiProvider(LLMProvider):
                 role = entry.get("role", "")
                 if role in {"user", "gemini"}:
                     content = entry.get("content", "")
-                    token_count += int(_estimate_tokens(content) * buffer_factor)
+                    token_count += int(estimate_tokens(content) * buffer_factor)
 
         # Get max context length for this model
-        max_context = _get_max_context_length(effective_model)
+        max_context = get_max_context_length(effective_model)
 
         return {
             "input_tokens": token_count,
@@ -427,17 +315,17 @@ class ChatGPTProvider(LLMProvider):
 
         # Use estimation with buffer (if tiktoken unavailable or failed)
         if use_estimation:
-            buffer_factor = _get_buffer_factor()
-            token_count = int(_estimate_tokens(text) * buffer_factor)
+            buffer_factor = get_buffer_factor()
+            token_count = int(estimate_tokens(text) * buffer_factor)
             if history:
                 for entry in history:
                     if entry.get("role") in {"user", "chatgpt"}:
                         token_count += int(
-                            _estimate_tokens(entry.get("content", "")) * buffer_factor
+                            estimate_tokens(entry.get("content", "")) * buffer_factor
                         )
 
         # Get max context length for this model
-        max_context = _get_max_context_length(effective_model)
+        max_context = get_max_context_length(effective_model)
 
         return {
             "input_tokens": token_count,

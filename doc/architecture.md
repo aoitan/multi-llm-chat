@@ -18,11 +18,12 @@ graph TB
     end
     
     subgraph Core["コアロジック層 (低レベルAPI)"]
-        CorePy["core.py"]
-        API["API管理<br/>- load_api_key()<br/>- _get_gemini_model()<br/>- _get_openai_client()"]
-        Req["リクエスト準備<br/>- prepare_request()<br/>- get_token_info()"]
-        Fmt["履歴フォーマット<br/>- format_history_for_gemini()<br/>- format_history_for_chatgpt()"]
-        Call["API呼び出し<br/>- call_gemini_api()<br/>- call_chatgpt_api()"]
+        CorePy["core.py (Facade)"]
+        TokenUtils["token_utils.py<br/>- トークン計算<br/>- get_token_info()"]
+        HistoryUtils["history_utils.py<br/>- 履歴整形<br/>- 定数定義"]
+        Compression["compression.py<br/>- 履歴圧縮<br/>- スライディングウィンドウ"]
+        Validation["validation.py<br/>- バリデーション"]
+        LLMProvider["llm_provider.py<br/>- 戦略パターン<br/>- API呼び出し"]
     end
     
     subgraph Persistence["永続化層 (Epic 017)"]
@@ -44,12 +45,16 @@ graph TB
     CLI --> ChatService
     WebUI --> HistoryStore
     ChatService --> CorePy
-    CorePy --> API
-    CorePy --> Req
-    CorePy --> Fmt
-    CorePy --> Call
-    Call --> Gemini
-    Call --> ChatGPT
+    CorePy --> TokenUtils
+    CorePy --> HistoryUtils
+    CorePy --> Compression
+    CorePy --> Validation
+    CorePy --> LLMProvider
+    LLMProvider --> TokenUtils
+    Compression --> TokenUtils
+    Validation --> TokenUtils
+    LLMProvider --> Gemini
+    LLMProvider --> ChatGPT
     HistoryStore --> FileSystem
     AppPy -.-> WebUI
     ChatLogic -.-> ChatService
@@ -63,30 +68,29 @@ graph TB
 
 #### 1.1 `src/multi_llm_chat/core.py`
 
-**責務**: UIに依存しない低レベルAPIロジック
+**責務**: 共通インターフェース（ファサード）。各機能別ユーティリティを統合し、後方互換性を提供。
 
-##### 主要機能
+#### 1.2 `src/multi_llm_chat/token_utils.py`
 
-| 機能カテゴリ | 関数/変数 | 説明 |
-|------------|----------|------|
-| **設定管理** | `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `GEMINI_MODEL`, `CHATGPT_MODEL` | 環境変数から読み込まれる設定 |
-| | `load_api_key(env_var_name)` | 環境変数からAPIキーを読み込む |
-| **APIクライアント管理** | `_get_gemini_model()` | Geminiモデルインスタンスをキャッシュして返す |
-| | `_get_openai_client()` | OpenAIクライアントをキャッシュして返す |
-| **トークン計算** | `get_token_info(text, model_name)` | テキストのトークン数、最大コンテキスト長、推定フラグを返す |
-| **リクエスト準備** | `prepare_request(history, system_prompt, model_name)` | モデル別にシステムプロンプトと履歴を整形 |
-| **履歴フォーマット** | `format_history_for_gemini(history)` | Gemini API形式に変換 |
-| | `format_history_for_chatgpt(history)` | ChatGPT API形式に変換 |
-| **API呼び出し** | `call_gemini_api(history, system_prompt=None)` | Gemini APIをストリーミング呼び出し |
-| | `call_chatgpt_api(history, system_prompt=None)` | ChatGPT APIをストリーミング呼び出し |
-| **ユーティリティ** | `list_gemini_models()` | 利用可能なGeminiモデルを一覧表示 |
+**責務**: トークン計算ロジック、コンテキスト長情報の管理。
 
-##### 設計原則
-- **UI非依存**: `print()`や`input()`を使わない（例外: デバッグ用`list_gemini_models()`）
-- **ステートレス**: 関数は引数から全ての情報を受け取る
-- **キャッシング**: APIクライアントはモジュールレベルでキャッシュ
+#### 1.3 `src/multi_llm_chat/history_utils.py`
 
-#### 1.2 `src/multi_llm_chat/chat_logic.py` (Epic 017追加)
+**責務**: 履歴データの整形、プロバイダー判定、共通定数（`LLM_ROLES`など）の定義。
+
+#### 1.4 `src/multi_llm_chat/compression.py`
+
+**責務**: 履歴データのスライディングウィンドウによる圧縮・枝刈り。
+
+#### 1.5 `src/multi_llm_chat/validation.py`
+
+**責務**: システムプロンプトやコンテキスト長の検証。
+
+#### 1.6 `src/multi_llm_chat/llm_provider.py`
+
+**責務**: 各LLMプロバイダー（Gemini, ChatGPT）の抽象化と実際のAPI呼び出しの実装（戦略パターン）。
+
+### 2. ビジネスロジック層 (Epic 017追加)
 
 **責務**: ビジネスロジック層 - メンション解析、LLMルーティング、履歴管理
 

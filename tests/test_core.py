@@ -240,52 +240,6 @@ def test_estimate_tokens_mixed():
     assert result >= 4
 
 
-def test_hash_prompt():
-    """Prompt hashing should be consistent and collision-resistant"""
-    prompt1 = "You are a helpful assistant."
-    prompt2 = "You are a helpful assistant."
-    prompt3 = "You are a different assistant."
-
-    hash1 = core._hash_prompt(prompt1)
-    hash2 = core._hash_prompt(prompt2)
-    hash3 = core._hash_prompt(prompt3)
-
-    # Same prompts should have same hash
-    assert hash1 == hash2
-
-    # Different prompts should have different hash
-    assert hash1 != hash3
-
-    # Hash should be hex string
-    assert len(hash1) == 64  # SHA256 = 64 hex chars
-    assert all(c in "0123456789abcdef" for c in hash1)
-
-
-def test_get_gemini_model_cache_with_hash():
-    """Gemini model cache should use hash keys to prevent memory leak"""
-    with patch("multi_llm_chat.core._configure_gemini", return_value=True):
-        with patch("multi_llm_chat.core.genai.GenerativeModel"):
-            # Clear cache
-            core._gemini_models_cache.clear()
-
-            # Create model with very long system prompt
-            long_prompt = "A" * 10000  # 10K characters
-            model1 = core._get_gemini_model(long_prompt)
-
-            # Cache should contain hash, not full prompt
-            assert len(core._gemini_models_cache) == 1
-            cache_key = list(core._gemini_models_cache.keys())[0]
-
-            # Key should be hash (64 hex chars), not the long prompt
-            assert len(cache_key) == 64
-            assert cache_key != long_prompt
-
-            # Same prompt should hit cache
-            model2 = core._get_gemini_model(long_prompt)
-            assert model1 == model2
-            assert len(core._gemini_models_cache) == 1
-
-
 def test_extract_text_from_chunk_gemini():
     """extract_text_from_chunk should extract text from Gemini chunk"""
     # Create a mock Gemini chunk
@@ -396,39 +350,3 @@ def test_prepare_request_whitespace_only_system_prompt_gemini():
     assert isinstance(result, tuple)
     assert result[0] is None
     assert result[1] == history
-
-
-@patch("multi_llm_chat.core.genai")
-@patch("multi_llm_chat.core._configure_gemini")
-def test_get_gemini_model_with_empty_system_prompt(mock_configure, mock_genai):
-    """_get_gemini_model should use default model for empty system prompt"""
-    mock_configure.return_value = True
-    mock_model = Mock()
-    mock_genai.GenerativeModel.return_value = mock_model
-
-    # Reset cached model
-    core._gemini_model = None
-
-    result = core._get_gemini_model("")
-
-    # Should create model without system_instruction
-    mock_genai.GenerativeModel.assert_called_once_with(core.GEMINI_MODEL)
-    assert result == mock_model
-
-
-@patch("multi_llm_chat.core.genai")
-@patch("multi_llm_chat.core._configure_gemini")
-def test_get_gemini_model_with_whitespace_system_prompt(mock_configure, mock_genai):
-    """_get_gemini_model should use default model for whitespace-only system prompt"""
-    mock_configure.return_value = True
-    mock_model = Mock()
-    mock_genai.GenerativeModel.return_value = mock_model
-
-    # Reset cached model
-    core._gemini_model = None
-
-    result = core._get_gemini_model("  \t\n  ")
-
-    # Should create model without system_instruction
-    mock_genai.GenerativeModel.assert_called_once_with(core.GEMINI_MODEL)
-    assert result == mock_model
