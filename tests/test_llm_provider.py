@@ -75,19 +75,19 @@ class TestGeminiProvider(unittest.TestCase):
         """GeminiProvider should cache model instances based on system prompt"""
         # Ensure GenerativeModel returns a new mock each time it's called
         mock_genai.GenerativeModel.side_effect = lambda *args, **kwargs: MagicMock()
-        
+
         provider = GeminiProvider()
         system_prompt = "You are a helpful assistant."
-        
+
         # First call creates new model
         model1 = provider._get_model(system_prompt)
         assert mock_genai.GenerativeModel.call_count == 1
-        
+
         # Second call with same prompt returns cached model
         model2 = provider._get_model(system_prompt)
         assert mock_genai.GenerativeModel.call_count == 1
         assert model1 is model2
-        
+
         # Call with different prompt creates new model
         model3 = provider._get_model("Different prompt")
         assert mock_genai.GenerativeModel.call_count == 2

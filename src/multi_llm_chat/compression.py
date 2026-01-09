@@ -1,27 +1,31 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from .history_utils import get_provider_name_from_model
-from .token_utils import calculate_tokens
+
 
 def prune_history_sliding_window(
-    history: List[Dict[str, Any]], 
-    max_tokens: int, 
-    model_name: str, 
-    system_prompt: Optional[str] = None
+    history: List[Dict[str, Any]],
+    max_tokens: int,
+    model_name: str,
+    system_prompt: Optional[str] = None,
+    token_calculator: Callable[[str, str], int] = None,
 ) -> List[Dict[str, Any]]:
     """Prune conversation history using sliding window approach"""
     if not history:
         return history
 
+    if token_calculator is None:
+        raise ValueError("token_calculator is required")
+
     # Calculate system prompt tokens
     system_tokens = 0
     if system_prompt:
-        system_tokens = calculate_tokens(system_prompt, model_name)
+        system_tokens = token_calculator(system_prompt, model_name)
 
     # Calculate tokens for each entry
     entry_tokens = []
     for entry in history:
         content = entry.get("content", "")
-        tokens = calculate_tokens(content, model_name)
+        tokens = token_calculator(content, model_name)
         entry_tokens.append(tokens)
 
     # Calculate total tokens
@@ -83,11 +87,13 @@ def prune_history_sliding_window(
 
     return pruned_history
 
+
 def get_pruning_info(
-    history: List[Dict[str, Any]], 
-    max_tokens: int, 
-    model_name: str, 
-    system_prompt: Optional[str] = None
+    history: List[Dict[str, Any]],
+    max_tokens: int,
+    model_name: str,
+    system_prompt: Optional[str] = None,
+    token_calculator: Callable[[str, str], int] = None,
 ) -> Dict[str, Any]:
     """Get information about how history would be pruned"""
     if not history:
@@ -97,23 +103,28 @@ def get_pruning_info(
             "pruned_length": 0,
         }
 
+    if token_calculator is None:
+        raise ValueError("token_calculator is required")
+
     # Calculate current total
     system_tokens = 0
     if system_prompt:
-        system_tokens = calculate_tokens(system_prompt, model_name)
+        system_tokens = token_calculator(system_prompt, model_name)
 
     original_tokens = system_tokens
     for entry in history:
         content = entry.get("content", "")
-        original_tokens += calculate_tokens(content, model_name)
+        original_tokens += token_calculator(content, model_name)
 
     # Get pruned version
-    pruned = prune_history_sliding_window(history, max_tokens, model_name, system_prompt)
+    pruned = prune_history_sliding_window(
+        history, max_tokens, model_name, system_prompt, token_calculator
+    )
 
     pruned_tokens = system_tokens
     for entry in pruned:
         content = entry.get("content", "")
-        pruned_tokens += calculate_tokens(content, model_name)
+        pruned_tokens += token_calculator(content, model_name)
 
     turns_removed = len(history) - len(pruned)
 

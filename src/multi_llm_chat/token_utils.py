@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Optional, List, Dict, Any
 
+
 def get_buffer_factor() -> float:
     """Get token estimation buffer factor from environment variable
 
@@ -17,6 +18,7 @@ def get_buffer_factor() -> float:
             f"Using default 1.2. Error: {e}"
         )
         return 1.2
+
 
 def estimate_tokens(text: str) -> int:
     """Estimate token count for mixed English/Japanese text
@@ -50,6 +52,7 @@ def estimate_tokens(text: str) -> int:
     estimated = (japanese_chars / 1.5) + (ascii_chars / 4.0)
 
     return int(estimated)
+
 
 def get_max_context_length(model_name: str) -> int:
     """Get maximum context length for the specified model
@@ -113,46 +116,3 @@ def get_max_context_length(model_name: str) -> int:
             return context_length
 
     return 4096
-
-def calculate_tokens(text: str, model_name: str) -> int:
-    """Calculate token count for text using model-appropriate method"""
-    from .llm_provider import get_provider
-    from .history_utils import get_provider_name_from_model
-    
-    provider_name = get_provider_name_from_model(model_name)
-    provider = get_provider(provider_name)
-    result = provider.get_token_info(text, history=None, model_name=model_name)
-    return result["input_tokens"]
-
-def get_token_info(text: str, model_name: str, history: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
-    """Get token information for the given text and model
-
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use provider.get_token_info() directly.
-
-    Args:
-        text: System prompt text
-        model_name: Model to use for context length calculation
-        history: Optional conversation history to include in token count
-
-    Returns:
-        dict with token_count, max_context_length, and is_estimated
-    """
-    from .llm_provider import get_provider, TIKTOKEN_AVAILABLE
-    from .history_utils import get_provider_name_from_model
-
-    # Determine provider from model name
-    provider_name = get_provider_name_from_model(model_name)
-
-    # Get provider and delegate token calculation with actual model name
-    provider = get_provider(provider_name)
-    result = provider.get_token_info(text, history, model_name=model_name)
-
-    # Add is_estimated flag for backward compatibility
-    is_estimated = provider_name == "gemini" or not TIKTOKEN_AVAILABLE
-
-    return {
-        "token_count": result["input_tokens"],
-        "max_context_length": result["max_tokens"],
-        "is_estimated": is_estimated,
-    }

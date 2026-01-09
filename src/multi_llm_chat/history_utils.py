@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Tuple, Union, Optional
 
 LLM_ROLES = {"gemini", "chatgpt"}
 
+
 def get_provider_name_from_model(model_name: str) -> str:
     """Get provider name from model name
 
@@ -16,10 +17,9 @@ def get_provider_name_from_model(model_name: str) -> str:
         return "chatgpt"
     return "gemini"
 
+
 def prepare_request(
-    history: List[Dict[str, Any]], 
-    system_prompt: str, 
-    model_name: str
+    history: List[Dict[str, Any]], system_prompt: str, model_name: str
 ) -> Union[List[Dict[str, Any]], Tuple[Optional[str], List[Dict[str, Any]]]]:
     """Prepare API request with system prompt and history"""
     if "gemini" in model_name.lower():
