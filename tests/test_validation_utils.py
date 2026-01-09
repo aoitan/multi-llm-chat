@@ -1,7 +1,7 @@
-import pytest
 import os
 from unittest.mock import patch
-from multi_llm_chat.validation import validate_system_prompt_length, validate_context_length
+
+from multi_llm_chat.validation import validate_context_length, validate_system_prompt_length
 
 
 def mock_calculate_tokens(text: str, model_name: str) -> int:

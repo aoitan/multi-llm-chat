@@ -1,23 +1,31 @@
 import os
+from typing import Any, Dict, List, Optional
+
 import google.generativeai as genai
 import openai
 from dotenv import load_dotenv
 
+from .compression import (
+    get_pruning_info as _get_pruning_info,
+)
+from .compression import (
+    prune_history_sliding_window as _prune_history_sliding_window,
+)
 from .history_utils import (
     LLM_ROLES,
     get_provider_name_from_model as _get_provider_name_from_model,
-    prepare_request,
+    prepare_request as _prepare_request,
 )
-from .token_utils import estimate_tokens as _estimate_tokens, get_max_context_length
-from .compression import (
-    prune_history_sliding_window as _prune_history_sliding_window,
-    get_pruning_info as _get_pruning_info,
+from .token_utils import (
+    estimate_tokens as _estimate_tokens_impl,
+    get_max_context_length as _get_max_context_length,
+)
+from .validation import (
+    validate_context_length as _validate_context_length,
 )
 from .validation import (
     validate_system_prompt_length as _validate_system_prompt_length,
-    validate_context_length as _validate_context_length,
 )
-from typing import Optional, List, Dict, Any
 
 load_dotenv()
 
@@ -131,6 +139,19 @@ def extract_text_from_chunk(chunk, model_name):
         return ""
 
 
+def prepare_request(history, system_prompt, model_name):
+    """Prepare API request with system prompt and history"""
+    return _prepare_request(history, system_prompt, model_name)
+
+
+def _estimate_tokens(text):
+    return _estimate_tokens_impl(text)
+
+
+def get_max_context_length(model_name):
+    return _get_max_context_length(model_name)
+
+
 def calculate_tokens(text: str, model_name: str) -> int:
     """Calculate token count for text using model-appropriate method"""
 
@@ -158,7 +179,7 @@ def get_token_info(
 
     """
 
-    from .llm_provider import get_provider, TIKTOKEN_AVAILABLE
+    from .llm_provider import TIKTOKEN_AVAILABLE, get_provider
 
     # Determine provider from model name
 

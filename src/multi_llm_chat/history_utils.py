@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Tuple, Union, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 LLM_ROLES = {"gemini", "chatgpt"}
 

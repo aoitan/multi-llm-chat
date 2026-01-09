@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Optional, List, Dict, Any
 
 
 def get_buffer_factor() -> float:

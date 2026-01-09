@@ -1,5 +1,4 @@
-from typing import List, Dict, Any, Optional, Callable
-from .history_utils import get_provider_name_from_model
+from typing import Any, Callable, Dict, List, Optional
 
 
 def prune_history_sliding_window(

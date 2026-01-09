@@ -1,5 +1,4 @@
-import pytest
-from multi_llm_chat.compression import prune_history_sliding_window, get_pruning_info
+from multi_llm_chat.compression import get_pruning_info, prune_history_sliding_window
 
 
 def mock_calculate_tokens(text: str, model_name: str) -> int:

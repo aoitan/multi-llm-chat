@@ -5,7 +5,6 @@ making it easy to add new providers without modifying existing code.
 """
 
 import hashlib
-import logging
 import os
 import threading
 from abc import ABC, abstractmethod
@@ -22,8 +21,7 @@ try:
 except ImportError:
     TIKTOKEN_AVAILABLE = False
 
-from google.generativeai.types import BlockedPromptException
-from .token_utils import get_buffer_factor, estimate_tokens, get_max_context_length
+from .token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
 
 load_dotenv()
 

@@ -1,4 +1,3 @@
-import pytest
 from multi_llm_chat.history_utils import get_provider_name_from_model, prepare_request
 
 
