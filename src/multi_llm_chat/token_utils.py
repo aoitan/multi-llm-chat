@@ -1,6 +1,10 @@
 import logging
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def get_buffer_factor() -> float:
     """Get token estimation buffer factor from environment variable
