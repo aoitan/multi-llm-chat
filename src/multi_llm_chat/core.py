@@ -84,13 +84,36 @@ def list_gemini_models():
 def call_gemini_api(history, system_prompt=None):
     """Call Gemini API with optional system prompt
 
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use llm_provider.get_provider("gemini") instead.
+    DEPRECATED (Will be removed in future version):
+    This function uses a global shared provider instance which causes
+    prompt pollution in concurrent environments (e.g., Gradio sessions).
+
+    **DO NOT USE in production code.**
+
+    Migration path:
+    - For session-scoped: ChatService with injected providers
+    - For one-off calls: llm_provider.create_provider("gemini")
+
+    SECURITY WARNING: Using this in multi-user environments WILL result in:
+    - System prompt leaking between users
+    - Cached models being shared across sessions
+    - Race conditions in concurrent requests
+
+    This function is kept only for backward compatibility with existing tests.
     """
-    from .llm_provider import get_provider
+    import warnings
+
+    warnings.warn(
+        "call_gemini_api() is deprecated and will be removed. "
+        "Use ChatService or create_provider() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    from multi_llm_chat.llm_provider import create_provider
 
     try:
-        provider = get_provider("gemini")
+        provider = create_provider("gemini")
         yield from provider.call_api(history, system_prompt)
     except ValueError as e:
         yield f"Gemini API Error: {e}"
@@ -107,13 +130,36 @@ def call_gemini_api(history, system_prompt=None):
 def call_chatgpt_api(history, system_prompt=None):
     """Call ChatGPT API with optional system prompt
 
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use llm_provider.get_provider("chatgpt") instead.
+    DEPRECATED (Will be removed in future version):
+    This function uses a global shared provider instance which causes
+    prompt pollution in concurrent environments (e.g., Gradio sessions).
+
+    **DO NOT USE in production code.**
+
+    Migration path:
+    - For session-scoped: ChatService with injected providers
+    - For one-off calls: llm_provider.create_provider("chatgpt")
+
+    SECURITY WARNING: Using this in multi-user environments WILL result in:
+    - System prompt leaking between users
+    - Client instances being shared across sessions
+    - Race conditions in concurrent requests
+
+    This function is kept only for backward compatibility with existing tests.
     """
-    from .llm_provider import get_provider
+    import warnings
+
+    warnings.warn(
+        "call_chatgpt_api() is deprecated and will be removed. "
+        "Use ChatService or create_provider() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    from multi_llm_chat.llm_provider import create_provider
 
     try:
-        provider = get_provider("chatgpt")
+        provider = create_provider("chatgpt")
         yield from provider.call_api(history, system_prompt)
     except ValueError as e:
         yield f"ChatGPT API Error: {e}"
@@ -127,17 +173,34 @@ def call_chatgpt_api(history, system_prompt=None):
         yield f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
 
 
+def stream_text_events(history, provider_name, system_prompt=None):
+    """Stream normalized text events from a provider.
+
+    Args:
+        history: Conversation history for the request
+        provider_name: Provider identifier ("gemini" or "chatgpt")
+        system_prompt: Optional system instruction
+
+    Yields:
+        str: Normalized text chunks
+    """
+    from multi_llm_chat.llm_provider import create_provider
+
+    provider = create_provider(provider_name)
+    yield from provider.stream_text_events(history, system_prompt)
+
+
 def extract_text_from_chunk(chunk, model_name):
     """Extract text content from API response chunk
 
     DEPRECATED: This is a backward compatibility wrapper.
     New code should use provider.extract_text_from_chunk() directly.
     """
-    from .llm_provider import get_provider
+    from multi_llm_chat.llm_provider import create_provider
 
     try:
         provider_name = _get_provider_name_from_model(model_name)
-        provider = get_provider(provider_name)
+        provider = create_provider(provider_name)
         return provider.extract_text_from_chunk(chunk)
     except Exception:
         if isinstance(chunk, str):
@@ -177,28 +240,21 @@ def get_token_info(
 ) -> Dict[str, Any]:
     """Get token information for the given text and model
 
-
-
     DEPRECATED: This is a backward compatibility wrapper.
-
     New code should use provider.get_token_info() directly.
-
     """
 
     from .llm_provider import TIKTOKEN_AVAILABLE, get_provider
 
     # Determine provider from model name
-
     provider_name = _get_provider_name_from_model(model_name)
 
     # Get provider and delegate token calculation with actual model name
-
     provider = get_provider(provider_name)
 
     result = provider.get_token_info(text, history, model_name=model_name)
 
     # Add is_estimated flag for backward compatibility
-
     is_estimated = provider_name == "gemini" or not TIKTOKEN_AVAILABLE
 
     return {
