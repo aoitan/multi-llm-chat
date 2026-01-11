@@ -123,7 +123,9 @@ class TestMCPClient(unittest.TestCase):
 
     @patch("asyncio.create_subprocess_exec")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_unexpected_error_on_connect(self, mock_session_class, mock_create_subprocess):
+    def test_mcp_client_unexpected_error_on_connect(
+        self, mock_session_class, mock_create_subprocess
+    ):
         """予期せぬエラー発生時にクリーンアップが実行される"""
         # Setup mocks
         mock_proc = AsyncMock()

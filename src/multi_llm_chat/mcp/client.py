@@ -39,7 +39,7 @@ class MCPClient:
         except Exception as e:
             # On any exception during initialization, ensure the process is cleaned up.
             await self.__aexit__(None, None, None)
-            # Wrap all exceptions in ConnectionError to signal a failure in establishing a connection.
+            # Wrap all exceptions in ConnectionError to signal connection failure.
             raise ConnectionError(f"Failed to connect to MCP server: {e}") from e
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
