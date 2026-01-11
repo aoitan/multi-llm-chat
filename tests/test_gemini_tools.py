@@ -61,7 +61,9 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         # Setup mock
         mock_model = Mock()
         mock_response = Mock()
-        mock_response.__iter__ = Mock(return_value=iter([Mock(text="Response")]))
+        # Create a mock chunk that has a 'parts' attribute (even if empty)
+        mock_chunk = Mock(text="Response", parts=[])
+        mock_response.__iter__ = Mock(return_value=iter([mock_chunk]))
         mock_model.generate_content.return_value = mock_response
         mock_model_class.return_value = mock_model
 
@@ -95,20 +97,21 @@ class TestGeminiToolsIntegration(unittest.TestCase):
     @patch("multi_llm_chat.llm_provider.genai.GenerativeModel")
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test_key")
     def test_gemini_response_with_function_call(self, mock_model_class):
-        """Geminiからのツール呼び出しレスポンスを処理できる"""
+        """Geminiからのツール呼び出しレスポンスを共通形式にパースして返す"""
         # Setup mock with function call
         mock_model = Mock()
-        mock_chunk = Mock()
-        mock_chunk.text = ""
 
-        # Mock function call in chunk
-        mock_part = Mock()
-        mock_part.function_call.name = "get_weather"
-        mock_part.function_call.args = {"location": "Tokyo"}
-        mock_chunk.parts = [mock_part]
+        # Mock chunk with function call
+        mock_fc_part = Mock()
+        mock_fc_part.function_call.name = "get_weather"
+        mock_fc_part.function_call.args = {"location": "Tokyo"}
+        mock_fc_chunk = Mock(text=None, parts=[mock_fc_part])
+        # Mock chunk with text
+        mock_text_chunk = Mock(text="Some text", parts=[])
 
+        # Mock the response iterator
         mock_response = Mock()
-        mock_response.__iter__ = Mock(return_value=iter([mock_chunk]))
+        mock_response.__iter__ = Mock(return_value=iter([mock_text_chunk, mock_fc_chunk]))
         mock_model.generate_content.return_value = mock_response
         mock_model_class.return_value = mock_model
 
@@ -117,8 +120,23 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         # Call API
         chunks = list(self.provider.call_api(history, tools=self.mcp_tools))
 
-        # Verify we got chunks
-        self.assertGreater(len(chunks), 0)
+        # Verify that we received both the text chunk and the parsed function call
+        self.assertEqual(len(chunks), 2)
+
+        # Find the parsed function call and the original text chunk
+        parsed_fc = next((chunk for chunk in chunks if isinstance(chunk, dict)), None)
+        original_text_chunk = next(
+            (chunk for chunk in chunks if not isinstance(chunk, dict)), None
+        )
+
+        # Verify the parsed function call
+        self.assertIsNotNone(parsed_fc)
+        self.assertEqual(parsed_fc["tool_name"], "get_weather")
+        self.assertEqual(parsed_fc["arguments"], {"location": "Tokyo"})
+
+        # Verify the original text chunk is passed through
+        self.assertIsNotNone(original_text_chunk)
+        self.assertEqual(original_text_chunk.text, "Some text")
 
 
 if __name__ == "__main__":

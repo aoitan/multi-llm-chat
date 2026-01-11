@@ -246,7 +246,22 @@ class GeminiProvider(LLMProvider):
                 response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
             else:
                 response = model.generate_content(gemini_history, stream=True)
-            yield from response
+
+            for chunk in response:
+                # Check for function call in the chunk
+                if chunk.parts:
+                    for part in chunk.parts:
+                        if part.function_call:
+                            # If found, parse it and yield the common format dict
+                            yield parse_gemini_function_call(part.function_call)
+                            # Continue to next chunk after yielding function call
+                            break
+                    else:
+                        # If no function call was found in parts, yield the original chunk
+                        yield chunk
+                else:
+                    # If chunk has no parts, yield it directly
+                    yield chunk
         except genai.types.BlockedPromptException as e:
             raise ValueError(f"Prompt was blocked due to safety concerns: {e}") from e
 
