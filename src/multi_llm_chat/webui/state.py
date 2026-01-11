@@ -53,6 +53,7 @@ class WebUIState:
 
         can_save = can_interact and bool(self.logic_history)
 
+        # Return button states in consistent order
         return {
             "send_button": gr.update(interactive=send_enabled),
             "new_chat_btn": gr.update(interactive=can_interact),
