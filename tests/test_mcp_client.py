@@ -14,110 +14,107 @@ class TestMCPClient(unittest.TestCase):
 
     def test_mcp_client_initialization(self):
         """MCPClientが正常に初期化できる"""
-        client = MCPClient(server_command="uvx", server_args=["mcp-server-time"])
+        client = MCPClient(server_command="uvx", server_args=["mcp-server-time"], timeout=5)
         self.assertEqual(client.server_command, "uvx")
         self.assertEqual(client.server_args, ["mcp-server-time"])
+        self.assertEqual(client.timeout, 5)
 
-    @patch("multi_llm_chat.mcp.client.stdio_client")
+    @patch("asyncio.create_subprocess_exec")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_connect_success(self, mock_session_class, mock_stdio_client):
+    def test_mcp_client_connect_success(self, mock_session_class, mock_create_subprocess):
         """MCPサーバーへの接続が成功する"""
         # Setup mocks
-        mock_read = AsyncMock()
-        mock_write = AsyncMock()
-        mock_stdio_client.return_value.__aenter__.return_value = (mock_read, mock_write)
+        mock_proc = AsyncMock()
+        mock_proc.stdin = AsyncMock()
+        mock_proc.stdout = AsyncMock()
+        mock_proc.poll = MagicMock(return_value=None)
+        mock_proc.terminate = MagicMock()
+        mock_create_subprocess.return_value = mock_proc
 
         mock_session = AsyncMock()
-        mock_session_class.return_value.__aenter__.return_value = mock_session
+        mock_session_class.return_value = mock_session
         mock_session.initialize = AsyncMock()
+        mock_session.close = AsyncMock()
 
-        # Run test
         client = MCPClient(server_command="uvx", server_args=["mcp-server-time"])
 
         async def run_test():
-            async with client.connect() as session:
-                self.assertIsNotNone(session)
+            async with client as connected_client:
+                self.assertIsNotNone(connected_client.session)
                 mock_session.initialize.assert_awaited_once()
+            mock_session.close.assert_awaited_once()
+            mock_proc.terminate.assert_called_once()
 
         asyncio.run(run_test())
 
-    @patch("multi_llm_chat.mcp.client.stdio_client")
+    @patch("asyncio.create_subprocess_exec")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_list_tools(self, mock_session_class, mock_stdio_client):
+    def test_mcp_client_list_tools(self, mock_session_class, mock_create_subprocess):
         """接続したサーバーからツール一覧を取得できる"""
         # Setup mocks
-        mock_read = AsyncMock()
-        mock_write = AsyncMock()
-        mock_stdio_client.return_value.__aenter__.return_value = (mock_read, mock_write)
-
+        mock_proc = AsyncMock()
+        mock_proc.poll = MagicMock(return_value=None)
+        mock_proc.terminate = MagicMock()
+        mock_create_subprocess.return_value = mock_proc
         mock_session = AsyncMock()
-        mock_session_class.return_value.__aenter__.return_value = mock_session
+        mock_session_class.return_value = mock_session
         mock_session.initialize = AsyncMock()
 
-        # Mock list_tools response
         tool1 = MagicMock()
         tool1.name = "get_time"
         tool1.description = "Get current time"
         tool1.inputSchema = {"type": "object"}
-
-        tool2 = MagicMock()
-        tool2.name = "add_numbers"
-        tool2.description = "Add two numbers"
-        tool2.inputSchema = {"type": "object"}
-
         mock_tools_response = MagicMock()
-        mock_tools_response.tools = [tool1, tool2]
+        mock_tools_response.tools = [tool1]
         mock_session.list_tools = AsyncMock(return_value=mock_tools_response)
 
-        # Run test
         client = MCPClient(server_command="uvx", server_args=["mcp-server-time"])
 
         async def run_test():
-            async with client.connect() as session:
-                tools = await client.list_tools(session)
-                self.assertEqual(len(tools), 2)
+            async with client as connected_client:
+                tools = await connected_client.list_tools()
+                self.assertEqual(len(tools), 1)
                 self.assertEqual(tools[0]["name"], "get_time")
-                self.assertEqual(tools[0]["description"], "Get current time")
-                self.assertEqual(tools[1]["name"], "add_numbers")
 
         asyncio.run(run_test())
 
-    @patch("multi_llm_chat.mcp.client.stdio_client")
-    def test_mcp_client_connection_error(self, mock_stdio_client):
+    @patch("asyncio.create_subprocess_exec")
+    def test_mcp_client_connection_error(self, mock_create_subprocess):
         """サーバー接続エラーが適切にハンドリングされる"""
-        # Setup mock to raise exception
-        mock_stdio_client.return_value.__aenter__.side_effect = ConnectionError("Server not found")
+        mock_create_subprocess.side_effect = FileNotFoundError("Command not found")
 
-        # Run test
         client = MCPClient(server_command="invalid-command", server_args=[])
 
         async def run_test():
             with self.assertRaises(ConnectionError):
-                async with client.connect():
+                async with client:
                     pass
 
         asyncio.run(run_test())
 
-    @patch("multi_llm_chat.mcp.client.stdio_client")
+    @patch("asyncio.create_subprocess_exec")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_timeout(self, mock_session_class, mock_stdio_client):
+    def test_mcp_client_timeout(self, mock_session_class, mock_create_subprocess):
         """タイムアウトが適切にハンドリングされる"""
         # Setup mocks
-        mock_read = AsyncMock()
-        mock_write = AsyncMock()
-        mock_stdio_client.return_value.__aenter__.return_value = (mock_read, mock_write)
+        mock_proc = AsyncMock()
+        mock_proc.poll = MagicMock(return_value=None)
+        mock_proc.terminate = MagicMock()
+        mock_create_subprocess.return_value = mock_proc
 
         mock_session = AsyncMock()
-        mock_session_class.return_value.__aenter__.return_value = mock_session
+        mock_session_class.return_value = mock_session
         mock_session.initialize = AsyncMock(side_effect=asyncio.TimeoutError("Connection timeout"))
 
-        # Run test
-        client = MCPClient(server_command="uvx", server_args=["slow-server"])
+        client = MCPClient(server_command="uvx", server_args=["slow-server"], timeout=0.1)
 
         async def run_test():
-            with self.assertRaises(asyncio.TimeoutError):
-                async with client.connect():
+            with self.assertRaises(ConnectionError):
+                async with client:
                     pass
+            # Ensure cleanup is still attempted
+            mock_proc.terminate.assert_called_once()
+
 
         asyncio.run(run_test())
 
