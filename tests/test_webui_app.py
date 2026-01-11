@@ -58,12 +58,15 @@ class TestWebUIApp:
         有効なユーザーIDが入力された場合、ボタンが有効になるかをテストする
         """
         initial_history_str = logic_history_to_display(mock_state["logic_history"])
-        with patch(
-            "multi_llm_chat.webui.state.core.get_token_info",
-            return_value={"token_count": 100, "max_context_length": 8192},
-        ), patch(
-            "multi_llm_chat.webui.app.has_history_for_user",
-            return_value=True,
+        with (
+            patch(
+                "multi_llm_chat.webui.state.core.get_token_info",
+                return_value={"token_count": 100, "max_context_length": 8192},
+            ),
+            patch(
+                "multi_llm_chat.webui.app.has_history_for_user",
+                return_value=True,
+            ),
         ):
             updates = update_ui_on_user_id_change(
                 "test_user", mock_state["logic_history"], INITIAL_SYSTEM_PROMPT
