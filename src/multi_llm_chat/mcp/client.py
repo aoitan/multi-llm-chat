@@ -45,7 +45,10 @@ class MCPClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Close the session and terminate the server process."""
         if self.session:
-            await self.session.close()
+            try:
+                await self.session.close()
+            except Exception:
+                pass  # Ignore errors on cleanup
             self.session = None
         
         if self.proc:
@@ -57,6 +60,14 @@ class MCPClient:
                     if self.proc.returncode is None:
                         self.proc.kill()
                         await self.proc.wait()
+
+            # Safeguard: Explicitly close streams if they are still open,
+            # which can happen if initialization fails before session takes ownership.
+            if self.proc.stdin and not self.proc.stdin.is_closing():
+                self.proc.stdin.close()
+            if self.proc.stdout and not self.proc.stdout.is_closing():
+                self.proc.stdout.close()
+            
             self.proc = None
 
     async def list_tools(self):

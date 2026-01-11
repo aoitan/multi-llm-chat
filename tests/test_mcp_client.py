@@ -29,6 +29,7 @@ class TestMCPClient(unittest.TestCase):
         mock_proc.stdout = AsyncMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
+        mock_proc.wait = AsyncMock()
         mock_create_subprocess.return_value = mock_proc
 
         mock_session = AsyncMock()
@@ -55,6 +56,7 @@ class TestMCPClient(unittest.TestCase):
         mock_proc = AsyncMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
+        mock_proc.wait = AsyncMock()
         mock_create_subprocess.return_value = mock_proc
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
@@ -100,6 +102,7 @@ class TestMCPClient(unittest.TestCase):
         mock_proc = AsyncMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
+        mock_proc.wait = AsyncMock()
         mock_create_subprocess.return_value = mock_proc
 
         mock_session = AsyncMock()
@@ -126,6 +129,7 @@ class TestMCPClient(unittest.TestCase):
         mock_proc = AsyncMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
+        mock_proc.wait = AsyncMock()
         mock_create_subprocess.return_value = mock_proc
 
         mock_session = AsyncMock()
