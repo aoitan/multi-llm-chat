@@ -626,87 +626,114 @@ with gr.Blocks() as demo:
         user_id_input,
         chat_service_state,
     ]
+    
+    ordered_buttons = [
+        send_button,
+        new_chat_btn,
+        save_history_btn,
+        load_history_btn,
+        reset_button,
+        button_components["system_prompt_save_btn"],
+    ]
     submit_outputs = [
+        user_input,
         chatbot_ui,
         display_history_state,
         logic_history_state,
         chat_service_state,
+        token_display,
+        *ordered_buttons,
     ]
 
-    def disable_buttons_on_submit(user_id: str):
-        """Disables buttons when a message is being streamed."""
-        state = WebUIState(user_id=user_id, has_history=True, is_streaming=True)
-        button_states = state.get_button_states()
-        # Ensure the order of updates matches the order of components in button_components
-        return [button_states.get(name, gr.update()) for name in button_components]
-
-    def update_ui_after_submit(user_id, logic, sys):
-        """Update token display and button state after response (success or error)"""
-        has_history = has_history_for_user(user_id)
-        state = WebUIState(
+    def handle_chat_submission(
+        user_message, display_history, logic_history, system_prompt, user_id, chat_service
+    ):
+        """
+        Handles chat submission, including UI state updates.
+        This generator centralizes all UI state changes during a chat response.
+        """
+        # 1. Disable UI components at the start of streaming
+        streaming_start_state = WebUIState(
             user_id=user_id,
-            has_history=has_history,
+            is_streaming=True,
+            has_history=has_history_for_user(user_id),
+            system_prompt=system_prompt,
+            logic_history=logic_history,
+        )
+        button_updates = streaming_start_state.get_button_states()
+        
+        yield (
+            gr.update(value="", interactive=False),  # user_input
+            gr.update(),  # chatbot_ui
+            gr.update(),  # display_history_state
+            gr.update(),  # logic_history_state
+            gr.update(),  # chat_service_state
+            gr.update(),  # token_display
+            button_updates["send_button"],
+            button_updates["new_chat_btn"],
+            button_updates["save_history_btn"],
+            button_updates["load_history_btn"],
+            button_updates["reset_button"],
+            button_updates["system_prompt_save_btn"],
+        )
+
+        # 2. Stream the response from the core logic
+        final_logic_history = logic_history
+        for res_display, res_disp_state, res_logic, res_service in validate_and_respond(
+            user_message, display_history, logic_history, system_prompt, user_id, chat_service
+        ):
+            final_logic_history = res_logic
+            yield (
+                gr.update(),  # user_input
+                res_display,  # chatbot_ui
+                res_disp_state,  # display_history_state
+                res_logic,  # logic_history_state
+                res_service,  # chat_service_state
+                gr.update(),  # token_display
+                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),  # buttons
+            )
+
+        # 3. Re-enable UI components and update token count at the end
+        streaming_end_state = WebUIState(
+            user_id=user_id,
             is_streaming=False,
-            system_prompt=sys,
-            logic_history=logic,
+            has_history=has_history_for_user(user_id),
+            system_prompt=system_prompt,
+            logic_history=final_logic_history,
         )
-        button_updates = state.get_button_states()
+        button_updates = streaming_end_state.get_button_states()
+        token_display_value = update_token_display(system_prompt, final_logic_history)
+        
+        yield (
+            gr.update(interactive=True),  # user_input
+            gr.update(),  # chatbot_ui
+            gr.update(),  # display_history_state
+            final_logic_history,  # logic_history_state (final update)
+            gr.update(),  # chat_service_state
+            token_display_value,  # token_display
+            button_updates["send_button"],
+            button_updates["new_chat_btn"],
+            button_updates["save_history_btn"],
+            button_updates["load_history_btn"],
+            button_updates["reset_button"],
+            button_updates["system_prompt_save_btn"],
+        )
 
-        token_display_value = update_token_display(sys, logic)
-
-        # The order must match the `outputs` list below
-        return [
-            token_display_value,
-            button_updates.get("send_button"),
-            button_updates.get("new_chat_btn"),
-            button_updates.get("reset_button"),
-            button_updates.get("save_history_btn"),
-            button_updates.get("load_history_btn"),
-        ]
-
-    # Chain events: disable buttons -> stream response -> re-enable buttons and update tokens
+    # Chain events
     (
-        user_input.submit(lambda: "", None, user_input)
-        .then(
-            disable_buttons_on_submit,
-            inputs=[user_id_input],
-            outputs=list(button_components.values()),
-        )
-        .then(validate_and_respond, submit_inputs, submit_outputs)
-        .then(
-            update_ui_after_submit,
-            [user_id_input, logic_history_state, system_prompt_input],
-            [
-                token_display,
-                send_button,
-                new_chat_btn,
-                reset_button,
-                save_history_btn,
-                load_history_btn,
-            ],
-        )
+        user_input.submit(
+            lambda: "",
+            inputs=None,
+            outputs=[user_input],
+        ).then(handle_chat_submission, submit_inputs, submit_outputs)
     )
 
     (
-        send_button.click(lambda: "", None, user_input)
-        .then(
-            disable_buttons_on_submit,
-            inputs=[user_id_input],
-            outputs=list(button_components.values()),
-        )
-        .then(validate_and_respond, submit_inputs, submit_outputs)
-        .then(
-            update_ui_after_submit,
-            [user_id_input, logic_history_state, system_prompt_input],
-            [
-                token_display,
-                send_button,
-                new_chat_btn,
-                reset_button,
-                save_history_btn,
-                load_history_btn,
-            ],
-        )
+        send_button.click(
+            lambda: "",
+            inputs=None,
+            outputs=[user_input],
+        ).then(handle_chat_submission, submit_inputs, submit_outputs)
     )
 
 
