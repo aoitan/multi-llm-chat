@@ -9,6 +9,8 @@ import os
 import threading
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from typing import Any, Dict, List, Optional
+
 
 import google.generativeai as genai
 import openai
@@ -83,7 +85,8 @@ class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
     @abstractmethod
-    def call_api(self, history, system_prompt=None):
+    @abstractmethod
+    def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
         """Call the LLM API and return a generator of response chunks
 
         Args:
@@ -218,55 +221,66 @@ class GeminiProvider(LLMProvider):
             # Skip chatgpt, system, and other roles - they shouldn't be sent to Gemini
         return gemini_history
 
-    def call_api(self, history, system_prompt=None, tools=None):
+    def call_api(
+        self,
+        history,
+        system_prompt=None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        **kwargs,
+    ):
         """Call Gemini API and yield response chunks with safety error handling
 
         Args:
             history: Conversation history
             system_prompt: Optional system instruction
             tools: Optional list of MCP tool definitions
+            **kwargs: Additional keyword arguments for the provider.
         """
         if not GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY is not set")
 
-        # Get cached or new model with system prompt
         model = self._get_model(system_prompt)
-
-        # Filter history to only include user and Gemini messages
         gemini_history = self.format_history(history)
+        gemini_tools = mcp_tools_to_gemini_format(tools) if tools else None
 
-        # Convert MCP tools to Gemini format if provided
-        gemini_tools = None
-        if tools:
-            gemini_tools = mcp_tools_to_gemini_format(tools)
-
-        # Call API with streaming, handling BlockedPromptException
         try:
-            if gemini_tools:
-                response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
-            else:
-                response = model.generate_content(gemini_history, stream=True)
+            response = model.generate_content(
+                gemini_history, stream=True, tools=gemini_tools
+            )
 
+            function_call_name = None
+            function_call_args = {}
+
+            # Process stream and reconstruct tool calls
             for chunk in response:
-                # Check for function call in the chunk
                 if chunk.parts:
                     for part in chunk.parts:
                         if part.function_call:
-                            # If found, parse it and yield the common format dict
-                            yield parse_gemini_function_call(part.function_call)
-                            # Continue to next chunk after yielding function call
-                            break
-                    else:
-                        # If no function call was found in parts, yield the original chunk
-                        yield chunk
-                else:
-                    # If chunk has no parts, yield it directly
+                            fc = part.function_call
+                            if fc.name:
+                                function_call_name = fc.name
+                            if fc.args:
+                                function_call_args.update(fc.args)
+
+                # Yield text parts immediately
+                if chunk.text:
                     yield chunk
+
+            # Yield the reconstructed tool call at the end of the stream
+            if function_call_name:
+                yield {
+                    "tool_name": function_call_name,
+                    "arguments": dict(function_call_args),
+                }
+
         except genai.types.BlockedPromptException as e:
             raise ValueError(f"Prompt was blocked due to safety concerns: {e}") from e
 
-    def extract_text_from_chunk(self, chunk):
+
+    def extract_text_from_chunk(self, chunk: Any):
         """Extract text from Gemini response chunk"""
+        if isinstance(chunk, dict):
+            return ""
         return getattr(chunk, "text", "")
 
     def get_token_info(self, text, history=None, model_name=None):
@@ -332,10 +346,12 @@ class ChatGPTProvider(LLMProvider):
             # Skip gemini and other roles - they shouldn't be sent to ChatGPT
         return chatgpt_history
 
-    def call_api(self, history, system_prompt=None):
+    def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
         """Call ChatGPT API and yield response chunks"""
         if not OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is not set")
+        if tools:
+            print("Warning: ChatGPTProvider does not currently support tools.")
 
         # Build messages for OpenAI format
         messages = []
