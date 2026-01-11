@@ -1,6 +1,7 @@
 """
 MCP client implementation for connecting to MCP servers.
 """
+
 import asyncio
 
 from mcp.client.session import ClientSession
@@ -50,7 +51,7 @@ class MCPClient:
             except Exception:
                 pass  # Ignore errors on cleanup
             self.session = None
-        
+
         if self.proc:
             if self.proc.returncode is None:
                 self.proc.terminate()
@@ -67,7 +68,7 @@ class MCPClient:
                 self.proc.stdin.close()
             if self.proc.stdout and not self.proc.stdout.is_closing():
                 self.proc.stdout.close()
-            
+
             self.proc = None
 
     async def list_tools(self):

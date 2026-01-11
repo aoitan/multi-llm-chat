@@ -118,7 +118,6 @@ class TestMCPClient(unittest.TestCase):
             # Ensure cleanup is still attempted
             mock_proc.terminate.assert_called_once()
 
-
         asyncio.run(run_test())
 
     @patch("asyncio.create_subprocess_exec")

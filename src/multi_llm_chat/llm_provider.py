@@ -30,6 +30,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
+
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
