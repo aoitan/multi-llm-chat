@@ -36,9 +36,10 @@ class MCPClient:
             self.session = ClientSession(self.proc.stdout, self.proc.stdin)
             await asyncio.wait_for(self.session.initialize(), timeout=self.timeout)
             return self
-        except (FileNotFoundError, ConnectionError, asyncio.TimeoutError) as e:
-            if self.proc:
-                await self.__aexit__(None, None, None)
+        except Exception as e:
+            # On any exception during initialization, ensure the process is cleaned up.
+            await self.__aexit__(None, None, None)
+            # Wrap all exceptions in ConnectionError to signal a failure in establishing a connection.
             raise ConnectionError(f"Failed to connect to MCP server: {e}") from e
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

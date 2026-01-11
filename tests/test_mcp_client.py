@@ -118,6 +118,34 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.ClientSession")
+    def test_mcp_client_unexpected_error_on_connect(self, mock_session_class, mock_create_subprocess):
+        """予期せぬエラー発生時にクリーンアップが実行される"""
+        # Setup mocks
+        mock_proc = AsyncMock()
+        mock_proc.returncode = None
+        mock_proc.terminate = MagicMock()
+        mock_create_subprocess.return_value = mock_proc
+
+        mock_session = AsyncMock()
+        mock_session_class.return_value = mock_session
+        # Simulate an unexpected error during session initialization
+        mock_session.initialize = AsyncMock(side_effect=ValueError("Unexpected error"))
+
+        client = MCPClient(server_command="uvx", server_args=["buggy-server"])
+
+        async def run_test():
+            with self.assertRaises(ConnectionError) as cm:
+                async with client:
+                    pass
+            # Check that the original exception is wrapped
+            self.assertIsInstance(cm.exception.__cause__, ValueError)
+            # Ensure cleanup is still attempted
+            mock_proc.terminate.assert_called_once()
+
+        asyncio.run(run_test())
+
 
 if __name__ == "__main__":
     unittest.main()
