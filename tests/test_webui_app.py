@@ -1,4 +1,3 @@
-
 from unittest.mock import patch
 
 import pytest
@@ -23,9 +22,7 @@ class TestWebUIApp:
         }
         return state
 
-    def test_update_ui_on_user_id_change_disables_send_when_tokens_exceeded(
-        self, mock_state
-    ):
+    def test_update_ui_on_user_id_change_disables_send_when_tokens_exceeded(self, mock_state):
         """
         ユーザーID変更時、トークン数が上限を超える場合に送信ボタンが無効化されるかをテストする
         """
@@ -33,9 +30,7 @@ class TestWebUIApp:
         long_system_prompt = "This is a very long system prompt... " * 500
         # `update_ui_on_user_id_change` は内部で `WebUIState` を呼び出す
         # この関数を直接テストすることで、GradioのUIコンポーネントの状態更新を検証する
-        initial_history_str = logic_history_to_display(
-            mock_state["logic_history"]
-        )
+        initial_history_str = logic_history_to_display(mock_state["logic_history"])
 
         with patch(
             "multi_llm_chat.webui.state.core.get_token_info",
@@ -58,15 +53,11 @@ class TestWebUIApp:
         # 送信ボタンが無効化されていることを確認 (回帰バグの検出)
         assert send_button_state["interactive"] is False
 
-    def test_update_ui_on_user_id_change_enables_buttons_with_valid_user_id(
-        self, mock_state
-    ):
+    def test_update_ui_on_user_id_change_enables_buttons_with_valid_user_id(self, mock_state):
         """
         有効なユーザーIDが入力された場合、ボタンが有効になるかをテストする
         """
-        initial_history_str = logic_history_to_display(
-            mock_state["logic_history"]
-        )
+        initial_history_str = logic_history_to_display(mock_state["logic_history"])
         with patch(
             "multi_llm_chat.webui.state.core.get_token_info",
             return_value={"token_count": 100, "max_context_length": 8192},
@@ -85,15 +76,11 @@ class TestWebUIApp:
         # すべてのボタンが有効であるべき
         assert all(btn["interactive"] for btn in button_states)
 
-    def test_update_ui_on_user_id_change_disables_buttons_with_empty_user_id(
-        self, mock_state
-    ):
+    def test_update_ui_on_user_id_change_disables_buttons_with_empty_user_id(self, mock_state):
         """
         ユーザーIDが空の場合、ボタンが無効になるかをテストする
         """
-        initial_history_str = logic_history_to_display(
-            mock_state["logic_history"]
-        )
+        initial_history_str = logic_history_to_display(mock_state["logic_history"])
         updates = update_ui_on_user_id_change(
             "", mock_state["logic_history"], INITIAL_SYSTEM_PROMPT
         )

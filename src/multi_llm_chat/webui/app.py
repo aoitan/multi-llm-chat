@@ -131,9 +131,7 @@ with gr.Blocks() as demo:
     }
 
     # Update button states when user ID changes
-    def update_ui_on_user_id_change(
-        user_id: str, logic_history: list, system_prompt: str
-    ):
+    def update_ui_on_user_id_change(user_id: str, logic_history: list, system_prompt: str):
         """
         Updates UI components based on user ID changes.
         Fetches history and uses WebUIState to determine button states and other UI elements.
@@ -626,7 +624,7 @@ with gr.Blocks() as demo:
         user_id_input,
         chat_service_state,
     ]
-    
+
     ordered_buttons = [
         send_button,
         new_chat_btn,
@@ -661,7 +659,7 @@ with gr.Blocks() as demo:
             logic_history=logic_history,
         )
         button_updates = streaming_start_state.get_button_states()
-        
+
         yield (
             gr.update(value="", interactive=False),  # user_input
             gr.update(),  # chatbot_ui
@@ -690,7 +688,13 @@ with gr.Blocks() as demo:
                 res_logic,  # logic_history_state
                 res_service,  # chat_service_state
                 gr.update(),  # token_display
-                gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),  # buttons
+                # Keep buttons in their current state during streaming
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
             )
 
         # 3. Re-enable UI components and update token count at the end
@@ -703,7 +707,7 @@ with gr.Blocks() as demo:
         )
         button_updates = streaming_end_state.get_button_states()
         token_display_value = update_token_display(system_prompt, final_logic_history)
-        
+
         yield (
             gr.update(interactive=True),  # user_input
             gr.update(),  # chatbot_ui
@@ -720,21 +724,8 @@ with gr.Blocks() as demo:
         )
 
     # Chain events
-    (
-        user_input.submit(
-            lambda: "",
-            inputs=None,
-            outputs=[user_input],
-        ).then(handle_chat_submission, submit_inputs, submit_outputs)
-    )
-
-    (
-        send_button.click(
-            lambda: "",
-            inputs=None,
-            outputs=[user_input],
-        ).then(handle_chat_submission, submit_inputs, submit_outputs)
-    )
+    user_input.submit(handle_chat_submission, submit_inputs, submit_outputs)
+    send_button.click(handle_chat_submission, submit_inputs, submit_outputs)
 
 
 def launch(server_name=None, debug=True):

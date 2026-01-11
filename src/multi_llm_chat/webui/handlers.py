@@ -176,16 +176,19 @@ def has_history_for_user(user_id: str) -> bool:
 
 def respond(user_message, display_history, logic_history, system_prompt, user_id, chat_service):
     """
-    ユーザー入力への応答、LLM呼び出し、履歴管理をすべて行う単一の関数。
-    Note: 入力検証はvalidate_and_respondで行われることが前提です。
+    検証済みの入力に基づき、チャットの中核的な応答ロジック（LLM呼び出し、履歴管理）を実行します。
+
+    この関数は入力検証を行いません。呼び出し元は、この関数を呼び出す前に
+    user_id が有効であることを保証する必要があります。
+    UI統合には、検証をラップした `validate_and_respond()` を使用してください。
 
     Args:
-        user_message: User's input message
-        display_history: Display history for chatbot UI
-        logic_history: Internal logic history
-        system_prompt: System prompt text
-        user_id: User ID (required - must not be empty)
-        chat_service: Session-scoped ChatService instance (from gr.State)
+        user_message: ユーザーの入力メッセージ
+        display_history: チャットボットUIに表示するための履歴
+        logic_history: 内部で管理するための論理履歴
+        system_prompt: システムプロンプト
+        user_id: ユーザーID（呼び出し元で検証済みであること）
+        chat_service: セッションスコープのChatServiceインスタンス (gr.Stateより)
 
     Yields:
         tuple: (display_history, display_history, logic_history, chat_service)

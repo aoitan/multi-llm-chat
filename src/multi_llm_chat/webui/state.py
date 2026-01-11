@@ -56,6 +56,7 @@ class WebUIState:
         return {
             "send_button": gr.update(interactive=send_enabled),
             "new_chat_btn": gr.update(interactive=can_interact),
+            "reset_button": gr.update(interactive=can_interact),
             "save_history_btn": gr.update(interactive=can_save),
             "load_history_btn": gr.update(interactive=can_interact and self.has_history),
             "system_prompt_save_btn": gr.update(interactive=can_interact),

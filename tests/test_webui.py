@@ -1,9 +1,6 @@
 """Tests for the WebUI package, refactored for the new architecture."""
 
-from unittest.mock import MagicMock, patch
-
-import gradio as gr
-import pytest
+from unittest.mock import patch
 
 from multi_llm_chat.webui.components import update_token_display
 from multi_llm_chat.webui.handlers import (
@@ -54,18 +51,21 @@ class TestWebUIState:
         buttons = state.get_button_states()
         assert buttons["send_button"]["interactive"] is False
         assert buttons["new_chat_btn"]["interactive"] is False
+        assert buttons["reset_button"]["interactive"] is False
         assert buttons["save_history_btn"]["interactive"] is False
         # load_history_btn might be enabled to allow user to load a history, which sets the user_id
         assert buttons["load_history_btn"]["interactive"] is False
 
     def test_buttons_for_new_user_without_history(self):
         """WebUIState: Test button states for a new user without any saved history."""
-        state = WebUIState(user_id="new_user", has_history=False, is_streaming=False, logic_history=[])
+        state = WebUIState(
+            user_id="new_user", has_history=False, is_streaming=False, logic_history=[]
+        )
         buttons = state.get_button_states()
         assert buttons["send_button"]["interactive"] is True
         assert buttons["new_chat_btn"]["interactive"] is True
-        assert buttons["save_history_btn"]["interactive"] is False # No conversation yet
-        assert buttons["load_history_btn"]["interactive"] is False # No saved history
+        assert buttons["save_history_btn"]["interactive"] is False  # No conversation yet
+        assert buttons["load_history_btn"]["interactive"] is False  # No saved history
 
     def test_save_button_enabled_with_conversation(self):
         """WebUIState: Save button should be enabled once a conversation starts."""
@@ -73,7 +73,7 @@ class TestWebUIState:
             user_id="test_user",
             has_history=False,
             is_streaming=False,
-            logic_history=[{"role": "user", "content": "Hello"}], # Conversation started
+            logic_history=[{"role": "user", "content": "Hello"}],  # Conversation started
         )
         buttons = state.get_button_states()
         assert buttons["save_history_btn"]["interactive"] is True
@@ -83,7 +83,7 @@ class TestWebUIState:
         state = WebUIState(user_id="test_user", has_history=True, is_streaming=False)
         buttons = state.get_button_states()
         assert buttons["load_history_btn"]["interactive"] is True
-        assert buttons["new_chat_btn"]["interactive"] is True # Should always be available
+        assert buttons["new_chat_btn"]["interactive"] is True  # Should always be available
 
     def test_send_button_disabled_when_token_limit_exceeded(self):
         """WebUIState: Send button should be disabled when token limit is exceeded."""
@@ -107,6 +107,7 @@ class TestWebUIState:
         buttons = state.get_button_states()
         assert buttons["send_button"]["interactive"] is False
         assert buttons["new_chat_btn"]["interactive"] is False
+        assert buttons["reset_button"]["interactive"] is False
         assert buttons["save_history_btn"]["interactive"] is False
         # load can be disabled as well, as it would interrupt the stream
         assert buttons["load_history_btn"]["interactive"] is False
@@ -117,7 +118,12 @@ class TestWebUIHandlers:
     def test_validate_and_respond_rejects_empty_user_id(self):
         """handlers.validate_and_respond: should reject requests when user_id is empty"""
         result_gen = validate_and_respond(
-            "Hi", display_history=[], logic_history=[], system_prompt="", user_id="", chat_service=None
+            "Hi",
+            display_history=[],
+            logic_history=[],
+            system_prompt="",
+            user_id="",
+            chat_service=None,
         )
         results = list(result_gen)
         assert len(results) == 1
@@ -127,12 +133,8 @@ class TestWebUIHandlers:
     def test_validate_and_respond_delegates_to_respond(self):
         """handlers.validate_and_respond: should delegate to respond() when user_id is valid."""
         with patch("multi_llm_chat.webui.handlers.respond") as mock_respond:
-            mock_respond.return_value = iter(
-                [("display", "display", "logic", "service")]
-            )
-            result_gen = validate_and_respond(
-                "Hi", [], [], "", "test_user", None
-            )
+            mock_respond.return_value = iter([("display", "display", "logic", "service")])
+            result_gen = validate_and_respond("Hi", [], [], "", "test_user", None)
             list(result_gen)  # Consume generator
             mock_respond.assert_called_once()
 
@@ -141,15 +143,13 @@ class TestWebUIHandlers:
         system_prompt = "You are a helpful assistant."
         with patch("multi_llm_chat.webui.handlers.ChatService") as MockChatService:
             mock_service_instance = MockChatService.return_value
-            mock_service_instance.process_message.return_value = iter(
-                [(["Hi"], ["Hi"])]
-            )
-            
+            mock_service_instance.process_message.return_value = iter([(["Hi"], ["Hi"])])
+
             # We test the wrapper `validate_and_respond` which calls the actual respond
             result_gen = validate_and_respond(
                 "@gemini Hello", [], [], system_prompt, "test_user", None
             )
-            list(result_gen) # consume generator
+            list(result_gen)  # consume generator
 
             # Check that the service was initialized and its state was set correctly
             assert mock_service_instance.system_prompt == system_prompt
@@ -163,9 +163,7 @@ class TestWebUIHandlers:
 
             status, choices = save_history_action("user", "test", [], "prompt")
 
-            mock_store_instance.save_history.assert_called_once_with(
-                "user", "test", "prompt", []
-            )
+            mock_store_instance.save_history.assert_called_once_with("user", "test", "prompt", [])
             assert "保存しました" in status
             assert "test_history" in choices
 
@@ -196,7 +194,7 @@ class TestWebUIHandlers:
         with patch("multi_llm_chat.webui.handlers.HistoryStore") as MockStore:
             mock_store_instance = MockStore.return_value
             mock_store_instance.history_exists.return_value = True
-            
+
             result = check_history_name_exists("user", "name")
 
             mock_store_instance.history_exists.assert_called_once_with("user", "name")

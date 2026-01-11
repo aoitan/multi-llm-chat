@@ -10,6 +10,7 @@ from .handlers import (
     has_unsaved_session,
     load_history_action,
     new_chat_action,
+    respond,
     save_history_action,
     validate_and_respond,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "load_history_action",
     "new_chat_action",
     "validate_and_respond",
+    "respond",
     "save_history_action",
     "WebUIState",
     "hide_confirmation",
