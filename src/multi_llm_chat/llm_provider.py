@@ -38,6 +38,47 @@ MCP_ENABLED = os.getenv("MULTI_LLM_CHAT_MCP_ENABLED", "false").lower() in (
 )
 
 
+# MCP Tool conversion functions
+
+
+def mcp_tools_to_gemini_format(mcp_tools):
+    """Convert MCP tool definitions to Gemini Tool format
+
+    Args:
+        mcp_tools: List of MCP tool definitions with structure:
+            [{"name": str, "description": str, "inputSchema": dict}, ...]
+
+    Returns:
+        List of Gemini Tool dictionaries
+    """
+    if not mcp_tools:
+        return []
+
+    function_declarations = []
+    for tool in mcp_tools:
+        func_decl = {
+            "name": tool["name"],
+            "description": tool["description"],
+            "parameters": tool["inputSchema"],
+        }
+        function_declarations.append(func_decl)
+
+    # Gemini expects tools as a list with function_declarations
+    return [{"function_declarations": function_declarations}]
+
+
+def parse_gemini_function_call(function_call):
+    """Parse Gemini FunctionCall to common format
+
+    Args:
+        function_call: Gemini FunctionCall object
+
+    Returns:
+        Dict with structure: {"tool_name": str, "arguments": dict}
+    """
+    return {"tool_name": function_call.name, "arguments": dict(function_call.args)}
+
+
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
@@ -177,8 +218,14 @@ class GeminiProvider(LLMProvider):
             # Skip chatgpt, system, and other roles - they shouldn't be sent to Gemini
         return gemini_history
 
-    def call_api(self, history, system_prompt=None):
-        """Call Gemini API and yield response chunks with safety error handling"""
+    def call_api(self, history, system_prompt=None, tools=None):
+        """Call Gemini API and yield response chunks with safety error handling
+
+        Args:
+            history: Conversation history
+            system_prompt: Optional system instruction
+            tools: Optional list of MCP tool definitions
+        """
         if not GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY is not set")
 
@@ -188,9 +235,17 @@ class GeminiProvider(LLMProvider):
         # Filter history to only include user and Gemini messages
         gemini_history = self.format_history(history)
 
+        # Convert MCP tools to Gemini format if provided
+        gemini_tools = None
+        if tools:
+            gemini_tools = mcp_tools_to_gemini_format(tools)
+
         # Call API with streaming, handling BlockedPromptException
         try:
-            response = model.generate_content(gemini_history, stream=True)
+            if gemini_tools:
+                response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
+            else:
+                response = model.generate_content(gemini_history, stream=True)
             yield from response
         except genai.types.BlockedPromptException as e:
             raise ValueError(f"Prompt was blocked due to safety concerns: {e}") from e
