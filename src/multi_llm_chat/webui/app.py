@@ -540,6 +540,7 @@ with gr.Blocks() as demo:
                 "",  # Don't update status yet
                 gr.update(),  # Keep current token_display
                 gr.update(),  # Keep current send_button
+                gr.update(),  # Keep current history_dropdown
                 *show_confirmation(
                     "未保存の会話があります。破棄して新規開始しますか？",
                     "new_chat_unsaved",
