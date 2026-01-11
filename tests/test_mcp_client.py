@@ -27,7 +27,7 @@ class TestMCPClient(unittest.TestCase):
         mock_proc = AsyncMock()
         mock_proc.stdin = AsyncMock()
         mock_proc.stdout = AsyncMock()
-        mock_proc.poll = MagicMock(return_value=None)
+        mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_create_subprocess.return_value = mock_proc
 
@@ -53,7 +53,7 @@ class TestMCPClient(unittest.TestCase):
         """接続したサーバーからツール一覧を取得できる"""
         # Setup mocks
         mock_proc = AsyncMock()
-        mock_proc.poll = MagicMock(return_value=None)
+        mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_create_subprocess.return_value = mock_proc
         mock_session = AsyncMock()
@@ -98,7 +98,7 @@ class TestMCPClient(unittest.TestCase):
         """タイムアウトが適切にハンドリングされる"""
         # Setup mocks
         mock_proc = AsyncMock()
-        mock_proc.poll = MagicMock(return_value=None)
+        mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_create_subprocess.return_value = mock_proc
 

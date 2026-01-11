@@ -47,12 +47,15 @@ class MCPClient:
             await self.session.close()
             self.session = None
         
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
-            try:
-                await asyncio.wait_for(self.proc.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                self.proc.kill()
+        if self.proc:
+            if self.proc.returncode is None:
+                self.proc.terminate()
+                try:
+                    await asyncio.wait_for(self.proc.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    if self.proc.returncode is None:
+                        self.proc.kill()
+                        await self.proc.wait()
             self.proc = None
 
     async def list_tools(self):

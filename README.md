@@ -94,17 +94,6 @@ OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 - `CHAT_HISTORY_DIR`: 履歴ファイルの保存先（デフォルト: `XDG_DATA_HOME/multi_llm_chat/chat_histories` または `~/.multi_llm_chat/chat_histories`）
 - `CHAT_HISTORY_USER_ID`: CLI/非対話環境で利用するユーザーID（未設定時は起動時に入力を要求）
 
-#### MCPサーバー連携（実験的機能）
-
-Model Context Protocol (MCP) によるツール連携機能を有効化できます。
-
-```
-# MCPサーバー連携を有効化（デフォルト: false）
-MULTI_LLM_CHAT_MCP_ENABLED=true
-```
-
-**注意**: この機能は現在開発中です。有効化してもUI上では利用できません。
-
 #### コンテキスト圧縮設定（オプション）
 
 会話履歴が長くなった際のトークン数管理のため、以下の環境変数を設定できます。
