@@ -30,6 +30,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
+# Feature flags
+MCP_ENABLED = os.getenv("MULTI_LLM_CHAT_MCP_ENABLED", "false").lower() in ("true", "1", "yes")
+
 
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
