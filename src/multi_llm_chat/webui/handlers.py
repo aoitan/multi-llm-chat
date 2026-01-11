@@ -9,6 +9,23 @@ from .components import ASSISTANT_LABELS, ASSISTANT_ROLES
 logger = logging.getLogger(__name__)
 
 
+def logic_history_to_display(logic_history):
+    """Converts logic history to display history format."""
+    display_history = []
+    for turn in logic_history:
+        if turn["role"] == "user":
+            display_history.append([turn["content"], ""])
+        elif turn["role"] in ASSISTANT_ROLES and display_history:
+            prefix = ASSISTANT_LABELS.get(turn["role"], "")
+            formatted_content = f"{prefix}{turn['content']}" if prefix else turn["content"]
+            current_response = display_history[-1][1]
+            if current_response:
+                display_history[-1][1] = current_response + "\n\n" + formatted_content
+            else:
+                display_history[-1][1] = formatted_content
+    return display_history
+
+
 def save_history_action(user_id, save_name, logic_history, system_prompt):
     """Save current chat history using HistoryStore
 
