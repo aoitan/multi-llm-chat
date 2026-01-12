@@ -60,6 +60,7 @@ class ChatService:
         system_prompt: System prompt text for LLM context
         gemini_provider: Gemini LLM provider instance
         chatgpt_provider: ChatGPT LLM provider instance
+        mcp_client: Optional MCP client for tool execution
     """
 
     def __init__(
@@ -69,6 +70,7 @@ class ChatService:
         system_prompt="",
         gemini_provider=None,
         chatgpt_provider=None,
+        mcp_client=None,
     ):
         """Initialize ChatService with optional existing state and providers
 
@@ -78,6 +80,7 @@ class ChatService:
             system_prompt: Optional system prompt (default: "")
             gemini_provider: Optional Gemini provider instance (lazy-created if None)
             chatgpt_provider: Optional ChatGPT provider instance (lazy-created if None)
+            mcp_client: Optional MCP client for tool execution
         """
         self.display_history = display_history if display_history is not None else []
         self.logic_history = logic_history if logic_history is not None else []
@@ -86,12 +89,16 @@ class ChatService:
         # Store injected providers or None for lazy initialization
         self._gemini_provider = gemini_provider
         self._chatgpt_provider = chatgpt_provider
+        self.mcp_client = mcp_client
 
     @property
     def gemini_provider(self):
         """Lazy-initialized Gemini provider"""
         if self._gemini_provider is None:
             self._gemini_provider = create_provider("gemini")
+        # Add name attribute for execute_with_tools
+        if not hasattr(self._gemini_provider, "name"):
+            self._gemini_provider.name = "gemini"
         return self._gemini_provider
 
     @property
@@ -99,6 +106,9 @@ class ChatService:
         """Lazy-initialized ChatGPT provider"""
         if self._chatgpt_provider is None:
             self._chatgpt_provider = create_provider("chatgpt")
+        # Add name attribute for execute_with_tools
+        if not hasattr(self._chatgpt_provider, "name"):
+            self._chatgpt_provider.name = "chatgpt"
         return self._chatgpt_provider
 
     def _handle_api_error(self, error, provider_name):
@@ -124,10 +134,11 @@ class ChatService:
             }
         )
 
-    def process_message(self, user_message, tools=None):
+    async def process_message(self, user_message, tools=None):
         """Process user message and generate LLM responses
 
-        This is a generator function that yields intermediate states for streaming UI updates.
+        This is an async generator function that yields intermediate states
+        for streaming UI updates.
 
         Args:
             user_message: User's input message
@@ -136,6 +147,8 @@ class ChatService:
         Yields:
             tuple: (display_history, logic_history) after each update
         """
+        from .core import execute_with_tools
+
         mention = parse_mention(user_message)
 
         # Add user message to histories (structured format)
@@ -158,56 +171,56 @@ class ChatService:
         if mention in ["gemini", "all"]:
             gemini_label = ASSISTANT_LABELS["gemini"]
             self.display_history[-1][1] = gemini_label
-            gemini_input_history = history_snapshot or self.logic_history
+            # Use snapshot for input if @all, but we still want the results in self.logic_history
+            gemini_input_history = (
+                [entry.copy() for entry in history_snapshot]
+                if history_snapshot
+                else self.logic_history
+            )
 
             try:
-                full_response = ""
-                content_parts = []
-
-                # Directly use call_api to handle mixed content (text and tool calls)
-                stream = self.gemini_provider.call_api(
+                # Use Agentic Loop for Gemini
+                any_yielded = False
+                async for chunk in execute_with_tools(
+                    self.gemini_provider,
                     gemini_input_history,
                     self.system_prompt,
+                    mcp_client=self.mcp_client,
                     tools=tools,
-                )
-
-                for chunk in stream:
-                    if chunk.get("type") == "text":
+                ):
+                    any_yielded = True
+                    chunk_type = chunk.get("type")
+                    if chunk_type == "text":
                         text = chunk.get("content", "")
                         if text:
-                            full_response += text
-                            if content_parts and content_parts[-1].get("type") == "text":
-                                content_parts[-1]["content"] += text
-                            else:
-                                content_parts.append({"type": "text", "content": text})
                             self.display_history[-1][1] += text
                             yield self.display_history, self.logic_history
-                    elif chunk.get("type") == "tool_call":
+                    elif chunk_type == "tool_call":
                         tool_call_content = chunk.get("content", {})
-                        content_parts.append({"type": "tool_call", "content": tool_call_content})
-
-                        # Represent tool call in UI
                         tool_name = tool_call_content.get("name", "unknown_tool")
                         tool_representation = f"[Tool Call: {tool_name}]"
                         self.display_history[-1][1] += tool_representation
                         yield self.display_history, self.logic_history
+                    elif chunk_type == "tool_result":
+                        tool_result_content = chunk.get("content", {})
+                        tool_name = tool_result_content.get("name", "unknown_tool")
+                        tool_representation = f"[Tool Result: {tool_name}]"
+                        self.display_history[-1][1] += tool_representation
+                        yield self.display_history, self.logic_history
 
-                # Append structured data to logic history
-                if not content_parts:
-                    # Empty response case: API returned no content at all
-                    # This differs from streaming (where content_parts accumulates)
+                if not any_yielded:
                     error_message = "[System: Geminiからの応答がありませんでした]"
-                    content_parts = [{"type": "text", "content": error_message}]
-                    # Append error message only if display_history contains only label
-                    # (i.e., no streaming content was added)
                     if self.display_history[-1][1] == gemini_label:
                         self.display_history[-1][1] += error_message
+                    self.logic_history.append(
+                        {"role": "gemini", "content": [{"type": "text", "content": error_message}]}
+                    )
 
-                new_entry = {
-                    "role": "gemini",
-                    "content": content_parts,
-                }
-                self.logic_history.append(new_entry)
+                # If we used a snapshot, we need to append the new entries to the main history
+                if history_snapshot:
+                    new_entries = gemini_input_history[len(history_snapshot) :]
+                    self.logic_history.extend(new_entries)
+                # If not snapshot, self.logic_history was updated directly by execute_with_tools
             except (ValueError, Exception) as e:
                 self._handle_api_error(e, "gemini")
 
@@ -222,41 +235,55 @@ class ChatService:
             else:
                 self.display_history[-1][1] = chatgpt_label
 
-            chatgpt_input_history = history_snapshot or self.logic_history
+            # Use snapshot for input if @all
+            chatgpt_input_history = (
+                [entry.copy() for entry in history_snapshot]
+                if history_snapshot
+                else self.logic_history
+            )
 
             try:
-                # Use injected provider instance
-                full_response = ""
-
-                # ChatGPTはツール未対応のため、toolsが指定されている場合は警告ログを記録
-                if tools:
-                    logger.warning("ChatGPT does not support tools, ignoring tools parameter")
-
-                stream = self.chatgpt_provider.call_api(
+                # Use Agentic Loop for ChatGPT
+                any_yielded = False
+                async for chunk in execute_with_tools(
+                    self.chatgpt_provider,
                     chatgpt_input_history,
                     self.system_prompt,
-                    tools=None,  # Explicitly pass None (ChatGPT doesn't support tools yet)
-                )
-                for chunk in stream:
-                    if chunk.get("type") == "text":
+                    mcp_client=self.mcp_client,
+                    tools=tools,
+                ):
+                    any_yielded = True
+                    chunk_type = chunk.get("type")
+                    if chunk_type == "text":
                         text = chunk.get("content", "")
                         if text:
-                            full_response += text
                             self.display_history[-1][1] += text
                             yield self.display_history, self.logic_history
+                    elif chunk_type == "tool_call":
+                        tool_call_content = chunk.get("content", {})
+                        tool_name = tool_call_content.get("name", "unknown_tool")
+                        tool_representation = f"[Tool Call: {tool_name}]"
+                        self.display_history[-1][1] += tool_representation
+                        yield self.display_history, self.logic_history
+                    elif chunk_type == "tool_result":
+                        tool_result_content = chunk.get("content", {})
+                        tool_name = tool_result_content.get("name", "unknown_tool")
+                        tool_representation = f"[Tool Result: {tool_name}]"
+                        self.display_history[-1][1] += tool_representation
+                        yield self.display_history, self.logic_history
 
-                content_parts = []
-                if full_response:
-                    content_parts.append({"type": "text", "content": full_response})
-                else:
-                    # Empty response: add error message to logic_history
+                if not any_yielded:
                     error_message = "[System: ChatGPTからの応答がありませんでした]"
-                    content_parts.append({"type": "text", "content": error_message})
-                    # display_history already has chatgpt_label, so append error message
-                    self.display_history[-1][1] += error_message
+                    if self.display_history[-1][1] == chatgpt_label:
+                        self.display_history[-1][1] += error_message
+                    self.logic_history.append(
+                        {"role": "chatgpt", "content": [{"type": "text", "content": error_message}]}
+                    )
 
-                new_entry = {"role": "chatgpt", "content": content_parts}
-                self.logic_history.append(new_entry)
+                # If we used a snapshot, we need to append the new entries to the main history
+                if history_snapshot:
+                    new_entries = chatgpt_input_history[len(history_snapshot) :]
+                    self.logic_history.extend(new_entries)
             except (ValueError, Exception) as e:
                 self._handle_api_error(e, "chatgpt")
 
@@ -305,9 +332,11 @@ class ChatService:
 
 def main():
     """Backward compatible main function that returns only history"""
+    import asyncio
+
     from .cli import main as _cli_main
 
-    history, _system_prompt = _cli_main()
+    history, _system_prompt = asyncio.run(_cli_main())
     return history
 
 

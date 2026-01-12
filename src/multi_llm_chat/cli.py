@@ -29,7 +29,7 @@ def _display_tool_response(response_type, content):
         print()  # Blank line
 
 
-def _process_service_stream(service, user_message):
+async def _process_service_stream(service, user_message):
     """Process ChatService stream and print responses for CLI with real-time streaming.
 
     Args:
@@ -45,7 +45,7 @@ def _process_service_stream(service, user_message):
     last_model_name = None  # Track model name to detect switches (for @all)
 
     # Process message through ChatService with streaming
-    for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
+    async for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
         # Print only new content from display_history (incremental streaming)
         # display_history format: [[user_msg, assistant_msg], ...]
 
@@ -344,8 +344,12 @@ def _handle_copy_command(args, history):
         print("エラー: クリップボードへのコピーに失敗しました。")
 
 
-def main():
+async def main():
     """Main CLI loop"""
+    import asyncio
+
+    from .mcp.client import MCPClient
+
     store = HistoryStore()
     user_id = _prompt_user_id()
 
@@ -356,51 +360,88 @@ def main():
     # Create session-scoped ChatService for provider reuse
     service = ChatService()
 
-    while True:
-        prompt = input("> ").strip()
+    # MCP support
+    mcp_enabled = core.MCP_ENABLED
+    mcp_client = None
 
-        if prompt.lower() in ["exit", "quit"]:
-            break
+    if mcp_enabled:
+        # TODO: Load command/args from config
+        mcp_client = MCPClient("uvx", ["mcp-server-weather"])
 
-        # Handle commands
-        if prompt.startswith("/"):
-            parts = prompt.split(None, 1)
-            command = parts[0]
-            args = parts[1] if len(parts) > 1 else ""
+    async def run_cli():
+        nonlocal history, system_prompt, is_dirty
 
-            if command == "/system":
-                new_prompt = _handle_system_command(args, system_prompt)
-                if new_prompt != system_prompt:
-                    system_prompt = new_prompt
-                    is_dirty = True
-            elif command == "/reset":
-                if is_dirty and not _confirm("現在の会話は保存されていません。リセットしますか？"):
-                    continue
-                history = reset_history()
-                is_dirty = bool(system_prompt)  # system promptのみの場合はdirty扱いを継続
-                print("チャット履歴をリセットしました。")
-            elif command == "/history":
-                history, system_prompt, is_dirty = _handle_history_command(
-                    args, user_id, store, history, system_prompt, is_dirty
-                )
-            elif command == "/copy":
-                _handle_copy_command(args, history)
-            else:
-                print(
-                    f"エラー: `{command}` は不明なコマンドです。"
-                    f"利用可能なコマンドは `/system` などです。"
-                )
-            continue
+        # Use MCP client if enabled
+        if mcp_client:
+            async with mcp_client:
+                service.mcp_client = mcp_client
+                await _cli_loop()
+        else:
+            await _cli_loop()
 
-        # Use ChatService for message processing (Issue #62)
-        # ChatService handles mention parsing, LLM routing, and history updates
-        # Update service state with current history and system prompt
-        service.display_history = []  # CLI doesn't use Gradio-style display history
-        service.logic_history = history
-        service.system_prompt = system_prompt
+    async def _cli_loop():
+        nonlocal history, system_prompt, is_dirty
+        while True:
+            # Use loop.run_in_executor to make input() non-blocking for asyncio if needed
+            # but for a simple CLI, sync input is usually fine if we don't have background tasks.
+            try:
+                loop = asyncio.get_event_loop()
+                prompt = await loop.run_in_executor(None, input, "> ")
+                prompt = prompt.strip()
+            except EOFError:
+                break
 
-        # Process message through ChatService and handle CLI-specific display
-        _, history = _process_service_stream(service, prompt)
-        is_dirty = True
+            if prompt.lower() in ["exit", "quit"]:
+                break
 
+            # Handle commands
+            if prompt.startswith("/"):
+                parts = prompt.split(None, 1)
+                command = parts[0]
+                args = parts[1] if len(parts) > 1 else ""
+
+                if command == "/system":
+                    new_prompt = _handle_system_command(args, system_prompt)
+                    if new_prompt != system_prompt:
+                        system_prompt = new_prompt
+                        is_dirty = True
+                elif command == "/reset":
+                    if is_dirty and not _confirm(
+                        "現在の会話は保存されていません。リセットしますか？"
+                    ):
+                        continue
+                    history = reset_history()
+                    is_dirty = bool(system_prompt)  # system promptのみの場合はdirty扱いを継続
+                    print("チャット履歴をリセットしました。")
+                elif command == "/history":
+                    history, system_prompt, is_dirty = _handle_history_command(
+                        args, user_id, store, history, system_prompt, is_dirty
+                    )
+                elif command == "/copy":
+                    _handle_copy_command(args, history)
+                else:
+                    print(
+                        f"エラー: `{command}` は不明なコマンドです。"
+                        f"利用可能なコマンドは `/system` などです。"
+                    )
+                continue
+
+            # Use ChatService for message processing (Issue #62)
+            # ChatService handles mention parsing, LLM routing, and history updates
+            # Update service state with current history and system prompt
+            service.display_history = []  # CLI doesn't use Gradio-style display history
+            service.logic_history = history
+            service.system_prompt = system_prompt
+
+            # Process message through ChatService and handle CLI-specific display
+            _, history = await _process_service_stream(service, prompt)
+            is_dirty = True
+
+    await run_cli()
     return history, system_prompt
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())

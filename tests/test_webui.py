@@ -1,5 +1,6 @@
 """Tests for the WebUI package, refactored for the new architecture."""
 
+import asyncio
 from unittest.mock import patch
 
 from multi_llm_chat.webui.components import update_token_display
@@ -13,6 +14,14 @@ from multi_llm_chat.webui.handlers import (
     validate_and_respond,
 )
 from multi_llm_chat.webui.state import WebUIState
+
+
+async def consume_async_gen(gen):
+    """Helper to consume an async generator and return all yielded items."""
+    results = []
+    async for item in gen:
+        results.append(item)
+    return results
 
 
 # --- Tests for components.py ---
@@ -125,7 +134,7 @@ class TestWebUIHandlers:
             user_id="",
             chat_service=None,
         )
-        results = list(result_gen)
+        results = asyncio.run(consume_async_gen(result_gen))
         assert len(results) == 1
         final_display = results[0][0]
         assert "ユーザーIDを入力してください" in final_display[0][1]
@@ -133,9 +142,13 @@ class TestWebUIHandlers:
     def test_validate_and_respond_delegates_to_respond(self):
         """handlers.validate_and_respond: should delegate to respond() when user_id is valid."""
         with patch("multi_llm_chat.webui.handlers.respond") as mock_respond:
-            mock_respond.return_value = iter([("display", "display", "logic", "service")])
+
+            async def mock_respond_gen(*args, **kwargs):
+                yield ("display", "display", "logic", "service")
+
+            mock_respond.side_effect = mock_respond_gen
             result_gen = validate_and_respond("Hi", [], [], "", "test_user", None)
-            list(result_gen)  # Consume generator
+            asyncio.run(consume_async_gen(result_gen))  # Consume generator
             mock_respond.assert_called_once()
 
     def test_system_prompt_included_in_chat(self):
@@ -143,13 +156,17 @@ class TestWebUIHandlers:
         system_prompt = "You are a helpful assistant."
         with patch("multi_llm_chat.webui.handlers.ChatService") as MockChatService:
             mock_service_instance = MockChatService.return_value
-            mock_service_instance.process_message.return_value = iter([(["Hi"], ["Hi"])])
+
+            async def mock_process_message(*args, **kwargs):
+                yield (["Hi"], ["Hi"])
+
+            mock_service_instance.process_message.side_effect = mock_process_message
 
             # We test the wrapper `validate_and_respond` which calls the actual respond
             result_gen = validate_and_respond(
                 "@gemini Hello", [], [], system_prompt, "test_user", None
             )
-            list(result_gen)  # consume generator
+            asyncio.run(consume_async_gen(result_gen))  # consume generator
 
             # Check that the service was initialized and its state was set correctly
             assert mock_service_instance.system_prompt == system_prompt

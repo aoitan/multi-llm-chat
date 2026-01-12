@@ -205,7 +205,9 @@ def has_history_for_user(user_id: str) -> bool:
     return len(get_history_list(user_id)) > 0
 
 
-def respond(user_message, display_history, logic_history, system_prompt, user_id, chat_service):
+async def respond(
+    user_message, display_history, logic_history, system_prompt, user_id, chat_service
+):
     """
     検証済みの入力に基づき、チャットの中核的な応答ロジック（LLM呼び出し、履歴管理）を実行します。
 
@@ -234,11 +236,11 @@ def respond(user_message, display_history, logic_history, system_prompt, user_id
     chat_service.logic_history = logic_history
     chat_service.system_prompt = system_prompt
 
-    for updated_display, updated_logic in chat_service.process_message(user_message):
+    async for updated_display, updated_logic in chat_service.process_message(user_message):
         yield updated_display, updated_display, updated_logic, chat_service
 
 
-def validate_and_respond(
+async def validate_and_respond(
     user_message, display_history, logic_history, system_prompt, user_id, chat_service
 ):
     """
@@ -250,6 +252,7 @@ def validate_and_respond(
         yield display_history, display_history, logic_history, chat_service
         return
 
-    yield from respond(
+    async for result in respond(
         user_message, display_history, logic_history, system_prompt, user_id, chat_service
-    )
+    ):
+        yield result

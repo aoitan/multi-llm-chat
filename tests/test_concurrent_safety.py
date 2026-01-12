@@ -7,12 +7,21 @@ These tests verify that:
 4. Session-scoped providers are isolated from each other
 """
 
+import asyncio
 import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
 from multi_llm_chat.chat_logic import ChatService
 from multi_llm_chat.llm_provider import ChatGPTProvider, GeminiProvider, create_provider
+
+
+async def consume_async_gen(gen):
+    """Helper to consume an async generator and return all yielded items."""
+    results = []
+    async for item in gen:
+        results.append(item)
+    return results
 
 
 class TestGeminiConcurrentSafety(unittest.TestCase):
@@ -71,7 +80,7 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
             """Call API with specific prompt and store result"""
             try:
                 history = [{"role": "user", "content": f"Hello from thread {thread_id}"}]
-                # Call API and consume generator
+                # Call API and consume generator (call_api is sync generator)
                 chunks = list(provider.call_api(history, system_prompt=prompt_text))
                 response_text = "".join(provider.extract_text_from_chunk(c) for c in chunks)
 
@@ -317,8 +326,12 @@ class TestSessionScopedProviders(unittest.TestCase):
 
         # Process a message to ensure it uses the injected provider
         user_message = "@gemini Hello"
-        for _ in service.process_message(user_message):
-            pass
+
+        async def run_test():
+            async for _ in service.process_message(user_message):
+                pass
+
+        asyncio.run(run_test())
 
         # Verify the injected provider's model was used
         self.assertTrue(

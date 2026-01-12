@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import google.generativeai as genai
 import openai
@@ -20,6 +20,33 @@ from .history_utils import (
 from .history_utils import (
     prepare_request as _prepare_request,
 )
+from .llm_provider import (
+    CHATGPT_MODEL as CHATGPT_MODEL,
+)
+from .llm_provider import (
+    GEMINI_MODEL as GEMINI_MODEL,
+)
+from .llm_provider import (
+    GOOGLE_API_KEY as GOOGLE_API_KEY,
+)
+from .llm_provider import (
+    MCP_ENABLED as MCP_ENABLED,
+)
+from .llm_provider import (
+    OPENAI_API_KEY as OPENAI_API_KEY,
+)
+from .llm_provider import (
+    ChatGPTProvider as ChatGPTProvider,
+)
+from .llm_provider import (
+    GeminiProvider as GeminiProvider,
+)
+from .llm_provider import (
+    create_provider as create_provider,
+)
+from .llm_provider import (
+    get_provider as get_provider,
+)
 from .token_utils import (
     estimate_tokens as _estimate_tokens_impl,
 )
@@ -35,11 +62,6 @@ from .validation import (
 
 load_dotenv()
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
-CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
-
 
 def load_api_key(env_var_name):
     """Load API key from environment"""
@@ -52,8 +74,6 @@ def format_history_for_gemini(history):
     DEPRECATED: This is a backward compatibility wrapper.
     New code should use GeminiProvider.format_history() directly.
     """
-    from .llm_provider import GeminiProvider
-
     return GeminiProvider.format_history(history)
 
 
@@ -63,8 +83,6 @@ def format_history_for_chatgpt(history):
     DEPRECATED: This is a backward compatibility wrapper.
     New code should use ChatGPTProvider.format_history() directly.
     """
-    from .llm_provider import ChatGPTProvider
-
     return ChatGPTProvider.format_history(history)
 
 
@@ -110,8 +128,6 @@ def call_gemini_api(history, system_prompt=None):
         stacklevel=2,
     )
 
-    from multi_llm_chat.llm_provider import create_provider
-
     try:
         provider = create_provider("gemini")
         yield from provider.call_api(history, system_prompt)
@@ -156,8 +172,6 @@ def call_chatgpt_api(history, system_prompt=None):
         stacklevel=2,
     )
 
-    from multi_llm_chat.llm_provider import create_provider
-
     try:
         provider = create_provider("chatgpt")
         yield from provider.call_api(history, system_prompt)
@@ -184,8 +198,6 @@ def stream_text_events(history, provider_name, system_prompt=None):
     Yields:
         str: Normalized text chunks
     """
-    from multi_llm_chat.llm_provider import create_provider
-
     provider = create_provider(provider_name)
     yield from provider.stream_text_events(history, system_prompt)
 
@@ -196,8 +208,6 @@ def extract_text_from_chunk(chunk, model_name):
     DEPRECATED: This is a backward compatibility wrapper.
     New code should use provider.extract_text_from_chunk() directly.
     """
-    from multi_llm_chat.llm_provider import create_provider
-
     try:
         provider_name = _get_provider_name_from_model(model_name)
         provider = create_provider(provider_name)
@@ -223,11 +233,7 @@ def get_max_context_length(model_name):
 
 def calculate_tokens(text: str, model_name: str) -> int:
     """Calculate token count for text using model-appropriate method"""
-
-    from .llm_provider import get_provider
-
     provider_name = _get_provider_name_from_model(model_name)
-
     provider = get_provider(provider_name)
 
     result = provider.get_token_info(text, history=None, model_name=model_name)
@@ -243,8 +249,7 @@ def get_token_info(
     DEPRECATED: This is a backward compatibility wrapper.
     New code should use provider.get_token_info() directly.
     """
-
-    from .llm_provider import TIKTOKEN_AVAILABLE, get_provider
+    from .llm_provider import TIKTOKEN_AVAILABLE
 
     # Determine provider from model name
     provider_name = _get_provider_name_from_model(model_name)
@@ -298,13 +303,14 @@ def validate_context_length(history, system_prompt, model_name):
 
 # Agentic Loop implementation
 async def execute_with_tools(
-    provider,
+    provider: Any,
     history: List[Dict],
     system_prompt: Optional[str] = None,
-    mcp_client=None,
+    mcp_client: Optional[Any] = None,
     max_iterations: int = 10,
     timeout: float = 120.0,
-):
+    tools: Optional[List[Dict[str, Any]]] = None,
+) -> AsyncGenerator[Dict[str, Any], None]:
     """Execute LLM call with Agentic Loop for tool execution.
 
     Repeatedly calls LLM and executes tools until:
@@ -320,6 +326,8 @@ async def execute_with_tools(
         mcp_client: Optional MCP client for tool execution
         max_iterations: Maximum number of LLM calls (default: 10)
         timeout: Maximum total execution time in seconds (default: 120)
+        tools: Optional tool definitions (JSON Schema format).
+               If None, tools will be fetched from mcp_client.
 
     Yields:
         Streaming chunks from LLM:
@@ -329,14 +337,19 @@ async def execute_with_tools(
 
     Raises:
         TimeoutError: If execution exceeds timeout
+        ValueError: If tool call is requested but mcp_client is None
     """
     import logging
     import time
 
     logger = logging.getLogger(__name__)
     start_time = time.time()
-    tools = await mcp_client.list_tools() if mcp_client else None
 
+    # Use provided tools if any, otherwise list from MCP client
+    if tools is None and mcp_client:
+        tools = await mcp_client.list_tools()
+
+    _iteration = 0
     for _iteration in range(max_iterations):
         # Check timeout before each iteration
         if time.time() - start_time > timeout:
@@ -344,7 +357,8 @@ async def execute_with_tools(
 
         # Call LLM
         tool_calls_in_turn = []
-        async for chunk in provider.call_api(history, system_prompt, tools):
+        thought_text = ""
+        for chunk in provider.call_api(history, system_prompt, tools):
             # Check timeout during streaming
             if time.time() - start_time > timeout:
                 raise TimeoutError(f"Agentic loop exceeded {timeout}s timeout")
@@ -352,6 +366,8 @@ async def execute_with_tools(
             chunk_type = chunk.get("type")
 
             if chunk_type == "text":
+                content = chunk.get("content", "")
+                thought_text += content
                 yield chunk
             elif chunk_type == "tool_call":
                 tool_call = chunk.get("content", {})
@@ -360,7 +376,17 @@ async def execute_with_tools(
 
         # If no tool calls, loop ends (final response)
         if not tool_calls_in_turn:
+            # Add final text to history if it exists
+            if thought_text:
+                history.append(
+                    {"role": provider.name, "content": [{"type": "text", "content": thought_text}]}
+                )
             break
+
+        # Tool calls received - execute them
+        if tool_calls_in_turn and not mcp_client:
+            logger.error("Tool call received but mcp_client is None")
+            raise ValueError("MCP client is required for tool execution")
 
         # Execute tools and collect results
         tool_results = []
@@ -392,6 +418,10 @@ async def execute_with_tools(
                 # Notify UI
                 yield {"type": "tool_result", "content": tool_result}
 
+            except ConnectionError:
+                # MCP server is down - cannot continue
+                logger.error("MCP connection error during tool execution: %s", name)
+                raise
             except Exception as e:
                 # Tool execution failed - report to LLM
                 logger.warning("Tool execution failed for %s: %s", name, e)
@@ -408,7 +438,9 @@ async def execute_with_tools(
 
         # Append tool_call and tool_result to history
         # Note: History format is structured content (list of items)
-        assistant_entry = {"role": "assistant", "content": []}
+        assistant_entry = {"role": provider.name, "content": []}
+        if thought_text:
+            assistant_entry["content"].append({"type": "text", "content": thought_text})
         for tc in tool_calls_in_turn:
             assistant_entry["content"].append({"type": "tool_call", "content": tc})
         history.append(assistant_entry)
@@ -423,7 +455,6 @@ async def execute_with_tools(
                 tool_result_item["name"] = tr["name"]
             user_entry["content"].append(tool_result_item)
         history.append(user_entry)
-
-    # Max iterations reached - check last iteration
-    if len(history) >= max_iterations * 2:  # Each iteration adds 2 entries
+    else:
+        # Loop reached max_iterations without breaking
         logger.warning("Agentic loop reached max_iterations=%d", max_iterations)
