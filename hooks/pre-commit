@@ -1,0 +1,21 @@
+#!/bin/sh
+# Pre-commit hook: Run Ruff linting and formatting checks
+
+set -e
+
+echo "🔍 Running Ruff checks..."
+
+# Check for linting errors
+if ! uv run ruff check .; then
+    echo "❌ Ruff check failed. Please fix the issues above."
+    exit 1
+fi
+
+# Check for formatting issues
+if ! uv run ruff format --check .; then
+    echo "❌ Ruff format check failed. Run 'uv run ruff format .' to auto-fix."
+    exit 1
+fi
+
+echo "✅ All lint checks passed!"
+exit 0
