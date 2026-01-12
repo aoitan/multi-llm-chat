@@ -52,6 +52,12 @@ Web UI版とCLI版の2つのインターフェースを提供します。
 2. **Green**: テストを通す最小限の実装を追加
 3. **Refactor**: テストを保ったままコードを改善
 
+### 重要なドキュメント
+
+- **[開発ワークフロー](doc/development_workflow.md)**: TDD、レビュー、CI/CDのガイドライン
+- **[構造化コンテンツ移行計画](doc/migration_plan.md)**: 履歴データ形式の段階的移行ロードマップ
+- **[アーキテクチャ](doc/architecture.md)**: 3層アーキテクチャの設計思想
+
 ### コード品質チェック
 
 プロジェクトでは[Ruff](https://docs.astral.sh/ruff/)を使用して、コードのlintとフォーマットを行っています。

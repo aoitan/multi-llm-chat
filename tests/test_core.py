@@ -118,6 +118,7 @@ def test_format_history_for_gemini():
     assert result[1]["role"] == "model"
     assert result[1]["parts"] == [{"text": "Hi there"}]
 
+
 def test_format_history_for_chatgpt():
     """format_history should convert to ChatGPT format"""
     history = [
@@ -350,6 +351,7 @@ def test_format_history_for_gemini_filters_chatgpt_responses():
     assert result[0] == {"role": "user", "parts": [{"text": "Hello"}]}
     assert result[1] == {"role": "user", "parts": [{"text": "Another question"}]}
     assert result[2] == {"role": "model", "parts": [{"text": "Answer from Gemini"}]}
+
 
 def test_format_history_for_chatgpt_filters_gemini_responses():
     """format_history_for_chatgpt should filter out Gemini responses to avoid confusion"""

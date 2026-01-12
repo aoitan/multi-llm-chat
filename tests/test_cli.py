@@ -16,7 +16,7 @@ def _create_mock_provider(response_text, provider_type="gemini"):
         # Gemini now uses call_api and a structured dictionary
         mock_provider.call_api.return_value = iter([{"type": "text", "content": response_text}])
     else:  # chatgpt
-        mock_provider.stream_text_events.return_value = iter([response_text])
+        mock_provider.call_api.return_value = iter([{"type": "text", "content": response_text}])
 
     return mock_provider
 
@@ -136,13 +136,13 @@ def test_history_management_user_input(monkeypatch):
 
     assert len(history) == 4
     assert history[0]["role"] == "user"
-    assert history[0]["content"] == "hello gemini"
+    assert history[0]["content"] == [{"type": "text", "content": "hello gemini"}]
     assert history[1]["role"] == "user"
-    assert history[1]["content"] == "@gemini how are you?"
+    assert history[1]["content"] == [{"type": "text", "content": "@gemini how are you?"}]
     assert history[2]["role"] == "gemini"
     assert history[2]["content"] == [{"type": "text", "content": "Mocked Gemini Response"}]
     assert history[3]["role"] == "user"
-    assert history[3]["content"] == "just a thought"
+    assert history[3]["content"] == [{"type": "text", "content": "just a thought"}]
 
 
 def test_mention_routing():
@@ -158,7 +158,8 @@ def test_mention_routing():
                 # Verify Gemini provider was created
                 mock_create_provider.assert_called_with("gemini")
                 assert history[-1]["role"] == "gemini"
-                assert history[-1]["content"] == [{"type": "text", "content": "Mocked Gemini Response"}]
+                expected_content = [{"type": "text", "content": "Mocked Gemini Response"}]
+                assert history[-1]["content"] == expected_content
 
     # Test @chatgpt
     with patch("builtins.input", side_effect=["test-user", "@chatgpt hello", "exit"]):
@@ -171,7 +172,8 @@ def test_mention_routing():
                 # Verify ChatGPT provider was created
                 mock_create_provider.assert_called_with("chatgpt")
                 assert history[-1]["role"] == "chatgpt"
-                assert history[-1]["content"] == "Mocked ChatGPT Response"
+                expected_content = [{"type": "text", "content": "Mocked ChatGPT Response"}]
+                assert history[-1]["content"] == expected_content
 
     # Test @all (calls both providers)
     with patch("builtins.input", side_effect=["test-user", "@all hello", "exit"]):
@@ -190,9 +192,11 @@ def test_mention_routing():
                 # @all should call both providers
                 assert mock_create_provider.call_count == 2
                 assert history[-2]["role"] == "gemini"
-                assert history[-2]["content"] == [{"type": "text", "content": "Mocked Gemini Response"}]
+                expected_content = [{"type": "text", "content": "Mocked Gemini Response"}]
+                assert history[-2]["content"] == expected_content
                 assert history[-1]["role"] == "chatgpt"
-                assert history[-1]["content"] == "Mocked ChatGPT Response"
+                expected_content = [{"type": "text", "content": "Mocked ChatGPT Response"}]
+                assert history[-1]["content"] == expected_content
 
     # Test no mention (memo input)
     with patch("builtins.input", side_effect=["test-user", "hello", "exit"]):
@@ -203,7 +207,7 @@ def test_mention_routing():
                 # No provider should be called for memo input
                 assert not mock_create_provider.called
                 assert history[-1]["role"] == "user"
-                assert history[-1]["content"] == "hello"
+                assert history[-1]["content"] == [{"type": "text", "content": "hello"}]
 
 
 def test_unknown_command_error(monkeypatch):
@@ -242,7 +246,7 @@ def test_history_commands_basic(tmp_path, monkeypatch):
             history, system_prompt = cli.main()
 
     assert system_prompt == ""
-    assert [entry["content"] for entry in history] == ["hello"]
+    assert [entry["content"] for entry in history] == [[{"type": "text", "content": "hello"}]]
 
 
 def test_system_command_uses_gemini_limit_for_large_prompt(monkeypatch):
@@ -285,7 +289,9 @@ def test_reset_command_clears_history_but_keeps_prompt(monkeypatch):
             history, system_prompt = cli.main()
 
     # After reset, only messages after the command should remain
-    assert [entry["content"] for entry in history] == ["second message"]
+    assert [entry["content"] for entry in history] == [
+        [{"type": "text", "content": "second message"}]
+    ]
     assert system_prompt == "base prompt"
 
 

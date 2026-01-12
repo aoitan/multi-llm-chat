@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, List, Optional
 
+from .history_utils import content_to_text
 from .token_utils import get_max_context_length
 
 
@@ -65,13 +66,13 @@ def validate_context_length(
         i = len(history) - 1
         while i >= 0 and history[i]["role"] in ["gemini", "chatgpt"]:
             # Add assistant message tokens
-            content = history[i].get("content", "")
+            content = content_to_text(history[i].get("content", ""), include_tool_data=True)
             latest_tokens += token_calculator(content, model_name)
             i -= 1
 
         # Add user message if found
         if i >= 0 and history[i]["role"] == "user":
-            content = history[i].get("content", "")
+            content = content_to_text(history[i].get("content", ""), include_tool_data=True)
             latest_tokens += token_calculator(content, model_name)
 
     total_tokens = system_tokens + latest_tokens

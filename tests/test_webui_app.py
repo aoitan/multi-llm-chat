@@ -100,3 +100,20 @@ class TestWebUIApp:
         assert system_prompt_output == INITIAL_SYSTEM_PROMPT
         # すべてのボタンが無効であるべき
         assert not any(btn["interactive"] for btn in button_states)
+
+    def test_logic_history_to_display_handles_structured_content(self):
+        logic_history = [
+            {"role": "user", "content": "hi"},
+            {
+                "role": "gemini",
+                "content": [
+                    {"type": "text", "content": "G-1"},
+                    {"type": "tool_call", "content": {"name": "tool", "arguments": {}}},
+                    {"type": "text", "content": "G-2"},
+                ],
+            },
+        ]
+
+        display_history = logic_history_to_display(logic_history)
+
+        assert display_history == [["hi", "**Gemini:**\nG-1 G-2"]]
