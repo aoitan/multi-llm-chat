@@ -115,13 +115,14 @@ class ChatService:
         self.display_history[-1][1] = f"**{provider_title}:**\n{error_msg}"
         self.logic_history.append({"role": provider_name, "content": error_msg})
 
-    def process_message(self, user_message):
+    def process_message(self, user_message, tools=None):
         """Process user message and generate LLM responses
 
         This is a generator function that yields intermediate states for streaming UI updates.
 
         Args:
             user_message: User's input message
+            tools: Optional list of tools for the LLM
 
         Yields:
             tuple: (display_history, logic_history) after each update
@@ -149,17 +150,40 @@ class ChatService:
             gemini_input_history = history_snapshot or self.logic_history
 
             try:
-                # Use injected provider instance
                 full_response = ""
-                for text in self.gemini_provider.stream_text_events(
-                    gemini_input_history, self.system_prompt
-                ):
-                    full_response += text
-                    self.display_history[-1][1] += text
-                    yield self.display_history, self.logic_history
+                structured_tool_calls = []
 
-                self.logic_history.append({"role": "gemini", "content": full_response})
-                if not full_response.strip():
+                # Directly use call_api to handle mixed content (text and tool calls)
+                stream = self.gemini_provider.call_api(
+                    gemini_input_history,
+                    self.system_prompt,
+                    tools=tools,
+                )
+
+                for chunk in stream:
+                    if chunk.get("type") == "text":
+                        text = chunk.get("content", "")
+                        if text:
+                            full_response += text
+                            self.display_history[-1][1] += text
+                            yield self.display_history, self.logic_history
+                    elif chunk.get("type") == "tool_call":
+                        tool_call_content = chunk.get("content", {})
+                        structured_tool_calls.append(tool_call_content)
+
+                        # Represent tool call in UI
+                        tool_name = tool_call_content.get("name", "unknown_tool")
+                        tool_representation = f"[Tool Call: {tool_name}]"
+                        self.display_history[-1][1] += tool_representation
+                        yield self.display_history, self.logic_history
+
+                # Append structured data to logic history
+                new_entry = {"role": "gemini", "content": full_response}
+                if structured_tool_calls:
+                    new_entry["tool_calls"] = structured_tool_calls
+                self.logic_history.append(new_entry)
+
+                if not full_response.strip() and not structured_tool_calls:
                     self.display_history[-1][1] = (
                         "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
                     )

@@ -11,10 +11,10 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
-
 import google.generativeai as genai
 import openai
 from dotenv import load_dotenv
+from google.generativeai.types import FunctionDeclaration, Tool
 
 try:
     import tiktoken
@@ -43,48 +43,46 @@ MCP_ENABLED = os.getenv("MULTI_LLM_CHAT_MCP_ENABLED", "false").lower() in (
 # MCP Tool conversion functions
 
 
-def mcp_tools_to_gemini_format(mcp_tools):
-    """Convert MCP tool definitions to Gemini Tool format
+def mcp_tools_to_gemini_format(mcp_tools: List[Dict[str, Any]]) -> Optional[List[Tool]]:
+    """Convert MCP tool definitions to Gemini Tool format.
 
     Args:
         mcp_tools: List of MCP tool definitions with structure:
             [{"name": str, "description": str, "inputSchema": dict}, ...]
 
     Returns:
-        List of Gemini Tool dictionaries
+        A list containing a single Gemini Tool object, or None if no tools are provided.
     """
     if not mcp_tools:
-        return []
+        return None
 
     function_declarations = []
     for tool in mcp_tools:
-        func_decl = {
-            "name": tool["name"],
-            "description": tool["description"],
-            "parameters": tool["inputSchema"],
-        }
+        # It's safer to check for keys
+        name = tool.get("name")
+        description = tool.get("description")
+        parameters = tool.get("inputSchema")
+
+        if not name:
+            continue  # Skip tools without a name
+
+        func_decl = FunctionDeclaration(
+            name=name,
+            description=description,
+            parameters=parameters,
+        )
         function_declarations.append(func_decl)
 
-    # Gemini expects tools as a list with function_declarations
-    return [{"function_declarations": function_declarations}]
+    if not function_declarations:
+        return None
 
-
-def parse_gemini_function_call(function_call):
-    """Parse Gemini FunctionCall to common format
-
-    Args:
-        function_call: Gemini FunctionCall object
-
-    Returns:
-        Dict with structure: {"tool_name": str, "arguments": dict}
-    """
-    return {"tool_name": function_call.name, "arguments": dict(function_call.args)}
+    # Gemini expects tools as a list containing one Tool object
+    return [Tool(function_declarations=function_declarations)]
 
 
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
-    @abstractmethod
     @abstractmethod
     def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
         """Call the LLM API and return a generator of response chunks
@@ -125,19 +123,15 @@ class LLMProvider(ABC):
         pass
 
     def stream_text_events(self, history, system_prompt=None):
-        """Stream normalized text events from provider-specific chunks.
-
-        Args:
-            history: List of conversation history dicts with 'role' and 'content'
-            system_prompt: Optional system instruction
-
-        Yields:
-            str: Text segments extracted from provider-specific chunks
-        """
+        """Stream normalized text events from the unified dictionary stream."""
         for chunk in self.call_api(history, system_prompt):
-            text = self.extract_text_from_chunk(chunk)
-            if text:
-                yield text
+            # Support both dict and legacy string format
+            if isinstance(chunk, dict):
+                if chunk.get("type") == "text":
+                    yield chunk.get("content", "")
+            elif isinstance(chunk, str):  # Legacy string support
+                if chunk:  # Filter empty strings
+                    yield chunk
 
 
 class GeminiProvider(LLMProvider):
@@ -204,21 +198,35 @@ class GeminiProvider(LLMProvider):
 
     @staticmethod
     def format_history(history):
-        """Convert history to Gemini API format
+        """Convert history to Gemini API format.
 
-        Filters out responses from other LLMs (e.g., ChatGPT) to avoid
-        sending Gemini messages it didn't generate, which would create
-        a self-contradictory conversation.
+        Handles structured history entries containing text and tool calls.
+        Filters out responses from other LLMs (e.g., ChatGPT).
         """
         gemini_history = []
         for entry in history:
             role = entry["role"]
+            content = entry.get("content", "")
+            tool_calls = entry.get("tool_calls")
+
             # Only include user messages and Gemini's own responses
             if role == "user":
-                gemini_history.append({"role": "user", "parts": [entry["content"]]})
+                gemini_history.append({"role": "user", "parts": [content]})
             elif role == "gemini":
-                gemini_history.append({"role": "model", "parts": [entry["content"]]})
-            # Skip chatgpt, system, and other roles - they shouldn't be sent to Gemini
+                parts = []
+                if content:
+                    parts.append(content)
+                if tool_calls:
+                    for tool_call in tool_calls:
+                        # Convert internal tool_call format to Gemini's expected format
+                        gemini_formatted_tool_call = {
+                            "name": tool_call.get("name"),
+                            "args": tool_call.get("arguments", {}),
+                        }
+                        parts.append({"function_call": gemini_formatted_tool_call})
+                if parts:
+                    gemini_history.append({"role": "model", "parts": parts})
+            # Skip chatgpt, system, and other roles
         return gemini_history
 
     def call_api(
@@ -230,58 +238,63 @@ class GeminiProvider(LLMProvider):
     ):
         """Call Gemini API and yield response chunks with safety error handling
 
-        Args:
-            history: Conversation history
-            system_prompt: Optional system instruction
-            tools: Optional list of MCP tool definitions
-            **kwargs: Additional keyword arguments for the provider.
+        Yields unified dictionary objects:
+        - {"type": "text", "content": str}
+        - {"type": "tool_call", "content": {"name": str, "arguments": dict}}
         """
         if not GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY is not set")
 
         model = self._get_model(system_prompt)
         gemini_history = self.format_history(history)
-        gemini_tools = mcp_tools_to_gemini_format(tools) if tools else None
+        # Convert MCP tools to Gemini format internally
+        gemini_tools = mcp_tools_to_gemini_format(tools)
 
         try:
-            response = model.generate_content(
-                gemini_history, stream=True, tools=gemini_tools
-            )
+            response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
 
-            function_call_name = None
-            function_call_args = {}
+            current_tool_call = {}
 
-            # Process stream and reconstruct tool calls
             for chunk in response:
-                if chunk.parts:
-                    for part in chunk.parts:
-                        if part.function_call:
-                            fc = part.function_call
-                            if fc.name:
-                                function_call_name = fc.name
-                            if fc.args:
-                                function_call_args.update(fc.args)
-
                 # Yield text parts immediately
-                if chunk.text:
-                    yield chunk
+                if hasattr(chunk, "text") and chunk.text:
+                    yield {"type": "text", "content": chunk.text}
 
-            # Yield the reconstructed tool call at the end of the stream
-            if function_call_name:
-                yield {
-                    "tool_name": function_call_name,
-                    "arguments": dict(function_call_args),
-                }
+                if hasattr(chunk, "parts"):
+                    for part in chunk.parts:
+                        if hasattr(part, "function_call") and part.function_call:
+                            fc = part.function_call
+
+                            if hasattr(fc, "name") and fc.name:
+                                # If a new tool call starts, yield the previous one if it exists
+                                if current_tool_call:
+                                    yield {
+                                        "type": "tool_call",
+                                        "content": current_tool_call,
+                                    }
+                                # Start a new tool call
+                                current_tool_call = {
+                                    "name": fc.name,
+                                    "arguments": {},
+                                }
+
+                            if hasattr(fc, "args") and fc.args:
+                                if "arguments" in current_tool_call:
+                                    # fc.args is a `dict_items` view, so convert to dict
+                                    current_tool_call["arguments"].update(dict(fc.args))
+
+            # Yield any remaining tool call at the end of the stream
+            if current_tool_call:
+                yield {"type": "tool_call", "content": current_tool_call}
 
         except genai.types.BlockedPromptException as e:
             raise ValueError(f"Prompt was blocked due to safety concerns: {e}") from e
 
-
     def extract_text_from_chunk(self, chunk: Any):
-        """Extract text from Gemini response chunk"""
-        if isinstance(chunk, dict):
-            return ""
-        return getattr(chunk, "text", "")
+        """Extract text from a unified response chunk."""
+        if isinstance(chunk, dict) and chunk.get("type") == "text":
+            return chunk.get("content", "")
+        return ""
 
     def get_token_info(self, text, history=None, model_name=None):
         """Get token information for Gemini
@@ -347,11 +360,13 @@ class ChatGPTProvider(LLMProvider):
         return chatgpt_history
 
     def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
-        """Call ChatGPT API and yield response chunks"""
+        """Call ChatGPT API and yield unified dictionary objects."""
         if not OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is not set")
         if tools:
-            print("Warning: ChatGPTProvider does not currently support tools.")
+            import logging
+
+            logging.warning("ChatGPTProvider does not currently support tools.")
 
         # Build messages for OpenAI format
         messages = []
@@ -366,7 +381,11 @@ class ChatGPTProvider(LLMProvider):
         stream = self._client.chat.completions.create(
             model=CHATGPT_MODEL, messages=messages, stream=True
         )
-        yield from stream
+
+        for chunk in stream:
+            text_content = self.extract_text_from_chunk(chunk)
+            if text_content:
+                yield {"type": "text", "content": text_content}
 
     def extract_text_from_chunk(self, chunk):
         """Extract text from ChatGPT response chunk
