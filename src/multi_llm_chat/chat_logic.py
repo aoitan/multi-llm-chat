@@ -142,9 +142,11 @@ class ChatService:
             user_message: User's input message
             tools: Optional list of tools for the LLM
 
-        Yields:
+        tuple:
             tuple: (display_history, logic_history, chunk) after each update
         """
+        import copy
+
         from .core import execute_with_tools
 
         mention = parse_mention(user_message)
@@ -159,8 +161,8 @@ class ChatService:
         if mention is None:
             return
 
-        # For @all, create snapshot so both LLMs see same history
-        history_at_start = [entry.copy() for entry in self.logic_history]
+        # For @all, create snapshot so both LLMs see same history (deepcopy to avoid side effects)
+        history_at_start = copy.deepcopy(self.logic_history)
 
         # Process models
         models_to_call = []
@@ -183,7 +185,7 @@ class ChatService:
 
             # Prepare input history for this model
             if mention == "all":
-                input_history = [entry.copy() for entry in history_at_start]
+                input_history = copy.deepcopy(history_at_start)
             else:
                 input_history = self.logic_history
 

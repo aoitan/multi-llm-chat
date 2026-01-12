@@ -64,10 +64,11 @@ async def test_execute_with_tools_single_iteration():
     assert any(c["type"] == "text" for c in chunks)
 
     # Verify history structure
-    assert len(history) == 3  # assistant (tool_call) + user (tool_result) + assistant (final text)
+    assert len(history) == 3  # assistant (tool_call) + tool (tool_result) + assistant (final text)
     assert history[0]["role"] == "gemini"
     assert history[0]["content"][0]["type"] == "tool_call"
-    assert history[1]["role"] == "user"
+    assert history[0]["content"][0]["name"] == "get_weather"
+    assert history[1]["role"] == "tool"
     assert history[1]["content"][0]["type"] == "tool_result"
     assert history[2]["role"] == "gemini"
     assert history[2]["content"][0]["type"] == "text"
@@ -193,4 +194,34 @@ async def test_execute_with_tools_tool_error():
     # Should yield tool_result with error message
     tool_results = [c for c in chunks if c["type"] == "tool_result"]
     assert len(tool_results) == 1
-    assert "Tool execution failed" in tool_results[0]["content"]["content"]
+    assert "ツール実行に失敗しました" in tool_results[0]["content"]["content"]
+
+
+@pytest.mark.asyncio
+async def test_execute_with_tools_missing_mcp_client():
+    """Test graceful handling when tool call is made but mcp_client is missing."""
+    from multi_llm_chat.core import execute_with_tools
+
+    mock_provider = MagicMock()
+    mock_provider.name = "gemini"
+
+    async def mock_call_api(*args, **kwargs):
+        yield {
+            "type": "tool_call",
+            "content": {"name": "any_tool", "arguments": {}},
+        }
+
+    mock_provider.call_api = mock_call_api
+
+    history = []
+    chunks = []
+    # Should NOT raise ValueError, but yield an error text chunk
+    async for chunk in execute_with_tools(mock_provider, history, mcp_client=None):
+        chunks.append(chunk)
+
+    assert any("MCPクライアントが設定されていません" in str(c.get("content", "")) for c in chunks)
+    assert any(h["role"] == "tool" for h in history)
+    assert "MCPクライアントが設定されていません" in history[-1]["content"][0]["content"]
+
+    # Verify history has role 'tool'
+    assert any(h["role"] == "tool" for h in history)

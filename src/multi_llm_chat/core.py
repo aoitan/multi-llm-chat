@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -99,35 +100,8 @@ def list_gemini_models():
             print(f"  - {m.name}")
 
 
-async def call_gemini_api(history, system_prompt=None):
-    """Call Gemini API with optional system prompt
-
-    DEPRECATED (Will be removed in future version):
-    This function uses a global shared provider instance which causes
-    prompt pollution in concurrent environments (e.g., Gradio sessions).
-
-    **DO NOT USE in production code.**
-
-    Migration path:
-    - For session-scoped: ChatService with injected providers
-    - For one-off calls: llm_provider.create_provider("gemini")
-
-    SECURITY WARNING: Using this in multi-user environments WILL result in:
-    - System prompt leaking between users
-    - Cached models being shared across sessions
-    - Race conditions in concurrent requests
-
-    This function is kept only for backward compatibility with existing tests.
-    """
-    import warnings
-
-    warnings.warn(
-        "call_gemini_api() is deprecated and will be removed. "
-        "Use ChatService or create_provider() instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
+async def call_gemini_api_async(history, system_prompt=None):
+    """Call Gemini API asynchronously."""
     try:
         provider = create_provider("gemini")
         async for chunk in provider.call_api(history, system_prompt):
@@ -144,35 +118,34 @@ async def call_gemini_api(history, system_prompt=None):
         yield error_msg
 
 
-async def call_chatgpt_api(history, system_prompt=None):
-    """Call ChatGPT API with optional system prompt
-
-    DEPRECATED (Will be removed in future version):
-    This function uses a global shared provider instance which causes
-    prompt pollution in concurrent environments (e.g., Gradio sessions).
-
-    **DO NOT USE in production code.**
-
-    Migration path:
-    - For session-scoped: ChatService with injected providers
-    - For one-off calls: llm_provider.create_provider("chatgpt")
-
-    SECURITY WARNING: Using this in multi-user environments WILL result in:
-    - System prompt leaking between users
-    - Client instances being shared across sessions
-    - Race conditions in concurrent requests
-
-    This function is kept only for backward compatibility with existing tests.
-    """
+def call_gemini_api(history, system_prompt=None):
+    """Call Gemini API (synchronous wrapper for backward compatibility)"""
+    import asyncio
     import warnings
 
     warnings.warn(
-        "call_chatgpt_api() is deprecated and will be removed. "
+        "call_gemini_api() is deprecated and will be removed. "
         "Use ChatService or create_provider() instead.",
         DeprecationWarning,
         stacklevel=2,
     )
 
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    async_gen = call_gemini_api_async(history, system_prompt)
+    while True:
+        try:
+            yield loop.run_until_complete(async_gen.__anext__())
+        except StopAsyncIteration:
+            break
+
+
+async def call_chatgpt_api_async(history, system_prompt=None):
+    """Call ChatGPT API asynchronously."""
     try:
         provider = create_provider("chatgpt")
         async for chunk in provider.call_api(history, system_prompt):
@@ -189,20 +162,55 @@ async def call_chatgpt_api(history, system_prompt=None):
         yield f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
 
 
-async def stream_text_events(history, provider_name, system_prompt=None):
-    """Stream normalized text events from a provider.
+def call_chatgpt_api(history, system_prompt=None):
+    """Call ChatGPT API (synchronous wrapper for backward compatibility)"""
+    import asyncio
+    import warnings
 
-    Args:
-        history: Conversation history for the request
-        provider_name: Provider identifier ("gemini" or "chatgpt")
-        system_prompt: Optional system instruction
+    warnings.warn(
+        "call_chatgpt_api() is deprecated and will be removed. "
+        "Use ChatService or create_provider() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
-    Yields:
-        str: Normalized text chunks
-    """
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    async_gen = call_chatgpt_api_async(history, system_prompt)
+    while True:
+        try:
+            yield loop.run_until_complete(async_gen.__anext__())
+        except StopAsyncIteration:
+            break
+
+
+async def stream_text_events_async(history, provider_name, system_prompt=None):
+    """Stream normalized text events from a provider asynchronously."""
     provider = create_provider(provider_name)
     async for chunk in provider.stream_text_events(history, system_prompt):
         yield chunk
+
+
+def stream_text_events(history, provider_name, system_prompt=None):
+    """Stream normalized text events (synchronous wrapper for backward compatibility)"""
+    import asyncio
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    async_gen = stream_text_events_async(history, provider_name, system_prompt)
+    while True:
+        try:
+            yield loop.run_until_complete(async_gen.__anext__())
+        except StopAsyncIteration:
+            break
 
 
 def extract_text_from_chunk(chunk, model_name):
@@ -388,8 +396,36 @@ async def execute_with_tools(
 
         # Tool calls received - execute them
         if tool_calls_in_turn and not mcp_client:
+            error_text = (
+                "[System: ツール呼び出しが要求されましたが、MCPクライアントが設定されていません。]"
+            )
             logger.error("Tool call received but mcp_client is None")
-            raise ValueError("MCP client is required for tool execution")
+            # Append error to history and notify UI
+            history.append(
+                {
+                    "role": provider.name,
+                    "content": [
+                        {"type": "text", "content": thought_text if thought_text else ""},
+                        *[{"type": "tool_call", **tc} for tc in tool_calls_in_turn],
+                    ],
+                }
+            )
+            history.append(
+                {
+                    "role": "tool",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "name": tc.get("name"),
+                            "content": error_text,
+                            "tool_call_id": tc.get("tool_call_id"),
+                        }
+                        for tc in tool_calls_in_turn
+                    ],
+                }
+            )
+            yield {"type": "text", "content": f"\n{error_text}"}
+            break
 
         # Execute tools and collect results
         tool_results = []
@@ -399,7 +435,8 @@ async def execute_with_tools(
             tool_call_id = tool_call.get("tool_call_id")  # OpenAI only
 
             try:
-                result = await mcp_client.call_tool(name, arguments)
+                # Per-tool timeout (e.g., 60s) to prevent single tool from hanging the loop
+                result = await asyncio.wait_for(mcp_client.call_tool(name, arguments), timeout=60.0)
 
                 # Extract text content (simplify for LLM)
                 text_parts = [
@@ -428,7 +465,7 @@ async def execute_with_tools(
             except Exception as e:
                 # Tool execution failed - report to LLM
                 logger.warning("Tool execution failed for %s: %s", name, e)
-                error_text = f"Tool execution failed: {str(e)}"
+                error_text = f"ツール実行に失敗しました: {str(e)}"
                 tool_result = {
                     "name": name,
                     "content": error_text,
@@ -440,24 +477,26 @@ async def execute_with_tools(
                 yield {"type": "tool_result", "content": tool_result}
 
         # Append tool_call and tool_result to history
-        # Note: History format is structured content (list of items)
+        # Note: Standardized flat schema used here
         assistant_entry = {"role": provider.name, "content": []}
         if thought_text:
             assistant_entry["content"].append({"type": "text", "content": thought_text})
         for tc in tool_calls_in_turn:
-            assistant_entry["content"].append({"type": "tool_call", "content": tc})
+            assistant_entry["content"].append({"type": "tool_call", **tc})
         history.append(assistant_entry)
 
-        # Tool results as separate user message
-        user_entry = {"role": "user", "content": []}
+        # Tool results as separate tool message (role: 'tool')
+        tool_entry = {"role": "tool", "content": []}
         for tr in tool_results:
-            tool_result_item = {"type": "tool_result", "content": tr["content"]}
+            tool_result_item = {
+                "type": "tool_result",
+                "name": tr.get("name"),
+                "content": tr["content"],
+            }
             if "tool_call_id" in tr:
                 tool_result_item["tool_call_id"] = tr["tool_call_id"]
-            if "name" in tr:
-                tool_result_item["name"] = tr["name"]
-            user_entry["content"].append(tool_result_item)
-        history.append(user_entry)
+            tool_entry["content"].append(tool_result_item)
+        history.append(tool_entry)
     else:
         # Loop reached max_iterations without breaking
-        logger.warning("Agentic loop reached max_iterations=%d", max_iterations)
+        logger.info("Agentic loop reached max_iterations=%d", max_iterations)

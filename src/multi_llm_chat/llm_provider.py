@@ -683,15 +683,18 @@ class GeminiProvider(LLMProvider):
                     if item.get("type") == "text":
                         parts.append({"text": item.get("content", "")})
                     elif item.get("type") == "tool_call":
-                        tool_call = item.get("content", {})
-                        parts.append(
-                            {
-                                "function_call": {
-                                    "name": tool_call.get("name"),
-                                    "args": tool_call.get("arguments", {}),
+                        # Support both flat schema and nested content for backward compatibility
+                        name = item.get("name") or item.get("content", {}).get("name")
+                        args = item.get("arguments") or item.get("content", {}).get("arguments", {})
+                        if name:
+                            parts.append(
+                                {
+                                    "function_call": {
+                                        "name": name,
+                                        "args": args,
+                                    }
                                 }
-                            }
-                        )
+                            )
                 if parts:
                     gemini_history.append({"role": "model", "parts": parts})
 
@@ -699,7 +702,9 @@ class GeminiProvider(LLMProvider):
                 # Tool messages contain function responses
                 for item in content_list:
                     if item.get("type") == "tool_result":
-                        response_payload = _parse_tool_response_payload(item.get("content"))
+                        # Support 'content' as result payload
+                        payload = item.get("content") or item.get("result")
+                        response_payload = _parse_tool_response_payload(payload)
                         tool_call_id = item.get("tool_call_id")
                         function_response = {
                             "name": item.get("name"),
@@ -889,6 +894,26 @@ class ChatGPTProvider(LLMProvider):
                 chatgpt_history.append({"role": "system", "content": content_to_text(content)})
             elif role == "user":
                 chatgpt_history.append({"role": "user", "content": content_to_text(content)})
+            elif role == "tool":
+                # Step 1: Normalize content to list
+                items = content if isinstance(content, list) else [content]
+                for item in items:
+                    if not isinstance(item, dict) or item.get("type") != "tool_result":
+                        continue
+                    if not item.get("tool_call_id"):
+                        logger.warning("Skipping tool_result without tool_call_id: %s", item)
+                        continue
+                    # Standardize payload key to 'content'
+                    # Standardize payload key to 'content'
+                    payload = item.get("content") or item.get("result") or ""
+                    content_val = json.dumps(payload) if not isinstance(payload, str) else payload
+                    chatgpt_history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": item["tool_call_id"],
+                            "content": content_val,
+                        }
+                    )
             elif role == "chatgpt":
                 # Step 1: Normalize content to list
                 items = []
@@ -940,16 +965,31 @@ class ChatGPTProvider(LLMProvider):
                     if tool_call_items:
                         valid_tool_calls = []
                         for item in tool_call_items:
-                            if not item.get("tool_call_id") or not item.get("name"):
+                            # Support both flat and nested content for backward compatibility
+                            name = item.get("name") or item.get("content", {}).get("name")
+                            tool_call_id = item.get("tool_call_id") or item.get("content", {}).get(
+                                "tool_call_id"
+                            )
+                            arguments = item.get("arguments") or item.get("content", {}).get(
+                                "arguments", {}
+                            )
+
+                            if not tool_call_id or not name:
                                 logger.warning("Skipping incomplete tool_call in history: %s", item)
                                 continue
+
+                            args_json = (
+                                json.dumps(arguments)
+                                if not isinstance(arguments, str)
+                                else arguments
+                            )
                             valid_tool_calls.append(
                                 {
-                                    "id": item["tool_call_id"],
+                                    "id": tool_call_id,
                                     "type": "function",
                                     "function": {
-                                        "name": item["name"],
-                                        "arguments": json.dumps(item["arguments"]),
+                                        "name": name,
+                                        "arguments": args_json,
                                     },
                                 }
                             )
@@ -958,16 +998,8 @@ class ChatGPTProvider(LLMProvider):
                             message["tool_calls"] = valid_tool_calls
 
                     # Only append if we have actual content (text) or valid tool_calls
-                    # If neither exist, skip this message entirely
-                    has_content = "content" in message
-                    has_tool_calls = "tool_calls" in message
-
-                    if has_content or has_tool_calls:
-                        # OpenAI API specification:
-                        # - content and tool_calls can coexist (mixed content is valid)
-                        # - content should be None only when no text is present
-                        # Reference: https://platform.openai.com/docs/guides/function-calling
-                        if has_tool_calls and not text_items:
+                    if "content" in message or "tool_calls" in message:
+                        if "tool_calls" in message and not text_items:
                             message["content"] = None
                         chatgpt_history.append(message)
 
@@ -976,11 +1008,14 @@ class ChatGPTProvider(LLMProvider):
                     if not item.get("tool_call_id"):
                         logger.warning("Skipping tool_result without tool_call_id: %s", item)
                         continue
+                    # Standardize payload key to 'content'
+                    payload = item.get("content") or item.get("result") or ""
+                    content_val = json.dumps(payload) if not isinstance(payload, str) else payload
                     chatgpt_history.append(
                         {
                             "role": "tool",
                             "tool_call_id": item["tool_call_id"],
-                            "content": json.dumps(item.get("result", "")),
+                            "content": content_val,
                         }
                     )
             # Skip gemini and other roles - they shouldn't be sent to ChatGPT

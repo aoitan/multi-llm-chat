@@ -359,7 +359,6 @@ def _handle_copy_command(args, history):
 
 async def main():
     """Main CLI loop"""
-    import asyncio
 
     from .mcp.client import MCPClient
 
@@ -395,12 +394,8 @@ async def main():
     async def _cli_loop():
         nonlocal history, system_prompt, is_dirty
         while True:
-            # Use loop.run_in_executor to make input() non-blocking for asyncio if needed
-            # but for a simple CLI, sync input is usually fine if we don't have background tasks.
             try:
-                loop = asyncio.get_event_loop()
-                prompt = await loop.run_in_executor(None, input, "> ")
-                prompt = prompt.strip()
+                prompt = input("> ").strip()
             except EOFError:
                 break
 

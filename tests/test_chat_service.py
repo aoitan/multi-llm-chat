@@ -183,7 +183,11 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         # execute_with_tools appends thought_text before tool_calls
         assert final_logic[1]["content"][0]["type"] == "text"
         assert final_logic[1]["content"][1]["type"] == "tool_call"
-        # Note: [Tool Call: search] marker is now added by UI layer, not ChatService
+        assert final_logic[1]["content"][1]["name"] == "search"
+        # Second entry: tool_result
+        assert final_logic[2]["role"] == "tool"
+        assert final_logic[2]["content"][0]["type"] == "tool_result"
+        assert final_logic[2]["content"][0]["name"] == "search"
 
     @patch("multi_llm_chat.chat_logic.create_provider")
     def test_process_message_gemini_preserves_stream_order(self, mock_create_provider):
@@ -220,9 +224,11 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         # First entry: text (Before) + tool_call
         assert final_logic[1]["content"][0] == {"type": "text", "content": "Before "}
         assert final_logic[1]["content"][1]["type"] == "tool_call"
+        assert final_logic[1]["content"][1]["name"] == "search"
         # Second entry (index 2): tool_result
-        assert final_logic[2]["role"] == "user"
+        assert final_logic[2]["role"] == "tool"
         assert final_logic[2]["content"][0]["type"] == "tool_result"
+        assert final_logic[2]["content"][0]["name"] == "search"
         # Third entry (index 3): text (after)
         assert final_logic[3]["role"] == "gemini"
         assert final_logic[3]["content"][0] == {"type": "text", "content": "after"}

@@ -17,6 +17,14 @@ from multi_llm_chat.llm_provider import (
 )
 
 
+async def consume_async_gen(gen):
+    """Helper to consume an async generator and return all yielded items."""
+    results = []
+    async for item in gen:
+        results.append(item)
+    return results
+
+
 class TestLLMProviderFactory(unittest.TestCase):
     """Test the provider factory functions"""
 
@@ -64,9 +72,10 @@ class TestGeminiProvider(unittest.TestCase):
     def setUp(self):
         self.history = [{"role": "user", "content": "Hello"}]
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_yields_text_chunks(self, mock_genai):
+    async def test_call_api_yields_text_chunks(self, mock_genai):
         """call_api should yield unified text dictionaries."""
         # Mock the Gemini API response stream
         mock_chunk1 = MagicMock()
@@ -75,25 +84,36 @@ class TestGeminiProvider(unittest.TestCase):
         mock_chunk2 = MagicMock()
         mock_chunk2.text = " world"
         mock_chunk2.parts = []
-        mock_response_iter = iter([mock_chunk1, mock_chunk2])
+
+        async def mock_aiter(instance=None):
+            yield mock_chunk1
+            yield mock_chunk2
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
-        result = list(provider.call_api(self.history))
+        result = await consume_async_gen(provider.call_api(self.history))
 
         expected = [
             {"type": "text", "content": "Hello"},
             {"type": "text", "content": " world"},
         ]
         self.assertEqual(result, expected)
-        mock_model.generate_content.assert_called_once()
+        mock_model.generate_content_async.assert_called_once()
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_yields_single_tool_call(self, mock_genai):
+    async def test_call_api_yields_single_tool_call(self, mock_genai):
         """call_api should yield a unified tool_call dictionary for a single tool call."""
         # Mock the Gemini API response for a tool call
         fc1 = MagicMock()
@@ -110,14 +130,24 @@ class TestGeminiProvider(unittest.TestCase):
 
         mock_chunk1 = MagicMock(parts=[part1], text=None)
         mock_chunk2 = MagicMock(parts=[part2], text=None)
-        mock_response_iter = iter([mock_chunk1, mock_chunk2])
+
+        async def mock_aiter(instance=None):
+            yield mock_chunk1
+            yield mock_chunk2
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
-        result = list(
+        result = await consume_async_gen(
             provider.call_api(
                 self.history,
                 tools=[{"name": "get_weather", "description": "test", "inputSchema": {}}],
@@ -132,9 +162,10 @@ class TestGeminiProvider(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_yields_multiple_tool_calls(self, mock_genai):
+    async def test_call_api_yields_multiple_tool_calls(self, mock_genai):
         """call_api should yield multiple tool_call dictionaries."""
         # Mock stream for two separate tool calls
         fc1 = MagicMock()
@@ -164,10 +195,21 @@ class TestGeminiProvider(unittest.TestCase):
         mock_chunk1 = MagicMock(parts=[part1], text=None)
         mock_chunk2 = MagicMock(parts=[part2, part3], text=None)
         mock_chunk3 = MagicMock(parts=[part4], text=None)
-        mock_response_iter = iter([mock_chunk1, mock_chunk2, mock_chunk3])
+
+        async def mock_aiter(instance=None):
+            yield mock_chunk1
+            yield mock_chunk2
+            yield mock_chunk3
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -175,7 +217,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"name": "get_weather", "description": "test", "inputSchema": {}},
             {"name": "get_time", "description": "test", "inputSchema": {}},
         ]
-        result = list(provider.call_api(self.history, tools=tools))
+        result = await consume_async_gen(provider.call_api(self.history, tools=tools))
 
         expected = [
             {
@@ -189,9 +231,10 @@ class TestGeminiProvider(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_allows_tool_call_without_args(self, mock_genai):
+    async def test_call_api_allows_tool_call_without_args(self, mock_genai):
         """call_api should allow tool calls with empty args."""
         fc1 = MagicMock()
         fc1.name = "get_weather"
@@ -200,14 +243,23 @@ class TestGeminiProvider(unittest.TestCase):
         part1.function_call = fc1
 
         mock_chunk1 = MagicMock(parts=[part1], text=None)
-        mock_response_iter = iter([mock_chunk1])
+
+        async def mock_aiter(instance=None):
+            yield mock_chunk1
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
-        result = list(
+        result = await consume_async_gen(
             provider.call_api(
                 self.history,
                 tools=[{"name": "get_weather", "description": "test", "inputSchema": {}}],
@@ -224,9 +276,10 @@ class TestGeminiProvider(unittest.TestCase):
             ],
         )
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_handles_mixed_text_and_tool_call(self, mock_genai):
+    async def test_call_api_handles_mixed_text_and_tool_call(self, mock_genai):
         """call_api should handle responses with both text and tool calls."""
         text_part = MagicMock(text="Thinking about it...", parts=[])
 
@@ -244,14 +297,24 @@ class TestGeminiProvider(unittest.TestCase):
 
         mock_chunk1 = text_part
         mock_chunk2 = MagicMock(parts=[tool_part1, tool_part2], text=None)
-        mock_response_iter = iter([mock_chunk1, mock_chunk2])
+
+        async def mock_aiter(instance=None):
+            yield mock_chunk1
+            yield mock_chunk2
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
-        result = list(
+        result = await consume_async_gen(
             provider.call_api(
                 self.history, tools=[{"name": "search", "description": "test", "inputSchema": {}}]
             )
@@ -266,9 +329,10 @@ class TestGeminiProvider(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_handles_chunk_text_value_error(self, mock_genai):
+    async def test_call_api_handles_chunk_text_value_error(self, mock_genai):
         """call_api should handle chunks that raise on .text access."""
 
         class TextRaises:
@@ -291,14 +355,23 @@ class TestGeminiProvider(unittest.TestCase):
         part_args = MagicMock(spec=["function_call"])
         part_args.function_call = fc_args
 
-        mock_response_iter = iter([TextRaises([part_name]), TextRaises([part_args])])
+        async def mock_aiter(instance=None):
+            yield TextRaises([part_name])
+            yield TextRaises([part_args])
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
-        result = list(
+        result = await consume_async_gen(
             provider.call_api(
                 self.history,
                 tools=[{"name": "get_weather", "description": "test", "inputSchema": {}}],
@@ -313,9 +386,10 @@ class TestGeminiProvider(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_maps_tool_calls_by_index(self, mock_genai):
+    async def test_call_api_maps_tool_calls_by_index(self, mock_genai):
         """call_api should map tool call args to matching indexed calls."""
         fc_name_a = MagicMock()
         fc_name_a.name = "tool_a"
@@ -345,17 +419,21 @@ class TestGeminiProvider(unittest.TestCase):
         part_args_b.function_call = fc_args_b
         part_args_b.index = 1
 
-        mock_response_iter = iter(
-            [
-                MagicMock(parts=[part_name_a], text=None),
-                MagicMock(parts=[part_name_b], text=None),
-                MagicMock(parts=[part_args_a], text=None),
-                MagicMock(parts=[part_args_b], text=None),
-            ]
-        )
+        async def mock_aiter(instance=None):
+            yield MagicMock(parts=[part_name_a], text=None)
+            yield MagicMock(parts=[part_name_b], text=None)
+            yield MagicMock(parts=[part_args_a], text=None)
+            yield MagicMock(parts=[part_args_b], text=None)
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -363,7 +441,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"name": "tool_a", "description": "test", "inputSchema": {}},
             {"name": "tool_b", "description": "test", "inputSchema": {}},
         ]
-        result = list(provider.call_api(self.history, tools=tools))
+        result = await consume_async_gen(provider.call_api(self.history, tools=tools))
 
         expected = [
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
@@ -371,9 +449,10 @@ class TestGeminiProvider(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_maps_tool_calls_without_index(self, mock_genai):
+    async def test_call_api_maps_tool_calls_without_index(self, mock_genai):
         """call_api should map tool call args in the same order when indexes are missing."""
         fc_name_a = MagicMock()
         fc_name_a.name = "tool_a"
@@ -399,17 +478,21 @@ class TestGeminiProvider(unittest.TestCase):
         part_args_b = MagicMock(spec=["function_call"])
         part_args_b.function_call = fc_args_b
 
-        mock_response_iter = iter(
-            [
-                MagicMock(parts=[part_name_a], text=None),
-                MagicMock(parts=[part_name_b], text=None),
-                MagicMock(parts=[part_args_a], text=None),
-                MagicMock(parts=[part_args_b], text=None),
-            ]
-        )
+        async def mock_aiter(instance=None):
+            yield MagicMock(parts=[part_name_a], text=None)
+            yield MagicMock(parts=[part_name_b], text=None)
+            yield MagicMock(parts=[part_args_a], text=None)
+            yield MagicMock(parts=[part_args_b], text=None)
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -417,7 +500,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"name": "tool_a", "description": "test", "inputSchema": {}},
             {"name": "tool_b", "description": "test", "inputSchema": {}},
         ]
-        result = list(provider.call_api(self.history, tools=tools))
+        result = await consume_async_gen(provider.call_api(self.history, tools=tools))
 
         expected = [
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
@@ -425,9 +508,10 @@ class TestGeminiProvider(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_handles_interleaved_parallel_tool_calls(self, mock_genai):
+    async def test_call_api_handles_interleaved_parallel_tool_calls(self, mock_genai):
         """並列ツール呼び出しでパーツが交互に到着する場合のテスト"""
         # Simulate interleaved stream: name_a -> name_b -> args_b -> args_a
         fc_name_a = MagicMock()
@@ -459,17 +543,21 @@ class TestGeminiProvider(unittest.TestCase):
         part_args_a.function_call = fc_args_a
         part_args_a.index = 0
 
-        mock_response_iter = iter(
-            [
-                MagicMock(parts=[part_name_a], text=None),
-                MagicMock(parts=[part_name_b], text=None),
-                MagicMock(parts=[part_args_b], text=None),  # B arrives first
-                MagicMock(parts=[part_args_a], text=None),  # A arrives second
-            ]
-        )
+        async def mock_aiter(instance=None):
+            yield MagicMock(parts=[part_name_a], text=None)
+            yield MagicMock(parts=[part_name_b], text=None)
+            yield MagicMock(parts=[part_args_b], text=None)  # B arrives first
+            yield MagicMock(parts=[part_args_a], text=None)  # A arrives second
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -477,7 +565,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"name": "tool_a", "description": "test", "inputSchema": {}},
             {"name": "tool_b", "description": "test", "inputSchema": {}},
         ]
-        result = list(provider.call_api(self.history, tools=tools))
+        result = await consume_async_gen(provider.call_api(self.history, tools=tools))
 
         # Verify correct mapping despite interleaved arrival
         expected = [
@@ -486,9 +574,10 @@ class TestGeminiProvider(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_finalizes_pending_calls_once_on_error(self, mock_genai):
+    async def test_call_api_finalizes_pending_calls_once_on_error(self, mock_genai):
         """例外発生時は未完のツール呼び出しを出力しない（Issue #79 Review Fix）"""
 
         # Create a proper exception class for BlockedPromptException
@@ -506,11 +595,21 @@ class TestGeminiProvider(unittest.TestCase):
         part_name = MagicMock(spec=["function_call"])
         part_name.function_call = fc_name
 
-        def error_generator():
+        async def error_generator():
             yield MagicMock(parts=[part_name], text=None)
             raise ValueError("Unexpected error")  # Use ValueError to trigger Exception handler
 
-        mock_model.generate_content.return_value = error_generator()
+        async def mock_aiter(instance=None):
+            async for chunk in error_generator():
+                yield chunk
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -518,16 +617,17 @@ class TestGeminiProvider(unittest.TestCase):
         # Collect results until exception
         results = []
         with pytest.raises(ValueError, match="Unexpected error"):
-            for chunk in provider.call_api(self.history, tools=[{"name": "get_weather"}]):
+            async for chunk in provider.call_api(self.history, tools=[{"name": "get_weather"}]):
                 results.append(chunk)
 
         # Should NOT emit pending tool calls on error (security fix)
         tool_calls = [r for r in results if r.get("type") == "tool_call"]
         assert len(tool_calls) == 0, "No tool calls should be emitted on error"
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_handles_name_and_args_in_same_chunk(self, mock_genai):
+    async def test_call_api_handles_name_and_args_in_same_chunk(self, mock_genai):
         """nameとargsが同一チャンクで到着した場合の処理テスト (Critical Fix A1)"""
         # First tool call with both name and args in single chunk
         fc1 = MagicMock()
@@ -543,15 +643,19 @@ class TestGeminiProvider(unittest.TestCase):
         part2 = MagicMock(spec=["function_call"])
         part2.function_call = fc2
 
-        mock_response_iter = iter(
-            [
-                MagicMock(parts=[part1], text=None),
-                MagicMock(parts=[part2], text=None),
-            ]
-        )
+        async def mock_aiter(instance=None):
+            yield MagicMock(parts=[part1], text=None)
+            yield MagicMock(parts=[part2], text=None)
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -559,7 +663,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"name": "tool_a", "description": "test", "inputSchema": {}},
             {"name": "tool_b", "description": "test", "inputSchema": {}},
         ]
-        result = list(provider.call_api(self.history, tools=tools))
+        result = await consume_async_gen(provider.call_api(self.history, tools=tools))
 
         # Both tool calls should be emitted correctly
         expected = [
@@ -568,9 +672,10 @@ class TestGeminiProvider(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
-    def test_call_api_handles_mixed_chunk_patterns(self, mock_genai):
+    async def test_call_api_handles_mixed_chunk_patterns(self, mock_genai):
         """複数の順次ツール呼び出しでチャンクパターンが混在するケース (Critical Fix A1)"""
         # tool_a: name+args in same chunk
         fc1 = MagicMock()
@@ -600,17 +705,21 @@ class TestGeminiProvider(unittest.TestCase):
         part3 = MagicMock(spec=["function_call"])
         part3.function_call = fc3
 
-        mock_response_iter = iter(
-            [
-                MagicMock(parts=[part1], text=None),
-                MagicMock(parts=[part2_name], text=None),
-                MagicMock(parts=[part2_args], text=None),
-                MagicMock(parts=[part3], text=None),
-            ]
-        )
+        async def mock_aiter(instance=None):
+            yield MagicMock(parts=[part1], text=None)
+            yield MagicMock(parts=[part2_name], text=None)
+            yield MagicMock(parts=[part2_args], text=None)
+            yield MagicMock(parts=[part3], text=None)
+
+        mock_response = MagicMock()
+        mock_response.__aiter__ = mock_aiter
 
         mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response_iter
+
+        async def mock_generate_content_async(*args, **kwargs):
+            return mock_response
+
+        mock_model.generate_content_async = mock_generate_content_async
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -619,7 +728,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"name": "tool_b", "description": "test", "inputSchema": {}},
             {"name": "tool_c", "description": "test", "inputSchema": {}},
         ]
-        result = list(provider.call_api(self.history, tools=tools))
+        result = await consume_async_gen(provider.call_api(self.history, tools=tools))
 
         # All three tool calls should be emitted correctly in order
         expected = [
@@ -914,15 +1023,24 @@ class TestGeminiProvider(unittest.TestCase):
 class TestChatGPTProvider(unittest.TestCase):
     """Test ChatGPTProvider implementation"""
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
-    def test_call_api_basic(self, mock_openai_class):
+    @patch("multi_llm_chat.llm_provider.openai.AsyncOpenAI")
+    async def test_call_api_basic(self, mock_openai_class):
         """ChatGPTProvider.call_api should return a generator"""
         # Setup mock
         mock_client = MagicMock()
         mock_stream = MagicMock()
-        mock_stream.__iter__ = MagicMock(return_value=iter([MagicMock()]))
-        mock_client.chat.completions.create.return_value = mock_stream
+
+        async def mock_aiter(instance=None):
+            yield MagicMock()
+
+        mock_stream.__aiter__ = mock_aiter
+
+        async def mock_create(**kwargs):
+            return mock_stream
+
+        mock_client.chat.completions.create = mock_create
         mock_openai_class.return_value = mock_client
 
         # Test
@@ -930,14 +1048,16 @@ class TestChatGPTProvider(unittest.TestCase):
         history = [{"role": "user", "content": "Hello"}]
         result = provider.call_api(history)
 
-        # Verify it's a generator
-        assert hasattr(result, "__iter__")
-        list(result)  # Consume generator
-        mock_client.chat.completions.create.assert_called_once()
+        # Verify it's an async generator
+        assert hasattr(result, "__aiter__")
+        await consume_async_gen(result)  # Consume generator
+        # Note: we check create instead of create_async because it's mocked differently
+        # but in the implementation it's awaited.
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
-    def test_call_api_yields_text_chunks(self, mock_openai_class):
+    @patch("multi_llm_chat.llm_provider.openai.AsyncOpenAI")
+    async def test_call_api_yields_text_chunks(self, mock_openai_class):
         """ChatGPTProvider.call_api should yield unified text chunks."""
         mock_chunk1 = MagicMock()
         mock_chunk1.choices = [MagicMock()]
@@ -947,37 +1067,57 @@ class TestChatGPTProvider(unittest.TestCase):
         mock_chunk2.choices[0].delta.content = " world"
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = iter([mock_chunk1, mock_chunk2])
+
+        async def mock_create(**kwargs):
+            async def mock_aiter():
+                yield mock_chunk1
+                yield mock_chunk2
+
+            stream = MagicMock()
+            stream.__aiter__ = mock_aiter
+            return stream
+
+        mock_client.chat.completions.create = mock_create
         mock_openai_class.return_value = mock_client
 
         provider = ChatGPTProvider()
         history = [{"role": "user", "content": "Hello"}]
-        result = list(provider.call_api(history))
+        result = await consume_async_gen(provider.call_api(history))
 
         assert result == [
             {"type": "text", "content": "Hello"},
             {"type": "text", "content": " world"},
         ]
 
+    @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
-    def test_call_api_with_tools(self, mock_openai_class):
+    @patch("multi_llm_chat.llm_provider.openai.AsyncOpenAI")
+    async def test_call_api_with_tools(self, mock_openai_class):
         """ChatGPTProvider.call_api should accept tools parameter (Issue #80)."""
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
 
         # Mock empty stream
-        mock_stream = iter([])
-        mock_client.chat.completions.create.return_value = mock_stream
+        async def mock_create(**kwargs):
+            async def mock_aiter():
+                if False:
+                    yield None
+
+            stream = MagicMock()
+            stream.__aiter__ = mock_aiter
+            return stream
+
+        mock_client.chat.completions.create = mock_create
 
         provider = ChatGPTProvider()
         history = [{"role": "user", "content": "Hello"}]
         tools = [{"name": "test_tool", "description": "Test", "inputSchema": {}}]
 
         # Should not raise - tools are now supported
-        list(provider.call_api(history, tools=tools))
+        await consume_async_gen(provider.call_api(history, tools=tools))
 
         # Verify API was called with tools
+        # Find the call to chat.completions.create
         call_args = mock_client.chat.completions.create.call_args
         self.assertIn("tools", call_args.kwargs)
         self.assertIn("tool_choice", call_args.kwargs)
@@ -1060,8 +1200,9 @@ class DummyProvider(LLMProvider):
     def __init__(self, chunks):
         self._chunks = chunks
 
-    def call_api(self, history, system_prompt=None):
-        return iter(self._chunks)
+    async def call_api(self, history, system_prompt=None, tools=None):
+        for chunk in self._chunks:
+            yield chunk
 
     def extract_text_from_chunk(self, chunk):
         return chunk
@@ -1070,11 +1211,12 @@ class DummyProvider(LLMProvider):
         return {"input_tokens": 0, "max_tokens": 0}
 
 
-def test_stream_text_events_filters_empty_strings():
+@pytest.mark.asyncio
+async def test_stream_text_events_filters_empty_strings():
     """stream_text_events should skip empty strings from chunk extraction."""
     provider = DummyProvider(["Hello", "", "world"])
 
-    result = list(provider.stream_text_events([], None))
+    result = await consume_async_gen(provider.stream_text_events([], None))
 
     assert result == ["Hello", "world"]
 
