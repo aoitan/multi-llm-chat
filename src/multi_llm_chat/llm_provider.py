@@ -113,7 +113,7 @@ def _parse_tool_response_payload(response_payload):
         try:
             parsed = json.loads(response_payload)
             return parsed if isinstance(parsed, dict) else {"result": parsed}
-        except (json.JSONDecodeError, ValueError) as e:
+        except (json.JSONDecodeError, ValueError, RecursionError) as e:
             logger.debug("Failed to parse JSON payload: %s", e)
             return {"result": response_payload}
 
