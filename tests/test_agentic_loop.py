@@ -8,7 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
-def test_execute_with_tools_single_iteration():
+@pytest.mark.asyncio
+async def test_execute_with_tools_single_iteration():
     """Test single tool call and final response."""
     from multi_llm_chat.core import execute_with_tools
 
@@ -17,24 +18,26 @@ def test_execute_with_tools_single_iteration():
     mock_provider.name = "gemini"
 
     # First call: tool_call
-    def first_call(*args, **kwargs):
+    async def first_call(*args, **kwargs):
         yield {
             "type": "tool_call",
             "content": {"name": "get_weather", "arguments": {"location": "Tokyo"}},
         }
 
     # Second call: final text
-    def second_call(*args, **kwargs):
+    async def second_call(*args, **kwargs):
         yield {"type": "text", "content": "The weather in Tokyo is 25°C."}
 
     call_count = [0]
 
-    def mock_call_api(*args, **kwargs):
+    async def mock_call_api(*args, **kwargs):
         if call_count[0] == 0:
             call_count[0] += 1
-            yield from first_call()
+            async for chunk in first_call():
+                yield chunk
         else:
-            yield from second_call()
+            async for chunk in second_call():
+                yield chunk
 
     mock_provider.call_api = mock_call_api
 
@@ -51,11 +54,8 @@ def test_execute_with_tools_single_iteration():
     history = []
     chunks = []
 
-    async def run_test():
-        async for chunk in execute_with_tools(mock_provider, history, mcp_client=mock_mcp):
-            chunks.append(chunk)
-
-    asyncio.run(run_test())
+    async for chunk in execute_with_tools(mock_provider, history, mcp_client=mock_mcp):
+        chunks.append(chunk)
 
     # Verify: tool_call → tool_result → text
     assert len(chunks) >= 3
@@ -73,7 +73,8 @@ def test_execute_with_tools_single_iteration():
     assert history[2]["content"][0]["type"] == "text"
 
 
-def test_execute_with_tools_max_iterations():
+@pytest.mark.asyncio
+async def test_execute_with_tools_max_iterations():
     """Test loop termination at max_iterations."""
     from multi_llm_chat.core import execute_with_tools
 
@@ -81,7 +82,7 @@ def test_execute_with_tools_max_iterations():
     mock_provider = MagicMock()
     mock_provider.name = "gemini"
 
-    def infinite_tool_call(*args, **kwargs):
+    async def infinite_tool_call(*args, **kwargs):
         yield {
             "type": "tool_call",
             "content": {"name": "infinite_tool", "arguments": {}},
@@ -102,20 +103,18 @@ def test_execute_with_tools_max_iterations():
     history = []
     chunks = []
 
-    async def run_test():
-        async for chunk in execute_with_tools(
-            mock_provider, history, mcp_client=mock_mcp, max_iterations=3
-        ):
-            chunks.append(chunk)
-
-    asyncio.run(run_test())
+    async for chunk in execute_with_tools(
+        mock_provider, history, mcp_client=mock_mcp, max_iterations=3
+    ):
+        chunks.append(chunk)
 
     # Should stop at 3 iterations
     tool_call_count = len([c for c in chunks if c["type"] == "tool_call"])
     assert tool_call_count == 3
 
 
-def test_execute_with_tools_timeout():
+@pytest.mark.asyncio
+async def test_execute_with_tools_timeout():
     """Test timeout handling."""
     from multi_llm_chat.core import execute_with_tools
 
@@ -125,13 +124,11 @@ def test_execute_with_tools_timeout():
 
     iteration_count = [0]
 
-    def slow_generator(*args, **kwargs):
-        import time
-
+    async def slow_generator(*args, **kwargs):
         iteration_count[0] += 1
         # First iteration sleeps to trigger timeout
         if iteration_count[0] == 1:
-            time.sleep(1.5)
+            await asyncio.sleep(1.5)
         yield {"type": "text", "content": "done"}
 
     mock_provider.call_api = slow_generator
@@ -141,15 +138,13 @@ def test_execute_with_tools_timeout():
     mock_mcp.list_tools = AsyncMock(return_value=[])
 
     # Execute with short timeout
-    async def run_test():
-        with pytest.raises(TimeoutError):
-            async for _ in execute_with_tools(mock_provider, [], mcp_client=mock_mcp, timeout=0.5):
-                pass
-
-    asyncio.run(run_test())
+    with pytest.raises(TimeoutError):
+        async for _ in execute_with_tools(mock_provider, [], mcp_client=mock_mcp, timeout=0.5):
+            pass
 
 
-def test_execute_with_tools_tool_error():
+@pytest.mark.asyncio
+async def test_execute_with_tools_tool_error():
     """Test graceful handling of tool execution errors."""
     from multi_llm_chat.core import execute_with_tools
 
@@ -158,24 +153,26 @@ def test_execute_with_tools_tool_error():
     mock_provider.name = "gemini"
 
     # First call: tool_call
-    def first_call(*args, **kwargs):
+    async def first_call(*args, **kwargs):
         yield {
             "type": "tool_call",
             "content": {"name": "failing_tool", "arguments": {}},
         }
 
     # Second call: final text (LLM acknowledges error)
-    def second_call(*args, **kwargs):
+    async def second_call(*args, **kwargs):
         yield {"type": "text", "content": "I encountered an error."}
 
     call_count = [0]
 
-    def mock_call_api(*args, **kwargs):
+    async def mock_call_api(*args, **kwargs):
         if call_count[0] == 0:
             call_count[0] += 1
-            yield from first_call()
+            async for chunk in first_call():
+                yield chunk
         else:
-            yield from second_call()
+            async for chunk in second_call():
+                yield chunk
 
     mock_provider.call_api = mock_call_api
 
@@ -190,11 +187,8 @@ def test_execute_with_tools_tool_error():
     history = []
     chunks = []
 
-    async def run_test():
-        async for chunk in execute_with_tools(mock_provider, history, mcp_client=mock_mcp):
-            chunks.append(chunk)
-
-    asyncio.run(run_test())
+    async for chunk in execute_with_tools(mock_provider, history, mcp_client=mock_mcp):
+        chunks.append(chunk)
 
     # Should yield tool_result with error message
     tool_results = [c for c in chunks if c["type"] == "tool_result"]

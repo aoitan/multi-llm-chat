@@ -1,7 +1,16 @@
+import asyncio
 import os
 from unittest.mock import Mock, patch
 
 import multi_llm_chat.core as core
+
+
+async def consume_async_gen(gen):
+    """Helper to consume an async generator and return all yielded items."""
+    results = []
+    async for item in gen:
+        results.append(item)
+    return results
 
 
 def test_get_token_info_returns_proper_structure():
@@ -142,10 +151,14 @@ def test_call_gemini_api_with_system_prompt():
 
     with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
-        mock_provider.call_api.return_value = iter([Mock(text="Response")])
+
+        async def mock_call_api(*args, **kwargs):
+            yield Mock(text="Response")
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
-        list(core.call_gemini_api(history, system_prompt))
+        asyncio.run(consume_async_gen(core.call_gemini_api(history, system_prompt)))
 
         mock_create_provider.assert_called_once_with("gemini")
         mock_provider.call_api.assert_called_once_with(history, system_prompt)
@@ -157,10 +170,14 @@ def test_call_gemini_api_without_system_prompt():
 
     with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
-        mock_provider.call_api.return_value = iter([Mock(text="Response")])
+
+        async def mock_call_api(*args, **kwargs):
+            yield Mock(text="Response")
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
-        list(core.call_gemini_api(history))
+        asyncio.run(consume_async_gen(core.call_gemini_api(history)))
 
         mock_create_provider.assert_called_once_with("gemini")
         mock_provider.call_api.assert_called_once_with(history, None)
@@ -173,11 +190,14 @@ def test_call_chatgpt_api_with_system_prompt():
 
     with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
-        mock_stream = Mock()
-        mock_provider.call_api.return_value = iter([mock_stream])
+
+        async def mock_call_api(*args, **kwargs):
+            yield Mock(text="Response")
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
-        list(core.call_chatgpt_api(history, system_prompt))
+        asyncio.run(consume_async_gen(core.call_chatgpt_api(history, system_prompt)))
 
         mock_create_provider.assert_called_once_with("chatgpt")
         mock_provider.call_api.assert_called_once_with(history, system_prompt)
@@ -189,11 +209,14 @@ def test_call_chatgpt_api_without_system_prompt():
 
     with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
-        mock_stream = Mock()
-        mock_provider.call_api.return_value = iter([mock_stream])
+
+        async def mock_call_api(*args, **kwargs):
+            yield Mock(text="Response")
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
-        list(core.call_chatgpt_api(history))
+        asyncio.run(consume_async_gen(core.call_chatgpt_api(history)))
 
         mock_create_provider.assert_called_once_with("chatgpt")
         mock_provider.call_api.assert_called_once_with(history, None)
@@ -206,10 +229,16 @@ def test_stream_text_events_with_system_prompt():
 
     with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
-        mock_provider.stream_text_events.return_value = iter(["Response"])
+
+        async def mock_stream_text_events(*args, **kwargs):
+            yield "Response"
+
+        mock_provider.stream_text_events.side_effect = mock_stream_text_events
         mock_create_provider.return_value = mock_provider
 
-        result = list(core.stream_text_events(history, "gemini", system_prompt))
+        result = asyncio.run(
+            consume_async_gen(core.stream_text_events(history, "gemini", system_prompt))
+        )
 
         assert result == ["Response"]
         mock_create_provider.assert_called_once_with("gemini")
@@ -222,10 +251,14 @@ def test_stream_text_events_without_system_prompt():
 
     with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
-        mock_provider.stream_text_events.return_value = iter(["Response"])
+
+        async def mock_stream_text_events(*args, **kwargs):
+            yield "Response"
+
+        mock_provider.stream_text_events.side_effect = mock_stream_text_events
         mock_create_provider.return_value = mock_provider
 
-        result = list(core.stream_text_events(history, "chatgpt"))
+        result = asyncio.run(consume_async_gen(core.stream_text_events(history, "chatgpt")))
 
         assert result == ["Response"]
         mock_create_provider.assert_called_once_with("chatgpt")

@@ -85,7 +85,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "gemini"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             yield {"type": "text", "content": "Test "}
             yield {"type": "text", "content": "response"}
 
@@ -99,7 +99,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         assert len(results) > 0
 
         # Final state should include user message and response
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
         assert len(final_logic) == 2  # user + assistant
         assert final_logic[0]["role"] == "user"
         assert final_logic[1]["role"] == "gemini"
@@ -112,7 +112,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "chatgpt"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             yield {"type": "text", "content": "Hello "}
             yield {"type": "text", "content": "world"}
 
@@ -122,7 +122,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         service = ChatService()
         results = asyncio.run(consume_async_gen(service.process_message("@chatgpt hi")))
 
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
         assert len(final_logic) == 2
         assert final_logic[0]["role"] == "user"
         assert final_logic[1]["role"] == "chatgpt"
@@ -135,7 +135,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         mock_provider.name = "chatgpt"
 
         # Return successful response
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             yield {"type": "text", "content": "Hello"}
 
         mock_provider.call_api.side_effect = mock_call_api
@@ -156,7 +156,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "gemini"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             yield {
                 "type": "tool_call",
                 "content": {"name": "search", "arguments": {"query": "hi"}},
@@ -177,13 +177,13 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         service = ChatService(mcp_client=mock_mcp)
         results = asyncio.run(consume_async_gen(service.process_message("@gemini hi")))
 
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
         assert final_logic[1]["role"] == "gemini"
         # First entry: text (Done) + tool_call
         # execute_with_tools appends thought_text before tool_calls
         assert final_logic[1]["content"][0]["type"] == "text"
         assert final_logic[1]["content"][1]["type"] == "tool_call"
-        assert "[Tool Call: search]" in final_display[-1][1]
+        # Note: [Tool Call: search] marker is now added by UI layer, not ChatService
 
     @patch("multi_llm_chat.chat_logic.create_provider")
     def test_process_message_gemini_preserves_stream_order(self, mock_create_provider):
@@ -191,15 +191,17 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "gemini"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             yield {"type": "text", "content": "Before "}
             yield {"type": "tool_call", "content": {"name": "search", "arguments": {}}}
+
             # Stop here to avoid infinite loop or needing more yields
             # Actually execute_with_tools will call call_api again if tool_call was returned.
             # To avoid the second call returning the same thing, we can use a stateful mock.
-            mock_provider.call_api.side_effect = lambda *a, **kw: (
+            async def next_call(*a, **kw):
                 yield {"type": "text", "content": "after"}
-            )
+
+            mock_provider.call_api.side_effect = next_call
 
         mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
@@ -213,7 +215,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         service = ChatService(mcp_client=mock_mcp)
         results = asyncio.run(consume_async_gen(service.process_message("@gemini check")))
 
-        _final_display, final_logic = results[-1]
+        _final_display, final_logic, _chunk = results[-1]
         assert final_logic[1]["role"] == "gemini"
         # First entry: text (Before) + tool_call
         assert final_logic[1]["content"][0] == {"type": "text", "content": "Before "}
@@ -232,7 +234,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         mock_gemini_provider = MagicMock()
         mock_gemini_provider.name = "gemini"
 
-        def mock_call_api_gemini(*args, **kwargs):
+        async def mock_call_api_gemini(*args, **kwargs):
             yield {"type": "text", "content": "Gemini response"}
 
         mock_gemini_provider.call_api.side_effect = mock_call_api_gemini
@@ -240,7 +242,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         mock_chatgpt_provider = MagicMock()
         mock_chatgpt_provider.name = "chatgpt"
 
-        def mock_call_api_chatgpt(*args, **kwargs):
+        async def mock_call_api_chatgpt(*args, **kwargs):
             yield {"type": "text", "content": "ChatGPT response"}
 
         mock_chatgpt_provider.call_api.side_effect = mock_call_api_chatgpt
@@ -251,7 +253,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         service = ChatService()
         results = asyncio.run(consume_async_gen(service.process_message("@all compare")))
 
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
         # Should have user message + 2 responses
         assert len(final_logic) == 3
         assert final_logic[0]["role"] == "user"
@@ -266,7 +268,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
 
         # Should yield once (user message added to history)
         assert len(results) == 1
-        final_display, final_logic = results[0]
+        final_display, final_logic, _chunk = results[0]
 
         # User message should be in history (structured format)
         assert len(final_logic) == 1
@@ -336,11 +338,11 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
             mock_provider = MagicMock()
             mock_provider.name = provider_name
 
-            def capture_stream_gemini(history, system_prompt=None, tools=None):
+            async def capture_stream_gemini(history, system_prompt=None, tools=None):
                 captured_histories.append(("gemini", [h.copy() for h in history]))
                 yield {"type": "text", "content": "Gemini"}
 
-            def capture_stream_chatgpt(history, system_prompt=None, tools=None):
+            async def capture_stream_chatgpt(history, system_prompt=None, tools=None):
                 captured_histories.append(("chatgpt", [h.copy() for h in history]))
                 yield {"type": "text", "content": "ChatGPT"}
 
@@ -383,7 +385,7 @@ class TestChatServiceSystemPrompt(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "gemini"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             yield {"type": "text", "content": "Response"}
 
         mock_provider.call_api.side_effect = mock_call_api
@@ -414,7 +416,9 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "gemini"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
+            if False:
+                yield {}
             raise ConnectionError("Network error")
 
         mock_provider.call_api.side_effect = mock_call_api
@@ -425,7 +429,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
 
         # Should yield error message
         assert len(results) > 0
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
 
         # Error message should be in display history
         assert len(final_display) == 1
@@ -439,7 +443,9 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "chatgpt"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
+            if False:
+                yield {}
             raise ValueError("API key missing")
 
         mock_provider.call_api.side_effect = mock_call_api
@@ -450,7 +456,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
 
         # Should yield error message
         assert len(results) > 0
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
 
         # Error message should be in display history
         assert "[System: エラー" in final_display[0][1]
@@ -466,7 +472,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         mock_provider.name = "gemini"
 
         # ツール呼び出しなし、テキストなしのケース（空のストリーム）
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             if False:
                 yield {}
 
@@ -476,7 +482,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         service = ChatService()
         results = asyncio.run(consume_async_gen(service.process_message("@gemini hello")))
 
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
 
         # display_historyにエラーメッセージが表示されること
         assert len(final_display) == 1
@@ -497,7 +503,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         mock_gemini = MagicMock()
         mock_gemini.name = "gemini"
 
-        def mock_call_api_gemini(*args, **kwargs):
+        async def mock_call_api_gemini(*args, **kwargs):
             yield {"type": "text", "content": "Gemini response"}
 
         mock_gemini.call_api.side_effect = mock_call_api_gemini
@@ -505,7 +511,9 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         mock_chatgpt = MagicMock()
         mock_chatgpt.name = "chatgpt"
 
-        def mock_call_api_chatgpt(*args, **kwargs):
+        async def mock_call_api_chatgpt(*args, **kwargs):
+            if False:
+                yield {}
             raise RuntimeError("ChatGPT API error")
 
         mock_chatgpt.call_api.side_effect = mock_call_api_chatgpt
@@ -517,7 +525,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
 
         # Should get results
         assert len(results) > 0
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
 
         # Should have Gemini success and ChatGPT error
         assert len(final_display) >= 1
@@ -540,7 +548,7 @@ class TestChatServiceEmptyResponseHandling(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "gemini"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             if False:
                 yield {}
 
@@ -550,7 +558,7 @@ class TestChatServiceEmptyResponseHandling(unittest.TestCase):
         results = asyncio.run(consume_async_gen(service.process_message("@gemini test")))
 
         # Should have added error message to display_history
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
         assert len(final_display) == 1
         assert "[System: Geminiからの応答がありませんでした]" in final_display[0][1]
 
@@ -569,7 +577,7 @@ class TestChatServiceEmptyResponseHandling(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.name = "gemini"
 
-        def mock_call_api(*args, **kwargs):
+        async def mock_call_api(*args, **kwargs):
             yield {"type": "text", "content": "部分的な"}
             yield {"type": "text", "content": "応答"}
 
@@ -579,7 +587,7 @@ class TestChatServiceEmptyResponseHandling(unittest.TestCase):
         results = asyncio.run(consume_async_gen(service.process_message("@gemini test")))
 
         # Should NOT have error message (streaming succeeded partially)
-        final_display, final_logic = results[-1]
+        final_display, final_logic, _chunk = results[-1]
         assert len(final_display) == 1
         # Should only have the gemini label + streamed text
         assert "部分的な応答" in final_display[0][1]

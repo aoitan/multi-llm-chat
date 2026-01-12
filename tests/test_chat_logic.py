@@ -17,7 +17,7 @@ def _create_mock_provider(response_text, provider_type="gemini"):
     mock_provider.name = provider_type
 
     # Gemini now uses call_api and a structured dictionary
-    def mock_call_api(*args, **kwargs):
+    async def mock_call_api(*args, **kwargs):
         yield {"type": "text", "content": response_text}
 
     mock_provider.call_api.side_effect = mock_call_api

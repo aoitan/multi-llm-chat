@@ -99,7 +99,7 @@ def list_gemini_models():
             print(f"  - {m.name}")
 
 
-def call_gemini_api(history, system_prompt=None):
+async def call_gemini_api(history, system_prompt=None):
     """Call Gemini API with optional system prompt
 
     DEPRECATED (Will be removed in future version):
@@ -130,7 +130,8 @@ def call_gemini_api(history, system_prompt=None):
 
     try:
         provider = create_provider("gemini")
-        yield from provider.call_api(history, system_prompt)
+        async for chunk in provider.call_api(history, system_prompt):
+            yield chunk
     except ValueError as e:
         yield f"Gemini API Error: {e}"
     except Exception as e:
@@ -143,7 +144,7 @@ def call_gemini_api(history, system_prompt=None):
         yield error_msg
 
 
-def call_chatgpt_api(history, system_prompt=None):
+async def call_chatgpt_api(history, system_prompt=None):
     """Call ChatGPT API with optional system prompt
 
     DEPRECATED (Will be removed in future version):
@@ -174,7 +175,8 @@ def call_chatgpt_api(history, system_prompt=None):
 
     try:
         provider = create_provider("chatgpt")
-        yield from provider.call_api(history, system_prompt)
+        async for chunk in provider.call_api(history, system_prompt):
+            yield chunk
     except ValueError as e:
         yield f"ChatGPT API Error: {e}"
     except openai.APIError as e:
@@ -187,7 +189,7 @@ def call_chatgpt_api(history, system_prompt=None):
         yield f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
 
 
-def stream_text_events(history, provider_name, system_prompt=None):
+async def stream_text_events(history, provider_name, system_prompt=None):
     """Stream normalized text events from a provider.
 
     Args:
@@ -199,7 +201,8 @@ def stream_text_events(history, provider_name, system_prompt=None):
         str: Normalized text chunks
     """
     provider = create_provider(provider_name)
-    yield from provider.stream_text_events(history, system_prompt)
+    async for chunk in provider.stream_text_events(history, system_prompt):
+        yield chunk
 
 
 def extract_text_from_chunk(chunk, model_name):
@@ -358,7 +361,7 @@ async def execute_with_tools(
         # Call LLM
         tool_calls_in_turn = []
         thought_text = ""
-        for chunk in provider.call_api(history, system_prompt, tools):
+        async for chunk in provider.call_api(history, system_prompt, tools):
             # Check timeout during streaming
             if time.time() - start_time > timeout:
                 raise TimeoutError(f"Agentic loop exceeded {timeout}s timeout")

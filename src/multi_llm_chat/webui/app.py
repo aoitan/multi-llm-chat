@@ -644,7 +644,7 @@ with gr.Blocks() as demo:
         *ordered_buttons,
     ]
 
-    def handle_chat_submission(
+    async def handle_chat_submission(
         user_message, display_history, logic_history, system_prompt, user_id, chat_service
     ):
         """
@@ -678,7 +678,7 @@ with gr.Blocks() as demo:
 
         # 2. Stream the response from the core logic
         final_logic_history = logic_history
-        for res_display, res_disp_state, res_logic, res_service in validate_and_respond(
+        async for res_display, res_disp_state, res_logic, res_service in validate_and_respond(
             user_message, display_history, logic_history, system_prompt, user_id, chat_service
         ):
             final_logic_history = res_logic

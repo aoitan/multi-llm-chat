@@ -520,12 +520,18 @@ class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
     @abstractmethod
-    def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
-        """Call the LLM API and return a generator of response chunks
+    async def call_api(
+        self,
+        history: List[Dict[str, Any]],
+        system_prompt: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ):
+        """Call the LLM API and return an async generator of response chunks
 
         Args:
             history: List of conversation history dicts with 'role' and 'content'
             system_prompt: Optional system instruction
+            tools: Optional list of tools for the LLM
 
         Yields:
             Response chunks from the API
@@ -558,9 +564,9 @@ class LLMProvider(ABC):
         """
         pass
 
-    def stream_text_events(self, history, system_prompt=None):
+    async def stream_text_events(self, history, system_prompt=None):
         """Stream normalized text events from the unified dictionary stream."""
-        for chunk in self.call_api(history, system_prompt):
+        async for chunk in self.call_api(history, system_prompt):
             # Support both dict and legacy string format
             if isinstance(chunk, dict):
                 if chunk.get("type") == "text":
@@ -726,7 +732,7 @@ class GeminiProvider(LLMProvider):
 
         return gemini_history
 
-    def call_api(
+    async def call_api(
         self,
         history: List[Dict[str, Any]],
         system_prompt: Optional[str] = None,
@@ -766,9 +772,11 @@ class GeminiProvider(LLMProvider):
         stream_completed_successfully = False
 
         try:
-            response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
+            response = await model.generate_content_async(
+                gemini_history, stream=True, tools=gemini_tools
+            )
 
-            for chunk in response:
+            async for chunk in response:
                 parts = getattr(chunk, "parts", None)
                 if parts:
                     for part in parts:
@@ -802,7 +810,8 @@ class GeminiProvider(LLMProvider):
         finally:
             # Only emit pending tool calls if stream completed successfully
             if stream_completed_successfully:
-                yield from assembler.finalize_pending_calls()
+                for tool_call in assembler.finalize_pending_calls():
+                    yield tool_call
 
     def extract_text_from_chunk(self, chunk: Any):
         """Extract text from a unified response chunk."""
@@ -859,7 +868,7 @@ class ChatGPTProvider(LLMProvider):
     def __init__(self):
         self._client = None
         if OPENAI_API_KEY:
-            self._client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            self._client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
 
     @staticmethod
     def format_history(history):
@@ -977,7 +986,12 @@ class ChatGPTProvider(LLMProvider):
             # Skip gemini and other roles - they shouldn't be sent to ChatGPT
         return chatgpt_history
 
-    def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
+    async def call_api(
+        self,
+        history: List[Dict[str, Any]],
+        system_prompt: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ):
         """Call ChatGPT API and yield unified dictionary objects.
 
         Args:
@@ -1013,11 +1027,11 @@ class ChatGPTProvider(LLMProvider):
                 api_params["tool_choice"] = "auto"
 
         # Call API with streaming
-        stream = self._client.chat.completions.create(**api_params)
+        stream = await self._client.chat.completions.create(**api_params)
 
         # Process stream with tool call assembler
         assembler = OpenAIToolCallAssembler()
-        for chunk in stream:
+        async for chunk in stream:
             finish_reason = None
             # Check for tool calls and finish reason
             if hasattr(chunk, "choices") and chunk.choices:

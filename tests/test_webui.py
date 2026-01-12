@@ -158,7 +158,7 @@ class TestWebUIHandlers:
             mock_service_instance = MockChatService.return_value
 
             async def mock_process_message(*args, **kwargs):
-                yield (["Hi"], ["Hi"])
+                yield (["Hi"], ["Hi"], {"type": "text", "content": "Hi"})
 
             mock_service_instance.process_message.side_effect = mock_process_message
 

@@ -52,8 +52,6 @@ class ChatService:
     independent of UI implementation. This allows both CLI and WebUI to share
     the same business logic without duplication.
 
-    Supports dependency injection of LLM providers for testing and session isolation.
-
     Attributes:
         display_history: UI-friendly history format [[user_msg, assistant_msg], ...]
         logic_history: API-friendly history format [{"role": "user", "content": "..."}]
@@ -145,149 +143,94 @@ class ChatService:
             tools: Optional list of tools for the LLM
 
         Yields:
-            tuple: (display_history, logic_history) after each update
+            tuple: (display_history, logic_history, chunk) after each update
         """
         from .core import execute_with_tools
 
         mention = parse_mention(user_message)
 
         # Add user message to histories (structured format)
-        self.logic_history.append(
-            {"role": "user", "content": [{"type": "text", "content": user_message}]}
-        )
+        user_entry = {"role": "user", "content": [{"type": "text", "content": user_message}]}
+        self.logic_history.append(user_entry)
         self.display_history.append([user_message, None])
-        yield self.display_history, self.logic_history
+        yield self.display_history, self.logic_history, {"type": "text", "content": ""}
 
         # If no mention, treat as memo (no LLM call)
         if mention is None:
             return
 
         # For @all, create snapshot so both LLMs see same history
-        history_snapshot = (
-            [entry.copy() for entry in self.logic_history] if mention == "all" else None
-        )
+        history_at_start = [entry.copy() for entry in self.logic_history]
 
-        # Process Gemini
-        if mention in ["gemini", "all"]:
-            gemini_label = ASSISTANT_LABELS["gemini"]
-            self.display_history[-1][1] = gemini_label
-            # Use snapshot for input if @all, but we still want the results in self.logic_history
-            gemini_input_history = (
-                [entry.copy() for entry in history_snapshot]
-                if history_snapshot
-                else self.logic_history
-            )
+        # Process models
+        models_to_call = []
+        if mention == "all":
+            models_to_call = ["gemini", "chatgpt"]
+        else:
+            models_to_call = [mention]
 
-            try:
-                # Use Agentic Loop for Gemini
-                any_yielded = False
-                async for chunk in execute_with_tools(
-                    self.gemini_provider,
-                    gemini_input_history,
-                    self.system_prompt,
-                    mcp_client=self.mcp_client,
-                    tools=tools,
-                ):
-                    any_yielded = True
-                    chunk_type = chunk.get("type")
-                    if chunk_type == "text":
-                        text = chunk.get("content", "")
-                        if text:
-                            self.display_history[-1][1] += text
-                            yield self.display_history, self.logic_history
-                    elif chunk_type == "tool_call":
-                        tool_call_content = chunk.get("content", {})
-                        tool_name = tool_call_content.get("name", "unknown_tool")
-                        tool_representation = f"[Tool Call: {tool_name}]"
-                        self.display_history[-1][1] += tool_representation
-                        yield self.display_history, self.logic_history
-                    elif chunk_type == "tool_result":
-                        tool_result_content = chunk.get("content", {})
-                        tool_name = tool_result_content.get("name", "unknown_tool")
-                        tool_representation = f"[Tool Result: {tool_name}]"
-                        self.display_history[-1][1] += tool_representation
-                        yield self.display_history, self.logic_history
+        for model_name in models_to_call:
+            provider = self.gemini_provider if model_name == "gemini" else self.chatgpt_provider
+            label = ASSISTANT_LABELS[model_name]
 
-                if not any_yielded:
-                    error_message = "[System: Geminiからの応答がありませんでした]"
-                    if self.display_history[-1][1] == gemini_label:
-                        self.display_history[-1][1] += error_message
-                    self.logic_history.append(
-                        {"role": "gemini", "content": [{"type": "text", "content": error_message}]}
-                    )
-
-                # If we used a snapshot, we need to append the new entries to the main history
-                if history_snapshot:
-                    new_entries = gemini_input_history[len(history_snapshot) :]
-                    self.logic_history.extend(new_entries)
-                # If not snapshot, self.logic_history was updated directly by execute_with_tools
-            except (ValueError, Exception) as e:
-                self._handle_api_error(e, "gemini")
-
-            yield self.display_history, self.logic_history
-
-        # Process ChatGPT
-        if mention in ["chatgpt", "all"]:
-            chatgpt_label = ASSISTANT_LABELS["chatgpt"]
-            # For @all, add new display row to avoid prompt duplication
-            if mention == "all":
-                self.display_history.append([None, chatgpt_label])
+            # For @all, we might need a new row in display_history for the second model
+            if mention == "all" and model_name == "chatgpt":
+                self.display_history.append([None, label])
             else:
-                self.display_history[-1][1] = chatgpt_label
+                self.display_history[-1][1] = label
 
-            # Use snapshot for input if @all
-            chatgpt_input_history = (
-                [entry.copy() for entry in history_snapshot]
-                if history_snapshot
-                else self.logic_history
-            )
+            yield self.display_history, self.logic_history, {"type": "text", "content": ""}
+
+            # Prepare input history for this model
+            if mention == "all":
+                input_history = [entry.copy() for entry in history_at_start]
+            else:
+                input_history = self.logic_history
+
+            initial_input_len = len(input_history)
+            any_yielded = False
 
             try:
-                # Use Agentic Loop for ChatGPT
-                any_yielded = False
                 async for chunk in execute_with_tools(
-                    self.chatgpt_provider,
-                    chatgpt_input_history,
+                    provider,
+                    input_history,
                     self.system_prompt,
                     mcp_client=self.mcp_client,
                     tools=tools,
                 ):
                     any_yielded = True
                     chunk_type = chunk.get("type")
+                    content = chunk.get("content", "")
+
                     if chunk_type == "text":
-                        text = chunk.get("content", "")
-                        if text:
-                            self.display_history[-1][1] += text
-                            yield self.display_history, self.logic_history
-                    elif chunk_type == "tool_call":
-                        tool_call_content = chunk.get("content", {})
-                        tool_name = tool_call_content.get("name", "unknown_tool")
-                        tool_representation = f"[Tool Call: {tool_name}]"
-                        self.display_history[-1][1] += tool_representation
-                        yield self.display_history, self.logic_history
-                    elif chunk_type == "tool_result":
-                        tool_result_content = chunk.get("content", {})
-                        tool_name = tool_result_content.get("name", "unknown_tool")
-                        tool_representation = f"[Tool Result: {tool_name}]"
-                        self.display_history[-1][1] += tool_representation
-                        yield self.display_history, self.logic_history
+                        if content:
+                            self.display_history[-1][1] += content
+
+                    yield self.display_history, self.logic_history, chunk
 
                 if not any_yielded:
-                    error_message = "[System: ChatGPTからの応答がありませんでした]"
-                    if self.display_history[-1][1] == chatgpt_label:
-                        self.display_history[-1][1] += error_message
-                    self.logic_history.append(
-                        {"role": "chatgpt", "content": [{"type": "text", "content": error_message}]}
+                    error_message = (
+                        f"[System: {model_name.capitalize()}からの応答がありませんでした]"
                     )
-
-                # If we used a snapshot, we need to append the new entries to the main history
-                if history_snapshot:
-                    new_entries = chatgpt_input_history[len(history_snapshot) :]
+                    self.display_history[-1][1] += error_message
+                    new_entry = {
+                        "role": model_name,
+                        "content": [{"type": "text", "content": error_message}],
+                    }
+                    if mention == "all":
+                        self.logic_history.append(new_entry)
+                    else:
+                        self.logic_history.append(new_entry)
+                elif mention == "all":
+                    # Append new entries from input_history to self.logic_history
+                    new_entries = input_history[initial_input_len:]
                     self.logic_history.extend(new_entries)
-            except (ValueError, Exception) as e:
-                self._handle_api_error(e, "chatgpt")
 
-            yield self.display_history, self.logic_history
+            except (ValueError, Exception) as e:
+                self._handle_api_error(e, model_name)
+                yield self.display_history, self.logic_history, {"type": "error", "content": str(e)}
+
+            yield self.display_history, self.logic_history, {"type": "text", "content": ""}
 
     def set_system_prompt(self, prompt):
         """Update system prompt
@@ -352,8 +295,8 @@ __all__ = [
     "reset_history",
     "call_gemini_api",
     "call_chatgpt_api",
-    "format_history_for_gemini",
     "format_history_for_chatgpt",
+    "format_history_for_gemini",
     "list_gemini_models",
     "get_llm_response",
     "GOOGLE_API_KEY",

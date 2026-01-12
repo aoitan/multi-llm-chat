@@ -236,7 +236,14 @@ async def respond(
     chat_service.logic_history = logic_history
     chat_service.system_prompt = system_prompt
 
-    async for updated_display, updated_logic in chat_service.process_message(user_message):
+    async for updated_display, updated_logic, chunk in chat_service.process_message(user_message):
+        chunk_type = chunk.get("type")
+        if chunk_type in ["tool_call", "tool_result"]:
+            # Format and add tool response to display history
+            formatted = format_tool_response(chunk_type, chunk.get("content", {}))
+            if formatted:
+                updated_display[-1][1] += formatted
+
         yield updated_display, updated_display, updated_logic, chat_service
 
 
