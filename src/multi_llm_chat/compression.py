@@ -1,5 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional
 
+from .history_utils import content_to_text
+
 
 def prune_history_sliding_window(
     history: List[Dict[str, Any]],
@@ -23,7 +25,7 @@ def prune_history_sliding_window(
     # Calculate tokens for each entry
     entry_tokens = []
     for entry in history:
-        content = entry.get("content", "")
+        content = content_to_text(entry.get("content", ""), include_tool_data=True)
         tokens = token_calculator(content, model_name)
         entry_tokens.append(tokens)
 
@@ -112,7 +114,7 @@ def get_pruning_info(
 
     original_tokens = system_tokens
     for entry in history:
-        content = entry.get("content", "")
+        content = content_to_text(entry.get("content", ""), include_tool_data=True)
         original_tokens += token_calculator(content, model_name)
 
     # Get pruned version
@@ -122,7 +124,7 @@ def get_pruning_info(
 
     pruned_tokens = system_tokens
     for entry in pruned:
-        content = entry.get("content", "")
+        content = content_to_text(entry.get("content", ""), include_tool_data=True)
         pruned_tokens += token_calculator(content, model_name)
 
     turns_removed = len(history) - len(pruned)

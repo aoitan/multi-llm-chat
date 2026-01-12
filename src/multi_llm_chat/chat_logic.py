@@ -1,4 +1,6 @@
 # Backward compatibility layer - delegates to new core and cli modules
+import logging
+
 from .core import (
     CHATGPT_MODEL,
     GEMINI_MODEL,
@@ -13,6 +15,8 @@ from .core import (
 from .history import get_llm_response
 from .history import reset_history as _reset_history
 from .llm_provider import create_provider
+
+logger = logging.getLogger(__name__)
 
 
 def parse_mention(message):
@@ -113,23 +117,31 @@ class ChatService:
             error_msg = f"[System: {provider_title} APIエラー - {str(error)}]"
 
         self.display_history[-1][1] = f"**{provider_title}:**\n{error_msg}"
-        self.logic_history.append({"role": provider_name, "content": error_msg})
+        self.logic_history.append(
+            {
+                "role": provider_name,
+                "content": [{"type": "text", "content": error_msg}],
+            }
+        )
 
-    def process_message(self, user_message):
+    def process_message(self, user_message, tools=None):
         """Process user message and generate LLM responses
 
         This is a generator function that yields intermediate states for streaming UI updates.
 
         Args:
             user_message: User's input message
+            tools: Optional list of tools for the LLM
 
         Yields:
             tuple: (display_history, logic_history) after each update
         """
         mention = parse_mention(user_message)
 
-        # Add user message to histories
-        self.logic_history.append({"role": "user", "content": user_message})
+        # Add user message to histories (structured format)
+        self.logic_history.append(
+            {"role": "user", "content": [{"type": "text", "content": user_message}]}
+        )
         self.display_history.append([user_message, None])
         yield self.display_history, self.logic_history
 
@@ -149,20 +161,53 @@ class ChatService:
             gemini_input_history = history_snapshot or self.logic_history
 
             try:
-                # Use injected provider instance
                 full_response = ""
-                for text in self.gemini_provider.stream_text_events(
-                    gemini_input_history, self.system_prompt
-                ):
-                    full_response += text
-                    self.display_history[-1][1] += text
-                    yield self.display_history, self.logic_history
+                content_parts = []
 
-                self.logic_history.append({"role": "gemini", "content": full_response})
-                if not full_response.strip():
-                    self.display_history[-1][1] = (
-                        "**Gemini:**\n[System: Geminiからの応答がありませんでした]"
-                    )
+                # Directly use call_api to handle mixed content (text and tool calls)
+                stream = self.gemini_provider.call_api(
+                    gemini_input_history,
+                    self.system_prompt,
+                    tools=tools,
+                )
+
+                for chunk in stream:
+                    if chunk.get("type") == "text":
+                        text = chunk.get("content", "")
+                        if text:
+                            full_response += text
+                            if content_parts and content_parts[-1].get("type") == "text":
+                                content_parts[-1]["content"] += text
+                            else:
+                                content_parts.append({"type": "text", "content": text})
+                            self.display_history[-1][1] += text
+                            yield self.display_history, self.logic_history
+                    elif chunk.get("type") == "tool_call":
+                        tool_call_content = chunk.get("content", {})
+                        content_parts.append({"type": "tool_call", "content": tool_call_content})
+
+                        # Represent tool call in UI
+                        tool_name = tool_call_content.get("name", "unknown_tool")
+                        tool_representation = f"[Tool Call: {tool_name}]"
+                        self.display_history[-1][1] += tool_representation
+                        yield self.display_history, self.logic_history
+
+                # Append structured data to logic history
+                if not content_parts:
+                    # Empty response case: API returned no content at all
+                    # This differs from streaming (where content_parts accumulates)
+                    error_message = "[System: Geminiからの応答がありませんでした]"
+                    content_parts = [{"type": "text", "content": error_message}]
+                    # Append error message only if display_history contains only label
+                    # (i.e., no streaming content was added)
+                    if self.display_history[-1][1] == gemini_label:
+                        self.display_history[-1][1] += error_message
+
+                new_entry = {
+                    "role": "gemini",
+                    "content": content_parts,
+                }
+                self.logic_history.append(new_entry)
             except (ValueError, Exception) as e:
                 self._handle_api_error(e, "gemini")
 
@@ -182,18 +227,36 @@ class ChatService:
             try:
                 # Use injected provider instance
                 full_response = ""
-                for text in self.chatgpt_provider.stream_text_events(
-                    chatgpt_input_history, self.system_prompt
-                ):
-                    full_response += text
-                    self.display_history[-1][1] += text
-                    yield self.display_history, self.logic_history
 
-                self.logic_history.append({"role": "chatgpt", "content": full_response})
-                if not full_response.strip():
-                    self.display_history[-1][1] = (
-                        "**ChatGPT:**\n[System: ChatGPTからの応答がありませんでした]"
-                    )
+                # ChatGPTはツール未対応のため、toolsが指定されている場合は警告ログを記録
+                if tools:
+                    logger.warning("ChatGPT does not support tools, ignoring tools parameter")
+
+                stream = self.chatgpt_provider.call_api(
+                    chatgpt_input_history,
+                    self.system_prompt,
+                    tools=None,  # Explicitly pass None (ChatGPT doesn't support tools yet)
+                )
+                for chunk in stream:
+                    if chunk.get("type") == "text":
+                        text = chunk.get("content", "")
+                        if text:
+                            full_response += text
+                            self.display_history[-1][1] += text
+                            yield self.display_history, self.logic_history
+
+                content_parts = []
+                if full_response:
+                    content_parts.append({"type": "text", "content": full_response})
+                else:
+                    # Empty response: add error message to logic_history
+                    error_message = "[System: ChatGPTからの応答がありませんでした]"
+                    content_parts.append({"type": "text", "content": error_message})
+                    # display_history already has chatgpt_label, so append error message
+                    self.display_history[-1][1] += error_message
+
+                new_entry = {"role": "chatgpt", "content": content_parts}
+                self.logic_history.append(new_entry)
             except (ValueError, Exception) as e:
                 self._handle_api_error(e, "chatgpt")
 
@@ -206,6 +269,38 @@ class ChatService:
             prompt: New system prompt text
         """
         self.system_prompt = prompt
+
+    def append_tool_results(self, tool_results):
+        """Append tool execution results to logic history.
+
+        Args:
+            tool_results: List of tool result dicts with name/content and optional tool_call_id.
+        """
+        if not tool_results:
+            return
+
+        content_parts = []
+        for result in tool_results:
+            if not isinstance(result, dict):
+                logger.warning(
+                    "Invalid tool result type: %s (expected dict), skipping",
+                    type(result).__name__,
+                )
+                continue
+            if result.get("type") == "tool_result":
+                content_parts.append(result)
+                continue
+            content_parts.append(
+                {
+                    "type": "tool_result",
+                    "name": result.get("name"),
+                    "content": result.get("content", ""),
+                    "tool_call_id": result.get("tool_call_id"),
+                }
+            )
+
+        if content_parts:
+            self.logic_history.append({"role": "tool", "content": content_parts})
 
 
 def main():

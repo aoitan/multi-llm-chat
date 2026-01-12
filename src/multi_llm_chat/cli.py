@@ -304,7 +304,20 @@ def _handle_copy_command(args, history):
         return
 
     try:
-        pyperclip.copy(message)
+        response_text = ""
+        if isinstance(message, list):
+            # Extract text from the new structured format
+            text_parts = [
+                part["content"]
+                for part in message
+                if part.get("type") == "text" and "content" in part
+            ]
+            response_text = " ".join(text_parts)
+        elif isinstance(message, str):
+            # Handle legacy string format for backward compatibility
+            response_text = message
+
+        pyperclip.copy(response_text)
         print(f"LLM応答をクリップボードにコピーしました (index={index})。")
     except pyperclip.PyperclipException:
         print("エラー: クリップボードへのコピーに失敗しました。")

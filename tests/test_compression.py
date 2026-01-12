@@ -92,3 +92,29 @@ def test_get_pruning_info():
     assert info["turns_to_remove"] > 0
     assert "original_length" in info
     assert "pruned_length" in info
+
+
+def test_pruning_handles_structured_content():
+    history = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "content": "Hello"},
+                {"type": "text", "content": "world"},
+            ],
+        },
+        {
+            "role": "gemini",
+            "content": [{"type": "text", "content": "Response"}],
+        },
+    ]
+
+    pruned = prune_history_sliding_window(
+        history,
+        max_tokens=100,
+        model_name="gemini-1.5-pro",
+        system_prompt=None,
+        token_calculator=mock_calculate_tokens,
+    )
+
+    assert pruned == history

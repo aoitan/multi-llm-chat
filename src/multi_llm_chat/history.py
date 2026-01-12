@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import core
+from .history_utils import content_to_text, normalize_history_turns
+
+# Schema version constants for history storage
+SCHEMA_VERSION_LEGACY = 1  # String-based content (deprecated in v2.0.0)
+SCHEMA_VERSION_STRUCTURED = 2  # List[Dict] content (current)
 
 
 def _default_base_dir() -> Path:
@@ -56,7 +61,7 @@ def get_llm_response(history, index):
         raise IndexError("index must be non-negative")
 
     responses = [
-        entry.get("content", "")
+        content_to_text(entry.get("content", ""), include_tool_data=False)
         for entry in reversed(history or [])
         if entry.get("role") in core.LLM_ROLES
     ]
@@ -103,7 +108,7 @@ class HistoryStore:
         return sorted(display_names)
 
     def save_history(self, user_id: str, display_name: str, system_prompt: str, turns):
-        """Persist a conversation to disk."""
+        """Persist a conversation to disk with normalization."""
         user_dir = self._user_dir(user_id)
         user_dir.mkdir(parents=True, exist_ok=True)
 
@@ -119,12 +124,16 @@ class HistoryStore:
             except (json.JSONDecodeError, OSError):
                 created_at = now
 
+        # Normalize turns to structured format before saving
+        if turns:
+            turns = normalize_history_turns(turns)
+
         payload = {
             "display_name": display_name,
             "system_prompt": system_prompt,
             "turns": turns,
             "metadata": {
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION_STRUCTURED,
                 "created_at": created_at,
                 "updated_at": now,
             },
@@ -154,7 +163,7 @@ class HistoryStore:
                     metadata["updated_at"] = metadata["created_at"]
                 data["metadata"] = metadata
                 data.setdefault("system_prompt", "")
-                data.setdefault("turns", [])
+                data["turns"] = normalize_history_turns(data.get("turns", []))
                 return data
 
         raise FileNotFoundError("History not found")

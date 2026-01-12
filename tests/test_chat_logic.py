@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,7 +15,11 @@ def _create_mock_provider(response_text, provider_type="gemini"):
     """
     mock_provider = MagicMock()
 
-    mock_provider.stream_text_events.return_value = iter([response_text])
+    if provider_type == "gemini":
+        # Gemini now uses call_api and a structured dictionary
+        mock_provider.call_api.return_value = iter([{"type": "text", "content": response_text}])
+    else:  # chatgpt
+        mock_provider.call_api.return_value = iter([{"type": "text", "content": response_text}])
 
     return mock_provider
 
@@ -32,25 +37,34 @@ def test_repl_exit_commands():
 
 
 def test_history_management_user_input():
+    # Set environment variable to skip user_id prompt
     test_inputs = ["hello gemini", "@gemini how are you?", "just a thought"]
 
-    with patch("builtins.input", side_effect=test_inputs + ["exit"]):
-        with patch("builtins.print"):  # Mock print to avoid console output
-            # Mock API calls to control history length
-            with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
-                mock_create_provider.return_value = _create_mock_provider("Mocked Gemini Response")
-                history = chat_logic.main()
+    with patch.dict(os.environ, {"CHAT_HISTORY_USER_ID": "test-user"}):
+        with patch("builtins.input", side_effect=test_inputs + ["exit"]):
+            with patch("builtins.print"):  # Mock print to avoid console output
+                # Mock API calls to control history length
+                with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
+                    mock_create_provider.return_value = _create_mock_provider(
+                        "Mocked Gemini Response"
+                    )
+                    history = chat_logic.main()
 
-            # Expected history: user, user, gemini, user
-            assert len(history) == 4
-            assert history[0]["role"] == "user"
-            assert history[0]["content"] == "hello gemini"
-            assert history[1]["role"] == "user"
-            assert history[1]["content"] == "@gemini how are you?"
-            assert history[2]["role"] == "gemini"
-            assert history[2]["content"] == "Mocked Gemini Response"
-            assert history[3]["role"] == "user"
-            assert history[3]["content"] == "just a thought"
+                # Expected history: memo (hello gemini), user (@gemini),
+                # gemini, user (just a thought)
+                assert len(history) == 4
+                assert history[0]["role"] == "user"
+                assert history[0]["content"] == [{"type": "text", "content": "hello gemini"}]
+                assert history[1]["role"] == "user"
+                assert history[1]["content"] == [
+                    {"type": "text", "content": "@gemini how are you?"}
+                ]
+                assert history[2]["role"] == "gemini"
+                assert history[2]["content"] == [
+                    {"type": "text", "content": "Mocked Gemini Response"}
+                ]
+                assert history[3]["role"] == "user"
+                assert history[3]["content"] == [{"type": "text", "content": "just a thought"}]
 
 
 def test_mention_routing():
@@ -74,7 +88,9 @@ def test_mention_routing():
                 # Verify Gemini provider was created
                 assert any(call[0][0] == "gemini" for call in mock_create_provider.call_args_list)
                 assert history[-1]["role"] == "gemini"
-                assert history[-1]["content"] == "Mocked Gemini Response"
+                assert history[-1]["content"] == [
+                    {"type": "text", "content": "Mocked Gemini Response"}
+                ]
 
     # Test @chatgpt
     with patch("builtins.input", side_effect=["test-user", "@chatgpt hello", "exit"]):
@@ -95,7 +111,9 @@ def test_mention_routing():
                 # Verify ChatGPT provider was created
                 assert any(call[0][0] == "chatgpt" for call in mock_create_provider.call_args_list)
                 assert history[-1]["role"] == "chatgpt"
-                assert history[-1]["content"] == "Mocked ChatGPT Response"
+                assert history[-1]["content"] == [
+                    {"type": "text", "content": "Mocked ChatGPT Response"}
+                ]
 
     # Test @all (calls both providers)
     with patch("builtins.input", side_effect=["test-user", "@all hello", "exit"]):
@@ -115,9 +133,13 @@ def test_mention_routing():
                 # ChatService creates both providers on initialization
                 assert mock_create_provider.call_count == 2
                 assert history[-2]["role"] == "gemini"
-                assert history[-2]["content"] == "Mocked Gemini Response"
+                assert history[-2]["content"] == [
+                    {"type": "text", "content": "Mocked Gemini Response"}
+                ]
                 assert history[-1]["role"] == "chatgpt"
-                assert history[-1]["content"] == "Mocked ChatGPT Response"
+                assert history[-1]["content"] == [
+                    {"type": "text", "content": "Mocked ChatGPT Response"}
+                ]
 
 
 def test_reset_command_clears_history(monkeypatch):
@@ -136,7 +158,7 @@ def test_reset_command_clears_history(monkeypatch):
         with patch("builtins.print"):
             history = chat_logic.main()
 
-    assert [entry["content"] for entry in history] == ["after reset"]
+    assert [entry["content"] for entry in history] == [[{"type": "text", "content": "after reset"}]]
 
 
 def test_get_llm_response_by_index():
@@ -150,6 +172,23 @@ def test_get_llm_response_by_index():
 
     assert chat_logic.get_llm_response(history, 0) == "C-1"
     assert chat_logic.get_llm_response(history, 1) == "G-1"
+
+
+def test_get_llm_response_with_structured_content():
+    """構造化されたcontentからテキストを抽出できること"""
+    history = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "gemini",
+            "content": [
+                {"type": "text", "content": "G-1"},
+                {"type": "tool_call", "content": {"name": "tool", "arguments": {}}},
+                {"type": "text", "content": "G-2"},
+            ],
+        },
+    ]
+
+    assert chat_logic.get_llm_response(history, 0) == "G-1 G-2"
 
 
 def test_get_llm_response_raises_on_missing():

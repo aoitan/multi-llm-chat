@@ -17,6 +17,53 @@ def test_estimate_tokens():
     assert estimate_tokens("Helloこんにちは") == 4
 
 
+def test_estimate_tokens_with_structured_content():
+    content = [
+        {"type": "text", "content": "abcd"},
+        {"type": "text", "content": "efgh"},
+    ]
+
+    assert estimate_tokens(content) == 2
+
+
+def test_estimate_tokens_with_tool_calls_under_buffer_factor():
+    """ツール呼び出しを含むcontentのトークン推定が妥当な範囲内であること
+
+    Note: This test verifies that token estimation for tool calls produces
+    reasonable values. Actual API token counts may differ due to schema
+    metadata included by Gemini. BUFFER_FACTOR compensates for this.
+    """
+    from multi_llm_chat.history_utils import content_to_text
+
+    # Simulate large tool call with nested JSON
+    large_tool_call = {
+        "type": "tool_call",
+        "content": {
+            "name": "search_documents",
+            "arguments": {
+                "query": "artificial intelligence " * 50,  # ~100 tokens worth
+                "filters": {"date_range": "2020-2025", "category": ["research", "engineering"]},
+            },
+        },
+    }
+    content = [large_tool_call]
+
+    # Estimate tokens using content_to_text
+    text_repr = content_to_text(content, include_tool_data=True)
+    estimated_tokens = estimate_tokens(text_repr)
+
+    # Verify estimation produces reasonable values
+    assert estimated_tokens > 0, "Tool call token count should be positive"
+    assert estimated_tokens < 10000, "Tool call token count should be reasonable (sanity check)"
+
+    # Verify the text representation includes tool data
+    assert "search_documents" in text_repr
+    assert "artificial intelligence" in text_repr
+
+    # TODO: Add integration test with actual Gemini API token count
+    # to verify BUFFER_FACTOR adequacy in practice
+
+
 def test_get_max_context_length(monkeypatch):
     # Clear environment variables to test defaults
     monkeypatch.delenv("GEMINI_MAX_CONTEXT_LENGTH", raising=False)
@@ -36,9 +83,25 @@ def test_get_max_context_length(monkeypatch):
 
 
 def test_get_buffer_factor(monkeypatch):
-    # Default
-    assert get_buffer_factor() == 1.2
+    # Clear any existing environment variable first
+    monkeypatch.delenv("TOKEN_ESTIMATION_BUFFER_FACTOR", raising=False)
 
-    # Environment variable override
-    monkeypatch.setenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "1.5")
-    assert get_buffer_factor() == 1.5
+    # Default without tools (1.2 for standard conversation)
+    assert get_buffer_factor(has_tools=False) == 1.2
+
+    # Default with tools (1.5 to account for FunctionDeclaration overhead)
+    assert get_buffer_factor(has_tools=True) == 1.5
+
+    # Environment variable overrides everything
+    monkeypatch.setenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "2.0")
+    assert get_buffer_factor(has_tools=False) == 2.0
+    assert get_buffer_factor(has_tools=True) == 2.0
+
+
+def test_get_buffer_factor_invalid_env_value(monkeypatch):
+    """Invalid environment variable should fall back to auto-detected default"""
+    monkeypatch.setenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "invalid")
+
+    # Should fall back to auto-detected values
+    assert get_buffer_factor(has_tools=False) == 1.2
+    assert get_buffer_factor(has_tools=True) == 1.5

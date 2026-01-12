@@ -114,9 +114,9 @@ def test_format_history_for_gemini():
 
     assert len(result) == 2
     assert result[0]["role"] == "user"
-    assert result[0]["parts"] == ["Hello"]
+    assert result[0]["parts"] == [{"text": "Hello"}]
     assert result[1]["role"] == "model"
-    assert result[1]["parts"] == ["Hi there"]
+    assert result[1]["parts"] == [{"text": "Hi there"}]
 
 
 def test_format_history_for_chatgpt():
@@ -275,10 +275,16 @@ def test_estimate_tokens_mixed():
 
 def test_extract_text_from_chunk_gemini():
     """extract_text_from_chunk should extract text from Gemini chunk"""
-    # Create a mock Gemini chunk
-    chunk = type("Chunk", (), {"text": "Hello from Gemini"})()
+    # Create a new dictionary-based chunk
+    chunk = {"type": "text", "content": "Hello from Gemini"}
+    # The model name 'gemini' will cause the GeminiProvider to be used
     result = core.extract_text_from_chunk(chunk, "gemini")
     assert result == "Hello from Gemini"
+
+    # Test with a non-text chunk, which should return empty
+    chunk = {"type": "tool_call", "content": {}}
+    result = core.extract_text_from_chunk(chunk, "gemini")
+    assert result == ""
 
 
 def test_extract_text_from_chunk_chatgpt_string():
@@ -342,9 +348,9 @@ def test_format_history_for_gemini_filters_chatgpt_responses():
 
     # Should only include user messages and Gemini's own responses
     assert len(result) == 3
-    assert result[0] == {"role": "user", "parts": ["Hello"]}
-    assert result[1] == {"role": "user", "parts": ["Another question"]}
-    assert result[2] == {"role": "model", "parts": ["Answer from Gemini"]}
+    assert result[0] == {"role": "user", "parts": [{"text": "Hello"}]}
+    assert result[1] == {"role": "user", "parts": [{"text": "Another question"}]}
+    assert result[2] == {"role": "model", "parts": [{"text": "Answer from Gemini"}]}
 
 
 def test_format_history_for_chatgpt_filters_gemini_responses():

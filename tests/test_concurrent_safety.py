@@ -37,8 +37,11 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
             time.sleep(0.01)
             mock_model = MagicMock()
             # Return the system_instruction in the response to verify correct prompt was used
+            # Mock Gemini API response format
+            mock_part = MagicMock(spec=["text"])  # Only has text attribute, no function_call
+            mock_part.text = f"Response with prompt: {system_instruction}"
             mock_chunk = MagicMock()
-            mock_chunk.text = f"Response with prompt: {system_instruction}"
+            mock_chunk.parts = [mock_part]
             mock_model.generate_content = MagicMock(return_value=iter([mock_chunk]))
 
             # Track creation without lock to detect race conditions

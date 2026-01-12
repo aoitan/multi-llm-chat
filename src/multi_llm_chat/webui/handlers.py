@@ -4,6 +4,7 @@ import logging
 
 from ..chat_logic import ChatService
 from ..history import HistoryStore
+from ..history_utils import content_to_text
 from .components import ASSISTANT_LABELS, ASSISTANT_ROLES
 
 logger = logging.getLogger(__name__)
@@ -14,10 +15,13 @@ def logic_history_to_display(logic_history):
     display_history = []
     for turn in logic_history:
         if turn["role"] == "user":
-            display_history.append([turn["content"], ""])
+            display_history.append(
+                [content_to_text(turn.get("content", ""), include_tool_data=False), ""]
+            )
         elif turn["role"] in ASSISTANT_ROLES and display_history:
             prefix = ASSISTANT_LABELS.get(turn["role"], "")
-            formatted_content = f"{prefix}{turn['content']}" if prefix else turn["content"]
+            assistant_text = content_to_text(turn.get("content", ""), include_tool_data=False)
+            formatted_content = f"{prefix}{assistant_text}" if prefix else assistant_text
             current_response = display_history[-1][1]
             if current_response:
                 display_history[-1][1] = current_response + "\n\n" + formatted_content
@@ -79,12 +83,15 @@ def load_history_action(user_id, history_name):
         for turn in logic_history:
             if turn["role"] == "user":
                 # Start a new turn
-                display_history.append([turn["content"], ""])
+                display_history.append(
+                    [content_to_text(turn.get("content", ""), include_tool_data=False), ""]
+                )
             elif turn["role"] in ASSISTANT_ROLES and display_history:
                 # Add assistant/LLM response to the last turn
                 # For @all mentions, multiple assistant responses exist - append them
                 prefix = ASSISTANT_LABELS.get(turn["role"], "")
-                formatted_content = f"{prefix}{turn['content']}" if prefix else turn["content"]
+                assistant_text = content_to_text(turn.get("content", ""), include_tool_data=False)
+                formatted_content = f"{prefix}{assistant_text}" if prefix else assistant_text
                 current_response = display_history[-1][1]
                 if current_response:
                     # Already has a response, append the new one
