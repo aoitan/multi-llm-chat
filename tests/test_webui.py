@@ -228,3 +228,26 @@ class TestWebUIHandlers:
         assert logic == []
         assert sys_prompt == ""
         assert "新しい会話を開始しました" in status
+
+    def test_webui_displays_tool_calls(self):
+        """WebUI displays tool calls with Markdown formatting."""
+        import asyncio
+
+        async def run_test():
+            from multi_llm_chat.webui.handlers import format_tool_response
+
+            # Test tool call formatting
+            tool_call = {"name": "get_weather", "arguments": {"location": "Tokyo"}}
+            tool_call_text = format_tool_response("tool_call", tool_call)
+
+            assert "🔧 **Tool Call**" in tool_call_text
+            assert "get_weather" in tool_call_text
+
+            # Test tool result formatting
+            tool_result = {"name": "get_weather", "content": "The temperature is 25°C"}
+            tool_result_text = format_tool_response("tool_result", tool_result)
+
+            assert "✅ **Result**" in tool_result_text
+            assert "25°C" in tool_result_text
+
+        asyncio.run(run_test())
