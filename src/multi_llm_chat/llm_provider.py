@@ -138,7 +138,7 @@ def parse_openai_tool_call(tool_call: dict) -> Dict[str, Any]:
 
     Returns:
         Common format dict:
-            {"tool_name": str, "arguments": dict, "tool_call_id": str}
+            {"name": str, "arguments": dict, "tool_call_id": str}
     """
     function = tool_call.get("function", {})
     name = function.get("name")
@@ -152,7 +152,7 @@ def parse_openai_tool_call(tool_call: dict) -> Dict[str, Any]:
         logger.warning("Failed to parse tool arguments JSON: %s", e)
         arguments = {}
 
-    return {"tool_name": name, "arguments": arguments, "tool_call_id": tool_call_id}
+    return {"name": name, "arguments": arguments, "tool_call_id": tool_call_id}
 
 
 def _parse_tool_response_payload(response_payload):
@@ -325,7 +325,7 @@ class OpenAIToolCallAssembler:
                 yield {
                     "type": "tool_call",
                     "content": {
-                        "tool_name": tool_call["name"],
+                        "name": tool_call["name"],
                         "arguments": arguments,
                         "tool_call_id": tool_call["id"],
                     },
@@ -869,24 +869,111 @@ class ChatGPTProvider(LLMProvider):
         sending ChatGPT messages it didn't generate, which would create
         a self-contradictory conversation.
 
-        Note: Preserves structured content for future tool support.
-        Currently flattens to text but maintains content structure.
+        Supports structured content including tool_call and tool_result.
         """
         chatgpt_history = []
         for entry in history:
             role = entry["role"]
             content = entry.get("content")
 
-            # Preserve structured content for future tool support
-            # Currently flatten to text since ChatGPT provider doesn't support tools yet
             if role == "system":
                 chatgpt_history.append({"role": "system", "content": content_to_text(content)})
             elif role == "user":
                 chatgpt_history.append({"role": "user", "content": content_to_text(content)})
             elif role == "chatgpt":
-                # TODO: When adding tool support, preserve tool_call and tool_result
-                # in structured format instead of flattening to text
-                chatgpt_history.append({"role": "assistant", "content": content_to_text(content)})
+                # Step 1: Normalize content to list
+                items = []
+                if isinstance(content, list):
+                    items = content
+                elif isinstance(content, dict):
+                    # Single dict is also structured data
+                    items = [content]
+                else:
+                    # Legacy format (string)
+                    chatgpt_history.append(
+                        {"role": "assistant", "content": content_to_text(content)}
+                    )
+                    continue
+
+                # Step 2: Group items by type
+                text_items = []
+                tool_call_items = []
+                tool_result_items = []
+
+                for item in items:
+                    if not isinstance(item, dict):
+                        # String item is treated as text
+                        text_items.append(str(item))
+                        continue
+
+                    item_type = item.get("type")
+                    if item_type == "text":
+                        text_items.append(item.get("content", ""))
+                    elif item_type == "tool_call":
+                        tool_call_items.append(item)
+                    elif item_type == "tool_result":
+                        tool_result_items.append(item)
+                    else:
+                        # Unknown type: fallback to content_to_text()
+                        text_items.append(content_to_text(item))
+
+                # Step 3: Generate messages (OpenAI allows text and tool_calls in same message)
+
+                # 3-1. Build assistant message if text or tool_calls exist
+                if text_items or tool_call_items:
+                    message = {"role": "assistant"}
+
+                    # Add text content if exists
+                    if text_items:
+                        message["content"] = " ".join(text_items)
+
+                    # Add tool_calls if exist
+                    if tool_call_items:
+                        valid_tool_calls = []
+                        for item in tool_call_items:
+                            if not item.get("tool_call_id") or not item.get("name"):
+                                logger.warning("Skipping incomplete tool_call in history: %s", item)
+                                continue
+                            valid_tool_calls.append(
+                                {
+                                    "id": item["tool_call_id"],
+                                    "type": "function",
+                                    "function": {
+                                        "name": item["name"],
+                                        "arguments": json.dumps(item["arguments"]),
+                                    },
+                                }
+                            )
+
+                        if valid_tool_calls:
+                            message["tool_calls"] = valid_tool_calls
+
+                    # Only append if we have actual content (text) or valid tool_calls
+                    # If neither exist, skip this message entirely
+                    has_content = "content" in message
+                    has_tool_calls = "tool_calls" in message
+
+                    if has_content or has_tool_calls:
+                        # OpenAI API specification:
+                        # - content and tool_calls can coexist (mixed content is valid)
+                        # - content should be None only when no text is present
+                        # Reference: https://platform.openai.com/docs/guides/function-calling
+                        if has_tool_calls and not text_items:
+                            message["content"] = None
+                        chatgpt_history.append(message)
+
+                # 3-2. Tool result messages (if any)
+                for item in tool_result_items:
+                    if not item.get("tool_call_id"):
+                        logger.warning("Skipping tool_result without tool_call_id: %s", item)
+                        continue
+                    chatgpt_history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": item["tool_call_id"],
+                            "content": json.dumps(item.get("result", "")),
+                        }
+                    )
             # Skip gemini and other roles - they shouldn't be sent to ChatGPT
         return chatgpt_history
 
@@ -931,17 +1018,29 @@ class ChatGPTProvider(LLMProvider):
         # Process stream with tool call assembler
         assembler = OpenAIToolCallAssembler()
         for chunk in stream:
-            # Check for tool calls
-            if hasattr(chunk.choices[0].delta, "tool_calls") and chunk.choices[0].delta.tool_calls:
-                for tool_call_delta in chunk.choices[0].delta.tool_calls:
-                    assembler.process_tool_call(tool_call_delta)
+            finish_reason = None
+            # Check for tool calls and finish reason
+            if hasattr(chunk, "choices") and chunk.choices:
+                choice = chunk.choices[0]
+                delta = choice.delta
+                finish_reason = getattr(choice, "finish_reason", None)
+
+                if hasattr(delta, "tool_calls") and delta.tool_calls:
+                    for tool_call_delta in delta.tool_calls:
+                        assembler.process_tool_call(tool_call_delta)
+
+                # Immediate finalization on tool_calls finish
+                if finish_reason == "tool_calls":
+                    for result in assembler.finalize_pending_calls():
+                        yield result
+                    continue  # Skip text processing for tool_calls finish
 
             # Check for text content
             text_content = self.extract_text_from_chunk(chunk)
             if text_content:
                 yield {"type": "text", "content": text_content}
 
-        # Finalize any pending tool calls
+        # Fallback: finalize any remaining calls (defensive)
         for result in assembler.finalize_pending_calls():
             yield result
 
@@ -973,10 +1072,16 @@ class ChatGPTProvider(LLMProvider):
                 return delta_content
         return ""
 
-    def get_token_info(self, text, history=None, model_name=None):
+    def get_token_info(self, text, history=None, model_name=None, has_tools=False):
         """Get token information for ChatGPT
 
         Uses tiktoken for accurate counting if available, falls back to estimation.
+
+        Args:
+            text: Text content to count tokens for
+            history: Optional conversation history
+            model_name: Optional model name (uses CHATGPT_MODEL if not provided)
+            has_tools: Whether tools are being used (applies buffer factor)
         """
         # Use provided model name or fall back to default
         effective_model = model_name if model_name else CHATGPT_MODEL
@@ -1016,9 +1121,14 @@ class ChatGPTProvider(LLMProvider):
                 # Fall back to estimation if tiktoken fails
                 use_estimation = True
 
+        # Apply buffer factor for tools if needed (even with tiktoken)
+        if has_tools:
+            buffer_factor = get_buffer_factor(has_tools=True)
+            token_count = int(token_count * buffer_factor)
+
         # Use estimation with buffer (if tiktoken unavailable or failed)
         if use_estimation:
-            buffer_factor = get_buffer_factor()
+            buffer_factor = get_buffer_factor(has_tools=has_tools)
             text_content = content_to_text(text, include_tool_data=True)
             token_count = int(estimate_tokens(text_content) * buffer_factor)
             if history:

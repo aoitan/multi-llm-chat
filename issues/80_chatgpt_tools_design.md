@@ -164,9 +164,9 @@ def parse_openai_tool_call(tool_call: dict) -> Dict[str, Any]:
         arguments = {}
     
     return {
-        "tool_name": name,
+        "name": name,  # Note: Unified with Gemini implementation
         "arguments": arguments,
-        "tool_call_id": tool_call_id
+        "tool_call_id": tool_call_id  # OpenAI-specific field
     }
 ```
 
@@ -302,32 +302,41 @@ chatgpt_history.append({"role": "assistant", "content": content_to_text(content)
 ```python
 elif role == "chatgpt":
     # Preserve structured content for tool support
-    if isinstance(content, dict):
-        # Handle tool_call/tool_result structured format
-        if content.get("type") == "tool_call":
-            # Convert to OpenAI tool_calls format
-            chatgpt_history.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{
-                    "id": content["tool_call_id"],
-                    "type": "function",
-                    "function": {
-                        "name": content["tool_name"],
-                        "arguments": json.dumps(content["arguments"])
-                    }
-                }]
-            })
-        elif content.get("type") == "tool_result":
-            # Convert to OpenAI tool message format
+    # OpenAI API specification:
+    # - content and tool_calls can coexist (mixed content is valid)
+    # - content should be None only when no text is present
+    if isinstance(content, list):
+        text_items = []
+        tool_call_items = []
+        tool_result_items = []
+        
+        for item in content:
+            if item.get("type") == "text":
+                text_items.append(item.get("content", ""))
+            elif item.get("type") == "tool_call":
+                tool_call_items.append(item)
+            elif item.get("type") == "tool_result":
+                tool_result_items.append(item)
+        
+        # Build assistant message with text and/or tool_calls
+        if text_items or tool_call_items:
+            message = {"role": "assistant"}
+            if text_items:
+                message["content"] = " ".join(text_items)
+            if tool_call_items:
+                message["tool_calls"] = [...]  # Convert format
+            # Only set content=None if we have tool_calls but NO text
+            if tool_call_items and not text_items:
+                message["content"] = None
+            chatgpt_history.append(message)
+        
+        # Add tool result messages separately
+        for result in tool_result_items:
             chatgpt_history.append({
                 "role": "tool",
-                "tool_call_id": content["tool_call_id"],
-                "content": json.dumps(content["result"])
+                "tool_call_id": result["tool_call_id"],
+                "content": json.dumps(result["result"])
             })
-        else:
-            # Plain text in dict format
-            chatgpt_history.append({"role": "assistant", "content": content_to_text(content)})
     else:
         # Legacy string format
         chatgpt_history.append({"role": "assistant", "content": content_to_text(content)})

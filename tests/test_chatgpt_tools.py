@@ -125,7 +125,7 @@ class TestOpenAIToolCallParsing(unittest.TestCase):
 
         result = parse_openai_tool_call(tool_call)
 
-        self.assertEqual(result["tool_name"], "get_weather")
+        self.assertEqual(result["name"], "get_weather")
         self.assertEqual(result["arguments"], {"location": "Tokyo"})
         self.assertEqual(result["tool_call_id"], "call_abc123")
 
@@ -142,7 +142,7 @@ class TestOpenAIToolCallParsing(unittest.TestCase):
 
         result = parse_openai_tool_call(tool_call)
 
-        self.assertEqual(result["tool_name"], "broken_tool")
+        self.assertEqual(result["name"], "broken_tool")
         self.assertEqual(result["arguments"], {})  # Empty dict on parse failure
         self.assertEqual(result["tool_call_id"], "call_xyz789")
 
@@ -232,7 +232,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         # Should emit tool_call event
         tool_calls = [r for r in results if r["type"] == "tool_call"]
         self.assertEqual(len(tool_calls), 1)
-        self.assertEqual(tool_calls[0]["content"]["tool_name"], "get_weather")
+        self.assertEqual(tool_calls[0]["content"]["name"], "get_weather")
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.openai.OpenAI")
@@ -341,7 +341,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         tool_calls = [r for r in results if r["type"] == "tool_call"]
         self.assertEqual(len(tool_calls), 2)
 
-        tool_names = {tc["content"]["tool_name"] for tc in tool_calls}
+        tool_names = {tc["content"]["name"] for tc in tool_calls}
         self.assertEqual(tool_names, {"tool_a", "tool_b"})
 
 
@@ -361,7 +361,7 @@ class TestOpenAIToolErrorHandling(unittest.TestCase):
 
         # Should not raise exception
         result = parse_openai_tool_call(tool_call)
-        self.assertEqual(result["tool_name"], "error_tool")
+        self.assertEqual(result["name"], "error_tool")
         self.assertEqual(result["arguments"], {})
 
     def test_missing_tool_call_id(self):
@@ -376,7 +376,7 @@ class TestOpenAIToolErrorHandling(unittest.TestCase):
         }
 
         result = parse_openai_tool_call(tool_call)
-        self.assertEqual(result["tool_name"], "no_id_tool")
+        self.assertEqual(result["name"], "no_id_tool")
         self.assertIsNone(result["tool_call_id"])
 
     def test_tool_call_without_name(self):
@@ -391,5 +391,216 @@ class TestOpenAIToolErrorHandling(unittest.TestCase):
         }
 
         result = parse_openai_tool_call(tool_call)
-        self.assertIsNone(result["tool_name"])
+        self.assertIsNone(result["name"])
         self.assertEqual(result["tool_call_id"], "call_noname")
+
+
+class TestChatGPTFormatHistory(unittest.TestCase):
+    """ChatGPTProvider.format_history()のツール対応をテスト"""
+
+    def test_format_history_with_tool_call(self):
+        """ツール呼び出しを含む履歴が正しくOpenAI形式に変換されること"""
+        history = [
+            {"role": "user", "content": "What's the weather?"},
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "name": "get_weather",
+                        "arguments": {"location": "Tokyo"},
+                        "tool_call_id": "call_123",
+                    }
+                ],
+            },
+        ]
+
+        provider = ChatGPTProvider()
+        formatted = provider.format_history(history)
+
+        # Should have 2 messages: user + assistant with tool_calls
+        self.assertEqual(len(formatted), 2)
+
+        # Check user message
+        self.assertEqual(formatted[0]["role"], "user")
+        self.assertEqual(formatted[0]["content"], "What's the weather?")
+
+        # Check assistant message with tool_calls
+        assistant_msg = formatted[1]
+        self.assertEqual(assistant_msg["role"], "assistant")
+        self.assertIsNone(assistant_msg["content"])
+        self.assertIn("tool_calls", assistant_msg)
+
+        tool_call = assistant_msg["tool_calls"][0]
+        self.assertEqual(tool_call["id"], "call_123")
+        self.assertEqual(tool_call["type"], "function")
+        self.assertEqual(tool_call["function"]["name"], "get_weather")
+        self.assertEqual(tool_call["function"]["arguments"], '{"location": "Tokyo"}')
+
+    def test_format_history_with_tool_result(self):
+        """ツール実行結果を含む履歴が正しくOpenAI形式に変換されること"""
+        history = [
+            {"role": "user", "content": "What's the weather?"},
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "name": "get_weather",
+                        "arguments": {"location": "Tokyo"},
+                        "tool_call_id": "call_123",
+                    }
+                ],
+            },
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_call_id": "call_123",
+                        "result": {"temperature": 20, "condition": "sunny"},
+                    }
+                ],
+            },
+        ]
+
+        provider = ChatGPTProvider()
+        formatted = provider.format_history(history)
+
+        # Should have 3 messages: user + assistant + tool
+        self.assertEqual(len(formatted), 3)
+
+        # Check tool message
+        tool_msg = formatted[2]
+        self.assertEqual(tool_msg["role"], "tool")
+        self.assertEqual(tool_msg["tool_call_id"], "call_123")
+        self.assertEqual(tool_msg["content"], '{"temperature": 20, "condition": "sunny"}')
+
+    def test_format_history_mixed_content(self):
+        """テキストとツール呼び出しが混在する履歴を正しく処理すること"""
+        history = [
+            {"role": "user", "content": "Hello"},
+            {"role": "chatgpt", "content": "Hi there!"},  # レガシー形式
+            {"role": "user", "content": "What's the weather?"},
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "text",
+                        "content": "Let me check...",
+                    },
+                    {
+                        "type": "tool_call",
+                        "name": "get_weather",
+                        "arguments": {"location": "Tokyo"},
+                        "tool_call_id": "call_456",
+                    },
+                ],
+            },
+        ]
+
+        provider = ChatGPTProvider()
+        formatted = provider.format_history(history)
+
+        # Should have 4 messages: user + assistant(text) + user + assistant(text+tool_call combined)
+        # OpenAI API allows text and tool_calls in the same message
+        self.assertEqual(len(formatted), 4)
+
+        # Check legacy text format
+        self.assertEqual(formatted[1]["role"], "assistant")
+        self.assertEqual(formatted[1]["content"], "Hi there!")
+
+        # Check last message has both text and tool_calls (mixed content is valid)
+        last_msg = formatted[3]
+        self.assertEqual(last_msg["role"], "assistant")
+        self.assertEqual(last_msg["content"], "Let me check...")  # Text is preserved
+        self.assertIn("tool_calls", last_msg)
+        self.assertEqual(len(last_msg["tool_calls"]), 1)
+        self.assertEqual(last_msg["tool_calls"][0]["function"]["name"], "get_weather")
+
+    def test_format_history_skips_incomplete_tool_call(self):
+        """tool_call_idやnameが欠けている場合はスキップすること"""
+        history = [
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        # name missing
+                        "arguments": {},
+                        "tool_call_id": "call_111",
+                    }
+                ],
+            },
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "name": "valid_tool",
+                        "arguments": {},
+                        # tool_call_id missing
+                    }
+                ],
+            },
+        ]
+
+        provider = ChatGPTProvider()
+        formatted = provider.format_history(history)
+
+        # Both should be skipped
+        self.assertEqual(len(formatted), 0)
+
+    def test_format_history_skips_tool_result_without_id(self):
+        """tool_call_idがないtool_resultはスキップすること"""
+        history = [
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        # tool_call_id missing
+                        "result": {"data": "value"},
+                    }
+                ],
+            }
+        ]
+
+        provider = ChatGPTProvider()
+        formatted = provider.format_history(history)
+        self.assertEqual(len(formatted), 0)
+
+    def test_format_history_parallel_tool_calls(self):
+        """同一ターンの複数tool_callsが1メッセージに集約されること"""
+        history = [
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "name": "tool_a",
+                        "arguments": {"arg": "A"},
+                        "tool_call_id": "call_1",
+                    },
+                    {
+                        "type": "tool_call",
+                        "name": "tool_b",
+                        "arguments": {"arg": "B"},
+                        "tool_call_id": "call_2",
+                    },
+                ],
+            }
+        ]
+
+        provider = ChatGPTProvider()
+        formatted = provider.format_history(history)
+
+        # Should have 1 message with 2 tool_calls
+        self.assertEqual(len(formatted), 1)
+        self.assertEqual(formatted[0]["role"], "assistant")
+        self.assertIsNone(formatted[0]["content"])
+        self.assertEqual(len(formatted[0]["tool_calls"]), 2)
+
+        # Check tool_calls contents
+        tool_names = {tc["function"]["name"] for tc in formatted[0]["tool_calls"]}
+        self.assertEqual(tool_names, {"tool_a", "tool_b"})

@@ -42,23 +42,33 @@ Gemini:
   Chunk 2: {function_call: {args: {"location": "Tokyo"}}}
 ```
 
-### 3. 共通形式の統一
+### 3. 共通形式の統一（修正版）
 
-#### 問題: GeminiとOpenAIで異なる共通形式
-- **Gemini（現状）**: `{"name": str, "arguments": dict}`
-- **OpenAI（必要）**: `{"tool_name": str, "arguments": dict, "tool_call_id": str}`
+#### 実装の決定: フィールド名は "name" で統一
 
-#### 解決策: OpenAIの形式を優先
+**基本形式（Gemini/OpenAI共通）**:
+- `name`: ツール名（文字列）
+- `arguments`: ツール引数（辞書）
+
+**OpenAI固有フィールド**:
+- `tool_call_id`: ツール呼び出しID（文字列、tool_resultメッセージで使用）
+
 ```python
-# 理由:
-# 1. tool_call_idはツール実行結果を返すときに必須
-# 2. OpenAI APIの後続リクエストで使用される
-# 3. Geminiにないが、Gemini側を拡張しても問題ない（Optional）
+# Geminiの戻り値:
+{"name": "get_weather", "arguments": {"location": "Tokyo"}}
 
-# 今回の実装:
-# - OpenAI: tool_call_id を含める
-# - Gemini: 既存の実装を維持（後でOptionalとして追加可能）
+# OpenAIの戻り値:
+{
+    "name": "get_weather",
+    "arguments": {"location": "Tokyo"},
+    "tool_call_id": "call_abc123"  # OpenAI固有（Geminiでは None）
+}
 ```
+
+**設計判断の理由**:
+1. Gemini実装が既に `"name"` キーを使用している
+2. フィールド名を統一することでUI層（CLI/WebUI）のハンドリングがシンプルになる
+3. `tool_call_id` はOpenAI固有の追加フィールドとして扱う（Geminiでは `None`）
 
 ### 4. format_history()の拡張
 
@@ -71,19 +81,19 @@ chatgpt_history.append({"role": "assistant", "content": content_to_text(content)
 #### 修正案
 ```python
 # 構造化コンテンツを保持
-if content.get("type") == "tool_call":
-    chatgpt_history.append({
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [{
-            "id": content["tool_call_id"],
-            "type": "function",
-            "function": {
-                "name": content["tool_name"],
-                "arguments": json.dumps(content["arguments"])
-            }
-        }]
-    })
+# OpenAI API specification:
+# - content and tool_calls can coexist (mixed content is valid)
+# - content should be None only when no text is present
+if text_items or tool_call_items:
+    message = {"role": "assistant"}
+    if text_items:
+        message["content"] = " ".join(text_items)
+    if tool_call_items:
+        message["tool_calls"] = [...]  # Convert format
+    # Only set content=None if we have tool_calls but NO text
+    if tool_call_items and not text_items:
+        message["content"] = None
+    chatgpt_history.append(message)
 ```
 
 ### 5. エラーハンドリング戦略
