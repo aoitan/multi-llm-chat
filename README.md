@@ -85,6 +85,20 @@ uv run pytest
 
 すべてのPull Requestは、CI（GitHub Actions）でlintとテストが自動実行されます。ローカルでも同じチェックを実行してから、コミットすることを推奨します。
 
+### Git フックの設定（推奨）
+
+コミット前とプッシュ前に自動的にチェックを実行するGitフックをインストールできます。
+
+```bash
+sh hooks/install.sh
+```
+
+これにより以下のフックが有効になります:
+- **pre-commit**: コミット前にRuffのlintとフォーマットチェックを実行
+- **pre-push**: プッシュ前にpytestを実行
+
+フックをスキップしたい場合は `git commit --no-verify` または `git push --no-verify` を使用してください。
+
 ## 使い方
 
 ### 1. APIキーの設定

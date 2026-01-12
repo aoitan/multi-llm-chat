@@ -7,9 +7,10 @@ This project follows **Test-Driven Development (TDD)**. All feature additions an
 ### Quick Start
 1. Read `AGENTS.md` for project structure, coding style, and detailed guidelines
 2. Set up your environment: `uv venv .venv && source .venv/bin/activate && uv sync --extra dev`
-3. Before coding, write failing tests first
-4. Run tests: `uv run pytest`
-5. Run linter: `uv run ruff check . && uv run ruff format .`
+3. Install Git hooks (recommended): `sh hooks/install.sh`
+4. Before coding, write failing tests first
+5. Run tests: `uv run pytest`
+6. Run linter: `uv run ruff check . && uv run ruff format .`
 
 ### TDD Cycle (Required)
 
@@ -24,6 +25,23 @@ This project follows **Test-Driven Development (TDD)**. All feature additions an
 #### Refactor Phase
 - Clean up code while keeping tests green
 - Run `uv run pytest` after each change
+
+### Git Hooks (Recommended)
+
+This project provides Git hooks to catch issues before CI:
+- **pre-commit**: Runs `ruff check` and `ruff format --check`
+- **pre-push**: Runs `pytest` to ensure all tests pass
+
+Install them with:
+```bash
+sh hooks/install.sh
+```
+
+To bypass hooks when necessary, use `--no-verify`:
+```bash
+git commit --no-verify
+git push --no-verify
+```
 
 ### Pull Request Requirements
 - List all test cases added in the PR description
