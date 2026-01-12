@@ -179,6 +179,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         ]
         self.history = [{"role": "user", "content": "What's the weather in Tokyo?"}]
 
+    @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.openai.OpenAI")
     def test_chatgpt_provider_call_api_with_tools(self, mock_openai_class):
         """tools引数がOpenAI APIに正しく渡されること"""
