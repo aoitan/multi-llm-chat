@@ -443,3 +443,52 @@ def test_cli_uses_chat_service_for_message_processing(monkeypatch):
     mock_process.assert_called_once()
     args = mock_process.call_args[0]
     assert args[0] == "@gemini Hello"  # user_message
+
+
+def test_cli_displays_tool_calls(capsys):
+    """CLI displays tool calls and results with visual markers."""
+    import asyncio
+
+    async def run_test():
+        from multi_llm_chat.cli import _display_tool_response
+
+        # Mock response stream with tool calls and results
+        async def mock_response_stream():
+            yield {
+                "type": "tool_call",
+                "content": {"name": "get_weather", "arguments": {"location": "Tokyo"}},
+            }
+            yield {"type": "tool_result", "content": {"name": "get_weather", "content": "25°C"}}
+            yield {"type": "text", "content": "The weather is 25°C."}
+
+        # Execute display function
+        content_parts = []
+        async for chunk in mock_response_stream():
+            chunk_type = chunk.get("type")
+            if chunk_type == "tool_call":
+                tool_call = chunk.get("content", {})
+                _display_tool_response("tool_call", tool_call)
+                content_parts.append({"type": "tool_call", "content": tool_call})
+            elif chunk_type == "tool_result":
+                result = chunk.get("content", {})
+                _display_tool_response("tool_result", result)
+                content_parts.append({"type": "tool_result", "content": result})
+            elif chunk_type == "text":
+                print(chunk["content"], end="", flush=True)
+                content_parts.append({"type": "text", "content": chunk["content"]})
+
+        print()  # Final newline
+
+        # Verify content structure
+        assert len(content_parts) == 3
+        assert content_parts[0]["type"] == "tool_call"
+        assert content_parts[1]["type"] == "tool_result"
+        assert content_parts[2]["type"] == "text"
+
+    asyncio.run(run_test())
+
+    # Verify console output contains markers
+    captured = capsys.readouterr()
+    assert "[Tool Call: get_weather]" in captured.out
+    assert "[Tool Result: get_weather]" in captured.out
+    assert "The weather is 25°C." in captured.out

@@ -8,6 +8,27 @@ from .chat_logic import ChatService
 from .history import HistoryStore, get_llm_response, reset_history, sanitize_name
 
 
+def _display_tool_response(response_type, content):
+    """Display tool call or tool result with visual markers.
+
+    Args:
+        response_type: "tool_call" or "tool_result"
+        content: Tool call or result content dict
+    """
+    if response_type == "tool_call":
+        name = content.get("name", "unknown")
+        args = content.get("arguments", {})
+        print(f"\n[Tool Call: {name}]", flush=True)
+        if args:
+            print(f"  Args: {args}", flush=True)
+    elif response_type == "tool_result":
+        name = content.get("name", "unknown")
+        result_content = content.get("content", "")
+        print(f"[Tool Result: {name}]", flush=True)
+        print(f"  {result_content}", flush=True)
+        print()  # Blank line
+
+
 def _process_service_stream(service, user_message):
     """Process ChatService stream and print responses for CLI with real-time streaming.
 
