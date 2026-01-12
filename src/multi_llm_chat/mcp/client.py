@@ -88,3 +88,43 @@ class MCPClient:
             {"name": tool.name, "description": tool.description, "inputSchema": tool.inputSchema}
             for tool in response.tools
         ]
+
+    async def call_tool(self, name: str, arguments: dict) -> dict:
+        """Execute a tool on the MCP server.
+
+        Args:
+            name: Tool name (e.g., "get_weather")
+            arguments: Tool arguments as dict (e.g., {"location": "Tokyo"})
+
+        Returns:
+            Tool result with structure:
+            {
+                "content": [
+                    {"type": "text", "text": "..."},
+                    # or {"type": "image", "data": "...", "mimeType": "..."},
+                    # or {"type": "resource", "resource": {...}}
+                ],
+                "isError": bool  # Optional, indicates execution failure
+            }
+
+        Raises:
+            ConnectionError: If session is not initialized
+        """
+        if not self.session:
+            raise ConnectionError("Client is not connected. Use 'async with MCPClient(...)'.")
+
+        response = await self.session.call_tool(name, arguments)
+
+        # Convert MCP CallToolResult to dict format
+        content = []
+        for item in response.content:
+            # Extract all fields from the content item
+            item_dict = {"type": item.type}
+            # Use model_dump to get all fields, excluding 'type' since we already have it
+            item_dict.update(item.model_dump(exclude={"type"}))
+            content.append(item_dict)
+
+        return {
+            "content": content,
+            "isError": getattr(response, "isError", False),
+        }
