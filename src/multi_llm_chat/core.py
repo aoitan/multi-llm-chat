@@ -294,3 +294,136 @@ def validate_context_length(history, system_prompt, model_name):
     return _validate_context_length(
         history, system_prompt, model_name, token_calculator=calculate_tokens
     )
+
+
+# Agentic Loop implementation
+async def execute_with_tools(
+    provider,
+    history: List[Dict],
+    system_prompt: Optional[str] = None,
+    mcp_client=None,
+    max_iterations: int = 10,
+    timeout: float = 120.0,
+):
+    """Execute LLM call with Agentic Loop for tool execution.
+
+    Repeatedly calls LLM and executes tools until:
+    - LLM returns text without tool calls
+    - max_iterations is reached
+    - timeout is exceeded
+    - An error occurs
+
+    Args:
+        provider: LLM provider instance (Gemini/ChatGPT)
+        history: Conversation history (will be mutated)
+        system_prompt: Optional system prompt
+        mcp_client: Optional MCP client for tool execution
+        max_iterations: Maximum number of LLM calls (default: 10)
+        timeout: Maximum total execution time in seconds (default: 120)
+
+    Yields:
+        Streaming chunks from LLM:
+        - {"type": "text", "content": str}
+        - {"type": "tool_call", "content": {...}}
+        - {"type": "tool_result", "content": {...}}
+
+    Raises:
+        TimeoutError: If execution exceeds timeout
+    """
+    import logging
+    import time
+
+    logger = logging.getLogger(__name__)
+    start_time = time.time()
+    tools = await mcp_client.list_tools() if mcp_client else None
+
+    for _iteration in range(max_iterations):
+        # Check timeout before each iteration
+        if time.time() - start_time > timeout:
+            raise TimeoutError(f"Agentic loop exceeded {timeout}s timeout")
+
+        # Call LLM
+        tool_calls_in_turn = []
+        async for chunk in provider.call_api(history, system_prompt, tools):
+            # Check timeout during streaming
+            if time.time() - start_time > timeout:
+                raise TimeoutError(f"Agentic loop exceeded {timeout}s timeout")
+
+            chunk_type = chunk.get("type")
+
+            if chunk_type == "text":
+                yield chunk
+            elif chunk_type == "tool_call":
+                tool_call = chunk.get("content", {})
+                tool_calls_in_turn.append(tool_call)
+                yield chunk  # Notify UI
+
+        # If no tool calls, loop ends (final response)
+        if not tool_calls_in_turn:
+            break
+
+        # Execute tools and collect results
+        tool_results = []
+        for tool_call in tool_calls_in_turn:
+            name = tool_call.get("name")
+            arguments = tool_call.get("arguments", {})
+            tool_call_id = tool_call.get("tool_call_id")  # OpenAI only
+
+            try:
+                result = await mcp_client.call_tool(name, arguments)
+
+                # Extract text content (simplify for LLM)
+                text_parts = [
+                    item.get("text", "")
+                    for item in result.get("content", [])
+                    if item.get("type") == "text"
+                ]
+                result_text = "\n".join(text_parts) if text_parts else "(no text output)"
+
+                tool_result = {
+                    "name": name,
+                    "content": result_text,
+                }
+                if tool_call_id:
+                    tool_result["tool_call_id"] = tool_call_id
+
+                tool_results.append(tool_result)
+
+                # Notify UI
+                yield {"type": "tool_result", "content": tool_result}
+
+            except Exception as e:
+                # Tool execution failed - report to LLM
+                logger.warning("Tool execution failed for %s: %s", name, e)
+                error_text = f"Tool execution failed: {str(e)}"
+                tool_result = {
+                    "name": name,
+                    "content": error_text,
+                }
+                if tool_call_id:
+                    tool_result["tool_call_id"] = tool_call_id
+
+                tool_results.append(tool_result)
+                yield {"type": "tool_result", "content": tool_result}
+
+        # Append tool_call and tool_result to history
+        # Note: History format is structured content (list of items)
+        assistant_entry = {"role": "assistant", "content": []}
+        for tc in tool_calls_in_turn:
+            assistant_entry["content"].append({"type": "tool_call", "content": tc})
+        history.append(assistant_entry)
+
+        # Tool results as separate user message
+        user_entry = {"role": "user", "content": []}
+        for tr in tool_results:
+            tool_result_item = {"type": "tool_result", "content": tr["content"]}
+            if "tool_call_id" in tr:
+                tool_result_item["tool_call_id"] = tr["tool_call_id"]
+            if "name" in tr:
+                tool_result_item["name"] = tr["name"]
+            user_entry["content"].append(tool_result_item)
+        history.append(user_entry)
+
+    # Max iterations reached - check last iteration
+    if len(history) >= max_iterations * 2:  # Each iteration adds 2 entries
+        logger.warning("Agentic loop reached max_iterations=%d", max_iterations)
