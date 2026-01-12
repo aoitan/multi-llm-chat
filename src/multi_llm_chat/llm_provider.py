@@ -244,7 +244,7 @@ class GeminiProvider(LLMProvider):
                     if item.get("type") == "tool_result":
                         parts.append({
                             "function_response": {
-                                "name": item.get("tool_name"),
+                                "name": item.get("name"),
                                 "response": {"content": item.get("content")},
                             }
                         })
@@ -252,7 +252,7 @@ class GeminiProvider(LLMProvider):
                     gemini_history.append({"role": "function", "parts": parts})
 
             # Legacy handling for "tool_calls" key (can be removed later)
-            if entry.get("tool_calls"):
+            if entry.get("tool_calls") and role == "gemini":
                 legacy_parts = []
                 for tool_call in entry.get("tool_calls"):
                     legacy_parts.append({
@@ -294,8 +294,8 @@ class GeminiProvider(LLMProvider):
         try:
             response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
 
-            current_tool_call = {}
-
+            assembled_tool_calls = []
+            
             for chunk in response:
                 # Yield text parts immediately
                 if hasattr(chunk, "text") and chunk.text:
@@ -307,26 +307,21 @@ class GeminiProvider(LLMProvider):
                             fc = part.function_call
 
                             if hasattr(fc, "name") and fc.name:
-                                # If a new tool call starts, yield the previous one if it exists
-                                if current_tool_call:
-                                    yield {
-                                        "type": "tool_call",
-                                        "content": current_tool_call,
-                                    }
-                                # Start a new tool call
-                                current_tool_call = {
+                                # Start a new tool call object
+                                assembled_tool_calls.append({
                                     "name": fc.name,
                                     "arguments": {},
-                                }
+                                })
 
                             if hasattr(fc, "args") and fc.args:
-                                if "arguments" in current_tool_call:
-                                    # fc.args is a `dict_items` view, so convert to dict
-                                    current_tool_call["arguments"].update(dict(fc.args))
+                                # Add args to the *last* started tool call
+                                if assembled_tool_calls:
+                                    assembled_tool_calls[-1]["arguments"].update(dict(fc.args))
 
-            # Yield any remaining tool call at the end of the stream
-            if current_tool_call:
-                yield {"type": "tool_call", "content": current_tool_call}
+            # Yield all fully assembled tool calls at the very end
+            for tool_call in assembled_tool_calls:
+                if tool_call.get("name"): # Ensure it's a valid tool call
+                    yield {"type": "tool_call", "content": tool_call}
 
         except genai.types.BlockedPromptException as e:
             raise ValueError(f"Prompt was blocked due to safety concerns: {e}") from e

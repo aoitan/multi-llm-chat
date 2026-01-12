@@ -90,7 +90,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         assert len(final_logic) == 2  # user + assistant
         assert final_logic[0]["role"] == "user"
         assert final_logic[1]["role"] == "gemini"
-        assert "Test response" in final_logic[1]["content"]
+        assert any("Test response" in d.get("content", "") for d in final_logic[1]["content"])
 
     @patch("multi_llm_chat.chat_logic.create_provider")
     def test_process_message_chatgpt(self, mock_create_provider):

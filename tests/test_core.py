@@ -114,10 +114,9 @@ def test_format_history_for_gemini():
 
     assert len(result) == 2
     assert result[0]["role"] == "user"
-    assert result[0]["parts"] == ["Hello"]
+    assert result[0]["parts"] == [{"text": "Hello"}]
     assert result[1]["role"] == "model"
-    assert result[1]["parts"] == ["Hi there"]
-
+    assert result[1]["parts"] == [{"text": "Hi there"}]
 
 def test_format_history_for_chatgpt():
     """format_history should convert to ChatGPT format"""
@@ -348,10 +347,9 @@ def test_format_history_for_gemini_filters_chatgpt_responses():
 
     # Should only include user messages and Gemini's own responses
     assert len(result) == 3
-    assert result[0] == {"role": "user", "parts": ["Hello"]}
-    assert result[1] == {"role": "user", "parts": ["Another question"]}
-    assert result[2] == {"role": "model", "parts": ["Answer from Gemini"]}
-
+    assert result[0] == {"role": "user", "parts": [{"text": "Hello"}]}
+    assert result[1] == {"role": "user", "parts": [{"text": "Another question"}]}
+    assert result[2] == {"role": "model", "parts": [{"text": "Answer from Gemini"}]}
 
 def test_format_history_for_chatgpt_filters_gemini_responses():
     """format_history_for_chatgpt should filter out Gemini responses to avoid confusion"""

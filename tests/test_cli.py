@@ -140,7 +140,7 @@ def test_history_management_user_input(monkeypatch):
     assert history[1]["role"] == "user"
     assert history[1]["content"] == "@gemini how are you?"
     assert history[2]["role"] == "gemini"
-    assert history[2]["content"] == "Mocked Gemini Response"
+    assert history[2]["content"] == [{"type": "text", "content": "Mocked Gemini Response"}]
     assert history[3]["role"] == "user"
     assert history[3]["content"] == "just a thought"
 
@@ -158,7 +158,7 @@ def test_mention_routing():
                 # Verify Gemini provider was created
                 mock_create_provider.assert_called_with("gemini")
                 assert history[-1]["role"] == "gemini"
-                assert history[-1]["content"] == "Mocked Gemini Response"
+                assert history[-1]["content"] == [{"type": "text", "content": "Mocked Gemini Response"}]
 
     # Test @chatgpt
     with patch("builtins.input", side_effect=["test-user", "@chatgpt hello", "exit"]):
@@ -190,7 +190,7 @@ def test_mention_routing():
                 # @all should call both providers
                 assert mock_create_provider.call_count == 2
                 assert history[-2]["role"] == "gemini"
-                assert history[-2]["content"] == "Mocked Gemini Response"
+                assert history[-2]["content"] == [{"type": "text", "content": "Mocked Gemini Response"}]
                 assert history[-1]["role"] == "chatgpt"
                 assert history[-1]["content"] == "Mocked ChatGPT Response"
 

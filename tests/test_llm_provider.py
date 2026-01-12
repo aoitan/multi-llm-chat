@@ -305,7 +305,7 @@ class TestGeminiProvider(unittest.TestCase):
                         "type": "tool_result",
                         "tool_call_id": "tool_call_12345",
                         "content": '{"temperature": "25°C"}',
-                        "tool_name": "get_weather"
+                        "name": "get_weather"
                     }
                 ],
             },
@@ -340,6 +340,9 @@ class TestGeminiProvider(unittest.TestCase):
         
         formatted_history = GeminiProvider.format_history(logic_history)
         self.assertEqual(formatted_history, expected_gemini_history)
+
+
+
 
 
 class TestChatGPTProvider(unittest.TestCase):

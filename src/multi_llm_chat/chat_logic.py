@@ -178,7 +178,11 @@ class ChatService:
                         yield self.display_history, self.logic_history
 
                 # Append structured data to logic history
-                new_entry = {"role": "gemini", "content": full_response}
+                content_parts = []
+                if full_response:
+                    content_parts.append({"type": "text", "content": full_response})
+                
+                new_entry = {"role": "gemini", "content": content_parts}
                 if structured_tool_calls:
                     new_entry["tool_calls"] = structured_tool_calls
                 self.logic_history.append(new_entry)
