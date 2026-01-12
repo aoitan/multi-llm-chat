@@ -1,9 +1,18 @@
 """Tests for ChatService - business logic layer for chat operations"""
 
+import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from multi_llm_chat.chat_logic import ChatService, parse_mention
+
+
+async def consume_async_gen(gen):
+    """Helper to consume an async generator and return all yielded items."""
+    results = []
+    async for item in gen:
+        results.append(item)
+    return results
 
 
 class TestChatServiceBasics(unittest.TestCase):
@@ -74,13 +83,17 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         """Should call Gemini API for @gemini mention"""
         # Setup mock provider
         mock_provider = MagicMock()
-        mock_provider.call_api.return_value = iter(
-            [{"type": "text", "content": "Test "}, {"type": "text", "content": "response"}]
-        )
+        mock_provider.name = "gemini"
+
+        def mock_call_api(*args, **kwargs):
+            yield {"type": "text", "content": "Test "}
+            yield {"type": "text", "content": "response"}
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
-        results = list(service.process_message("@gemini hello"))
+        results = asyncio.run(consume_async_gen(service.process_message("@gemini hello")))
 
         # Should have yielded at least once
         assert len(results) > 0
@@ -97,13 +110,17 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         """Should call ChatGPT API for @chatgpt mention"""
         # Setup mock provider
         mock_provider = MagicMock()
-        mock_provider.call_api.return_value = iter(
-            [{"type": "text", "content": "Hello "}, {"type": "text", "content": "world"}]
-        )
+        mock_provider.name = "chatgpt"
+
+        def mock_call_api(*args, **kwargs):
+            yield {"type": "text", "content": "Hello "}
+            yield {"type": "text", "content": "world"}
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
-        results = list(service.process_message("@chatgpt hi"))
+        results = asyncio.run(consume_async_gen(service.process_message("@chatgpt hi")))
 
         final_display, final_logic = results[-1]
         assert len(final_logic) == 2
@@ -112,98 +129,127 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         assert final_logic[1]["content"] == [{"type": "text", "content": "Hello world"}]
 
     @patch("multi_llm_chat.chat_logic.create_provider")
-    def test_process_message_chatgpt_logs_warning_when_tools_provided(self, mock_create_provider):
-        """ChatGPT should log warning when tools are passed (tools=None is sent to API)."""
+    def test_process_message_chatgpt_supports_tools(self, mock_create_provider):
+        """ChatGPT should support tools and pass them to API."""
         mock_provider = MagicMock()
-        # Return successful response since tools=None is passed
-        mock_provider.call_api.return_value = iter([{"type": "text", "content": "Hello"}])
+        mock_provider.name = "chatgpt"
+
+        # Return successful response
+        def mock_call_api(*args, **kwargs):
+            yield {"type": "text", "content": "Hello"}
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
-        # Pass tools to process_message
-        with self.assertLogs("multi_llm_chat.chat_logic", level="WARNING") as log_context:
-            list(service.process_message("@chatgpt hi", tools=[{"name": "search"}]))
+        tools = [{"name": "search"}]
+        asyncio.run(consume_async_gen(service.process_message("@chatgpt hi", tools=tools)))
 
-        # Check that warning was logged
-        assert any("ChatGPT does not support tools" in message for message in log_context.output), (
-            "Warning should be logged when tools are provided"
-        )
-
-        # Verify that tools=None was passed to API
+        # Verify that tools were passed to API (3rd positional argument)
         mock_provider.call_api.assert_called_once()
-        call_kwargs = mock_provider.call_api.call_args[1]
-        assert call_kwargs.get("tools") is None
+        call_args = mock_provider.call_api.call_args[0]
+        assert call_args[2] == tools
 
     @patch("multi_llm_chat.chat_logic.create_provider")
     def test_process_message_gemini_tool_call(self, mock_create_provider):
         """Gemini tool_call chunks should be stored in structured content."""
         mock_provider = MagicMock()
-        mock_provider.call_api.return_value = iter(
-            [
-                {
-                    "type": "tool_call",
-                    "content": {"name": "search", "arguments": {"query": "hi"}},
-                }
-            ]
-        )
-        mock_create_provider.return_value = mock_provider
+        mock_provider.name = "gemini"
 
-        service = ChatService()
-        results = list(service.process_message("@gemini hi"))
-
-        final_display, final_logic = results[-1]
-        assert final_logic[1]["role"] == "gemini"
-        assert final_logic[1]["content"] == [
-            {
+        def mock_call_api(*args, **kwargs):
+            yield {
                 "type": "tool_call",
                 "content": {"name": "search", "arguments": {"query": "hi"}},
             }
-        ]
+            # After tool_call, LLM is called again in execute_with_tools.
+            # We need to yield something else or stop.
+            yield {"type": "text", "content": "Done"}
+
+        mock_provider.call_api.side_effect = mock_call_api
+        mock_create_provider.return_value = mock_provider
+
+        mock_mcp = MagicMock()
+        mock_mcp.list_tools = AsyncMock(return_value=[{"name": "search"}])
+        mock_mcp.call_tool = AsyncMock(
+            return_value={"content": [{"type": "text", "text": "result"}], "isError": False}
+        )
+
+        service = ChatService(mcp_client=mock_mcp)
+        results = asyncio.run(consume_async_gen(service.process_message("@gemini hi")))
+
+        final_display, final_logic = results[-1]
+        assert final_logic[1]["role"] == "gemini"
+        # First entry: text (Done) + tool_call
+        # execute_with_tools appends thought_text before tool_calls
+        assert final_logic[1]["content"][0]["type"] == "text"
+        assert final_logic[1]["content"][1]["type"] == "tool_call"
         assert "[Tool Call: search]" in final_display[-1][1]
 
     @patch("multi_llm_chat.chat_logic.create_provider")
     def test_process_message_gemini_preserves_stream_order(self, mock_create_provider):
         """Gemini text/tool_callのストリーム順序を履歴に反映できること"""
         mock_provider = MagicMock()
-        mock_provider.call_api.return_value = iter(
-            [
-                {"type": "text", "content": "Before "},
-                {"type": "tool_call", "content": {"name": "search", "arguments": {}}},
-                {"type": "text", "content": "after"},
-            ]
-        )
+        mock_provider.name = "gemini"
+
+        def mock_call_api(*args, **kwargs):
+            yield {"type": "text", "content": "Before "}
+            yield {"type": "tool_call", "content": {"name": "search", "arguments": {}}}
+            # Stop here to avoid infinite loop or needing more yields
+            # Actually execute_with_tools will call call_api again if tool_call was returned.
+            # To avoid the second call returning the same thing, we can use a stateful mock.
+            mock_provider.call_api.side_effect = lambda *a, **kw: (
+                yield {"type": "text", "content": "after"}
+            )
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
-        service = ChatService()
-        results = list(service.process_message("@gemini check"))
+        mock_mcp = MagicMock()
+        mock_mcp.list_tools = AsyncMock(return_value=[{"name": "search"}])
+        mock_mcp.call_tool = AsyncMock(
+            return_value={"content": [{"type": "text", "text": "result"}], "isError": False}
+        )
+
+        service = ChatService(mcp_client=mock_mcp)
+        results = asyncio.run(consume_async_gen(service.process_message("@gemini check")))
 
         _final_display, final_logic = results[-1]
         assert final_logic[1]["role"] == "gemini"
-        assert final_logic[1]["content"] == [
-            {"type": "text", "content": "Before "},
-            {"type": "tool_call", "content": {"name": "search", "arguments": {}}},
-            {"type": "text", "content": "after"},
-        ]
+        # First entry: text (Before) + tool_call
+        assert final_logic[1]["content"][0] == {"type": "text", "content": "Before "}
+        assert final_logic[1]["content"][1]["type"] == "tool_call"
+        # Second entry (index 2): tool_result
+        assert final_logic[2]["role"] == "user"
+        assert final_logic[2]["content"][0]["type"] == "tool_result"
+        # Third entry (index 3): text (after)
+        assert final_logic[3]["role"] == "gemini"
+        assert final_logic[3]["content"][0] == {"type": "text", "content": "after"}
 
     @patch("multi_llm_chat.chat_logic.create_provider")
     def test_process_message_all(self, mock_create_provider):
         """Should call both APIs for @all mention"""
         # Setup mock providers for both calls
         mock_gemini_provider = MagicMock()
-        mock_gemini_provider.call_api.return_value = iter(
-            [{"type": "text", "content": "Gemini response"}]
-        )
+        mock_gemini_provider.name = "gemini"
+
+        def mock_call_api_gemini(*args, **kwargs):
+            yield {"type": "text", "content": "Gemini response"}
+
+        mock_gemini_provider.call_api.side_effect = mock_call_api_gemini
 
         mock_chatgpt_provider = MagicMock()
-        mock_chatgpt_provider.call_api.return_value = iter(
-            [{"type": "text", "content": "ChatGPT response"}]
-        )
+        mock_chatgpt_provider.name = "chatgpt"
+
+        def mock_call_api_chatgpt(*args, **kwargs):
+            yield {"type": "text", "content": "ChatGPT response"}
+
+        mock_chatgpt_provider.call_api.side_effect = mock_call_api_chatgpt
 
         # Return different providers for gemini and chatgpt
         mock_create_provider.side_effect = [mock_gemini_provider, mock_chatgpt_provider]
 
         service = ChatService()
-        results = list(service.process_message("@all compare"))
+        results = asyncio.run(consume_async_gen(service.process_message("@all compare")))
 
         final_display, final_logic = results[-1]
         # Should have user message + 2 responses
@@ -216,7 +262,7 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         """Messages without mention should be added to history as memo (no LLM call)"""
         service = ChatService()
 
-        results = list(service.process_message("This is a memo"))
+        results = asyncio.run(consume_async_gen(service.process_message("This is a memo")))
 
         # Should yield once (user message added to history)
         assert len(results) == 1
@@ -288,14 +334,15 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
 
         def create_mock_provider(provider_name):
             mock_provider = MagicMock()
+            mock_provider.name = provider_name
 
             def capture_stream_gemini(history, system_prompt=None, tools=None):
                 captured_histories.append(("gemini", [h.copy() for h in history]))
-                return iter([{"type": "text", "content": "Gemini"}])
+                yield {"type": "text", "content": "Gemini"}
 
             def capture_stream_chatgpt(history, system_prompt=None, tools=None):
                 captured_histories.append(("chatgpt", [h.copy() for h in history]))
-                return iter([{"type": "text", "content": "ChatGPT"}])
+                yield {"type": "text", "content": "ChatGPT"}
 
             if provider_name == "gemini":
                 mock_provider.call_api.side_effect = capture_stream_gemini
@@ -310,7 +357,7 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
         ]
 
         service = ChatService()
-        list(service.process_message("@all test"))
+        asyncio.run(consume_async_gen(service.process_message("@all test")))
 
         # Both should have been called
         assert len(captured_histories) == 2
@@ -334,11 +381,16 @@ class TestChatServiceSystemPrompt(unittest.TestCase):
     def test_system_prompt_passed_to_api(self, mock_create_provider):
         """System prompt should be passed to LLM API"""
         mock_provider = MagicMock()
-        mock_provider.call_api.return_value = iter([{"type": "text", "content": "Response"}])
+        mock_provider.name = "gemini"
+
+        def mock_call_api(*args, **kwargs):
+            yield {"type": "text", "content": "Response"}
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
         service = ChatService(system_prompt="You are a helpful assistant")
-        list(service.process_message("@gemini hello"))
+        asyncio.run(consume_async_gen(service.process_message("@gemini hello")))
 
         # Check that system prompt was passed (2nd positional argument to call_api)
         mock_provider.call_api.assert_called_once()
@@ -360,11 +412,16 @@ class TestChatServiceErrorHandling(unittest.TestCase):
     def test_network_error_handling(self, mock_create_provider):
         """Network errors should be caught and added to history as error message"""
         mock_provider = MagicMock()
-        mock_provider.call_api.side_effect = ConnectionError("Network error")
+        mock_provider.name = "gemini"
+
+        def mock_call_api(*args, **kwargs):
+            raise ConnectionError("Network error")
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
-        results = list(service.process_message("@gemini hello"))
+        results = asyncio.run(consume_async_gen(service.process_message("@gemini hello")))
 
         # Should yield error message
         assert len(results) > 0
@@ -380,11 +437,16 @@ class TestChatServiceErrorHandling(unittest.TestCase):
     def test_api_error_handling(self, mock_create_provider):
         """API errors should be caught and added to history as error message"""
         mock_provider = MagicMock()
-        mock_provider.call_api.side_effect = ValueError("API key missing")
+        mock_provider.name = "chatgpt"
+
+        def mock_call_api(*args, **kwargs):
+            raise ValueError("API key missing")
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
-        results = list(service.process_message("@chatgpt test"))
+        results = asyncio.run(consume_async_gen(service.process_message("@chatgpt test")))
 
         # Should yield error message
         assert len(results) > 0
@@ -401,12 +463,18 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         (Issue #79: ツール呼び出し実装時に修正)
         """
         mock_provider = MagicMock()
+        mock_provider.name = "gemini"
+
         # ツール呼び出しなし、テキストなしのケース（空のストリーム）
-        mock_provider.call_api.return_value = iter([])
+        def mock_call_api(*args, **kwargs):
+            if False:
+                yield {}
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
-        results = list(service.process_message("@gemini hello"))
+        results = asyncio.run(consume_async_gen(service.process_message("@gemini hello")))
 
         final_display, final_logic = results[-1]
 
@@ -427,15 +495,25 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         """@all should handle when one LLM succeeds and one fails"""
         # Gemini succeeds, ChatGPT fails
         mock_gemini = MagicMock()
-        mock_gemini.call_api.return_value = iter([{"type": "text", "content": "Gemini response"}])
+        mock_gemini.name = "gemini"
+
+        def mock_call_api_gemini(*args, **kwargs):
+            yield {"type": "text", "content": "Gemini response"}
+
+        mock_gemini.call_api.side_effect = mock_call_api_gemini
 
         mock_chatgpt = MagicMock()
-        mock_chatgpt.call_api.side_effect = RuntimeError("ChatGPT API error")
+        mock_chatgpt.name = "chatgpt"
+
+        def mock_call_api_chatgpt(*args, **kwargs):
+            raise RuntimeError("ChatGPT API error")
+
+        mock_chatgpt.call_api.side_effect = mock_call_api_chatgpt
 
         mock_create_provider.side_effect = [mock_gemini, mock_chatgpt]
 
         service = ChatService()
-        results = list(service.process_message("@all hello"))
+        results = asyncio.run(consume_async_gen(service.process_message("@all hello")))
 
         # Should get results
         assert len(results) > 0
@@ -460,10 +538,16 @@ class TestChatServiceEmptyResponseHandling(unittest.TestCase):
 
         # Mock provider that returns empty content
         mock_provider = MagicMock()
-        mock_provider.call_api.return_value = iter([])  # No chunks at all
+        mock_provider.name = "gemini"
+
+        def mock_call_api(*args, **kwargs):
+            if False:
+                yield {}
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
-        results = list(service.process_message("@gemini test"))
+        results = asyncio.run(consume_async_gen(service.process_message("@gemini test")))
 
         # Should have added error message to display_history
         final_display, final_logic = results[-1]
@@ -483,15 +567,16 @@ class TestChatServiceEmptyResponseHandling(unittest.TestCase):
 
         # Mock provider that returns some text first, then ends
         mock_provider = MagicMock()
-        mock_provider.call_api.return_value = iter(
-            [
-                {"type": "text", "content": "部分的な"},
-                {"type": "text", "content": "応答"},
-            ]
-        )
+        mock_provider.name = "gemini"
+
+        def mock_call_api(*args, **kwargs):
+            yield {"type": "text", "content": "部分的な"}
+            yield {"type": "text", "content": "応答"}
+
+        mock_provider.call_api.side_effect = mock_call_api
         mock_create_provider.return_value = mock_provider
 
-        results = list(service.process_message("@gemini test"))
+        results = asyncio.run(consume_async_gen(service.process_message("@gemini test")))
 
         # Should NOT have error message (streaming succeeded partially)
         final_display, final_logic = results[-1]

@@ -151,6 +151,97 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.ClientSession")
+    def test_call_tool_success(self, mock_session_class, mock_create_subprocess):
+        """ツール実行が成功する"""
+        # Setup mocks
+        mock_proc = AsyncMock()
+        mock_proc.returncode = None
+        mock_proc.terminate = MagicMock()
+        mock_proc.wait = AsyncMock()
+        mock_create_subprocess.return_value = mock_proc
+
+        mock_session = AsyncMock()
+        mock_session_class.return_value = mock_session
+        mock_session.initialize = AsyncMock()
+
+        # Mock tool result
+        mock_content_item = MagicMock()
+        mock_content_item.type = "text"
+        mock_content_item.model_dump = MagicMock(return_value={"text": "Tokyo weather: 25°C"})
+
+        mock_tool_result = MagicMock()
+        mock_tool_result.content = [mock_content_item]
+        mock_tool_result.isError = False
+
+        mock_session.call_tool = AsyncMock(return_value=mock_tool_result)
+
+        client = MCPClient(server_command="uvx", server_args=["mcp-server-weather"])
+
+        async def run_test():
+            async with client as connected_client:
+                result = await connected_client.call_tool("get_weather", {"location": "Tokyo"})
+
+                self.assertIn("content", result)
+                self.assertEqual(len(result["content"]), 1)
+                self.assertEqual(result["content"][0]["type"], "text")
+                self.assertIn("25°C", result["content"][0]["text"])
+                self.assertFalse(result["isError"])
+
+                mock_session.call_tool.assert_awaited_once_with(
+                    "get_weather", {"location": "Tokyo"}
+                )
+
+        asyncio.run(run_test())
+
+    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.ClientSession")
+    def test_call_tool_error(self, mock_session_class, mock_create_subprocess):
+        """ツール実行がエラーを返す"""
+        # Setup mocks
+        mock_proc = AsyncMock()
+        mock_proc.returncode = None
+        mock_proc.terminate = MagicMock()
+        mock_proc.wait = AsyncMock()
+        mock_create_subprocess.return_value = mock_proc
+
+        mock_session = AsyncMock()
+        mock_session_class.return_value = mock_session
+        mock_session.initialize = AsyncMock()
+
+        # Mock tool error result
+        mock_content_item = MagicMock()
+        mock_content_item.type = "text"
+        mock_content_item.model_dump = MagicMock(return_value={"text": "API key missing"})
+
+        mock_tool_result = MagicMock()
+        mock_tool_result.content = [mock_content_item]
+        mock_tool_result.isError = True
+
+        mock_session.call_tool = AsyncMock(return_value=mock_tool_result)
+
+        client = MCPClient(server_command="uvx", server_args=["mcp-server-weather"])
+
+        async def run_test():
+            async with client as connected_client:
+                result = await connected_client.call_tool("get_weather", {"location": "Invalid"})
+
+                self.assertTrue(result["isError"])
+                self.assertIn("API key missing", result["content"][0]["text"])
+
+        asyncio.run(run_test())
+
+    def test_call_tool_without_connection(self):
+        """接続前にツール実行を試みるとエラーになる"""
+        client = MCPClient(server_command="uvx", server_args=["mcp-server-time"])
+
+        async def run_test():
+            with self.assertRaises(ConnectionError):
+                await client.call_tool("get_time", {})
+
+        asyncio.run(run_test())
+
 
 if __name__ == "__main__":
     unittest.main()

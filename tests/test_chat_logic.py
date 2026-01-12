@@ -14,12 +14,13 @@ def _create_mock_provider(response_text, provider_type="gemini"):
         provider_type: 'gemini' or 'chatgpt' to determine chunk format
     """
     mock_provider = MagicMock()
+    mock_provider.name = provider_type
 
-    if provider_type == "gemini":
-        # Gemini now uses call_api and a structured dictionary
-        mock_provider.call_api.return_value = iter([{"type": "text", "content": response_text}])
-    else:  # chatgpt
-        mock_provider.call_api.return_value = iter([{"type": "text", "content": response_text}])
+    # Gemini now uses call_api and a structured dictionary
+    def mock_call_api(*args, **kwargs):
+        yield {"type": "text", "content": response_text}
+
+    mock_provider.call_api.side_effect = mock_call_api
 
     return mock_provider
 

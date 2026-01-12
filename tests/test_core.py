@@ -140,7 +140,7 @@ def test_call_gemini_api_with_system_prompt():
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.call_api.return_value = iter([Mock(text="Response")])
         mock_create_provider.return_value = mock_provider
@@ -155,7 +155,7 @@ def test_call_gemini_api_without_system_prompt():
     """call_gemini_api should delegate to GeminiProvider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.call_api.return_value = iter([Mock(text="Response")])
         mock_create_provider.return_value = mock_provider
@@ -171,7 +171,7 @@ def test_call_chatgpt_api_with_system_prompt():
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_stream = Mock()
         mock_provider.call_api.return_value = iter([mock_stream])
@@ -187,7 +187,7 @@ def test_call_chatgpt_api_without_system_prompt():
     """call_chatgpt_api should delegate to ChatGPTProvider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_stream = Mock()
         mock_provider.call_api.return_value = iter([mock_stream])
@@ -204,7 +204,7 @@ def test_stream_text_events_with_system_prompt():
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.stream_text_events.return_value = iter(["Response"])
         mock_create_provider.return_value = mock_provider
@@ -220,7 +220,7 @@ def test_stream_text_events_without_system_prompt():
     """stream_text_events should delegate to provider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.stream_text_events.return_value = iter(["Response"])
         mock_create_provider.return_value = mock_provider
@@ -314,7 +314,7 @@ def test_extract_text_from_chunk_chatgpt_list():
 def test_extract_text_from_chunk_fallback():
     """extract_text_from_chunk should delegate to provider and fall back to string"""
     # Test with plain string (fallback case - provider fails, falls back to string)
-    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
         # Provider fails to extract, triggering fallback
         mock_provider.extract_text_from_chunk.side_effect = Exception("extraction failed")
@@ -325,7 +325,7 @@ def test_extract_text_from_chunk_fallback():
         assert result == "Plain string chunk"
 
     # Test with invalid chunk (should return empty string)
-    with patch("multi_llm_chat.llm_provider.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.extract_text_from_chunk.side_effect = Exception("extraction failed")
         mock_create_provider.return_value = mock_provider
