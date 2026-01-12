@@ -961,19 +961,26 @@ class TestChatGPTProvider(unittest.TestCase):
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.openai.OpenAI")
-    def test_call_api_rejects_tools(self, mock_openai_class):
-        """ChatGPTProvider.call_api should raise ValueError when tools are passed."""
+    def test_call_api_with_tools(self, mock_openai_class):
+        """ChatGPTProvider.call_api should accept tools parameter (Issue #80)."""
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
 
+        # Mock empty stream
+        mock_stream = iter([])
+        mock_client.chat.completions.create.return_value = mock_stream
+
         provider = ChatGPTProvider()
         history = [{"role": "user", "content": "Hello"}]
+        tools = [{"name": "test_tool", "description": "Test", "inputSchema": {}}]
 
-        with pytest.raises(ValueError, match="does not support tools yet"):
-            list(provider.call_api(history, tools=[{"name": "dummy"}]))
+        # Should not raise - tools are now supported
+        list(provider.call_api(history, tools=tools))
 
-        # API should not be called since tools are rejected early
-        mock_client.chat.completions.create.assert_not_called()
+        # Verify API was called with tools
+        call_args = mock_client.chat.completions.create.call_args
+        self.assertIn("tools", call_args.kwargs)
+        self.assertIn("tool_choice", call_args.kwargs)
 
     def test_extract_text_from_chunk(self):
         """ChatGPTProvider should extract text from response chunk"""

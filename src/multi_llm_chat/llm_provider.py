@@ -87,6 +87,74 @@ def mcp_tools_to_gemini_format(mcp_tools: List[Dict[str, Any]]) -> Optional[List
     return [Tool(function_declarations=function_declarations)]
 
 
+def mcp_tools_to_openai_format(mcp_tools: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+    """Convert MCP tool definitions to OpenAI tools format.
+
+    Args:
+        mcp_tools: List of MCP tool definitions with structure:
+            [{"name": str, "description": str, "inputSchema": dict}, ...]
+
+    Returns:
+        List of OpenAI tool definitions:
+            [{"type": "function", "function": {"name": str, ...}}, ...]
+        or None if no tools are provided.
+    """
+    if not mcp_tools:
+        return None
+
+    openai_tools = []
+    for tool in mcp_tools:
+        name = tool.get("name")
+        description = tool.get("description")
+        parameters = tool.get("inputSchema")
+
+        if not name:
+            logger.warning(
+                "Skipping MCP tool without name. Tool data: %s",
+                {k: v for k, v in tool.items() if k != "inputSchema"},
+            )
+            continue
+
+        openai_tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": description or "",
+                    "parameters": parameters or {},
+                },
+            }
+        )
+
+    return openai_tools if openai_tools else None
+
+
+def parse_openai_tool_call(tool_call: dict) -> Dict[str, Any]:
+    """Parse OpenAI tool_call to common format.
+
+    Args:
+        tool_call: OpenAI tool_call object with structure:
+            {"id": str, "type": "function", "function": {"name": str, "arguments": str}}
+
+    Returns:
+        Common format dict:
+            {"tool_name": str, "arguments": dict, "tool_call_id": str}
+    """
+    function = tool_call.get("function", {})
+    name = function.get("name")
+    args_json = function.get("arguments", "{}")
+    tool_call_id = tool_call.get("id")
+
+    # Parse JSON arguments
+    try:
+        arguments = json.loads(args_json) if args_json else {}
+    except json.JSONDecodeError as e:
+        logger.warning("Failed to parse tool arguments JSON: %s", e)
+        arguments = {}
+
+    return {"tool_name": name, "arguments": arguments, "tool_call_id": tool_call_id}
+
+
 def _parse_tool_response_payload(response_payload):
     """Parse tool response payload into a dictionary format.
 
@@ -134,6 +202,135 @@ def _parse_tool_response_payload(response_payload):
             f"Tool response payload type {type(response_payload).__name__} "
             f"cannot be safely converted to dict"
         ) from e
+
+
+class OpenAIToolCallAssembler:
+    """Assembles OpenAI API streaming tool calls.
+
+    OpenAI API streams tool calls where arguments arrive as partial JSON strings
+    across multiple chunks. Each tool call has an 'index' to identify it in
+    parallel function calling scenarios.
+
+    State Management:
+        _tools_by_index: Dict[int, Dict]
+            Key: tool_call.index
+            Value: {
+                "id": str,
+                "name": str,
+                "arguments_json": str,  # Accumulated JSON string
+                "complete": bool
+            }
+
+    Design:
+        - Arguments arrive as incremental JSON strings: '{"loc' → 'ation": "T' → 'okyo"}'
+        - Parse JSON only when complete (end of stream or finish_reason)
+        - Multiple tool calls identified by index attribute
+
+    Usage:
+        ```python
+        assembler = OpenAIToolCallAssembler()
+        for chunk in stream:
+            if chunk.choices[0].delta.tool_calls:
+                for tc_delta in chunk.choices[0].delta.tool_calls:
+                    result = assembler.process_tool_call(tc_delta)
+                    if result:
+                        yield result
+        # Finalize any pending calls at stream end
+        for result in assembler.finalize_pending_calls():
+            yield result
+        ```
+    """
+
+    def __init__(self):
+        self._tools_by_index: Dict[int, Dict[str, Any]] = {}
+
+    def reset(self) -> None:
+        """Clear all internal state for reuse."""
+        self._tools_by_index.clear()
+
+    def process_tool_call(self, tool_call_delta) -> Optional[Dict[str, Any]]:
+        """Process tool_call delta from streaming response.
+
+        Args:
+            tool_call_delta: Tool call delta with structure:
+                {
+                    "index": int,
+                    "id": str (optional, first chunk only),
+                    "function": {
+                        "name": str (optional, first chunk only),
+                        "arguments": str (partial JSON fragment)
+                    }
+                }
+
+        Returns:
+            Optional[Dict[str, Any]]: {"type": "tool_call", "content": {...}} if complete,
+                                      None if still accumulating
+        """
+        index = tool_call_delta.index
+        function = tool_call_delta.function
+
+        # Initialize tool call entry if first chunk
+        if index not in self._tools_by_index:
+            self._tools_by_index[index] = {
+                "id": getattr(tool_call_delta, "id", None),
+                "name": None,
+                "arguments_json": "",
+                "complete": False,
+            }
+
+        tool_call = self._tools_by_index[index]
+
+        # Update id if present (first chunk)
+        if hasattr(tool_call_delta, "id") and tool_call_delta.id:
+            tool_call["id"] = tool_call_delta.id
+
+        # Update name if present (first chunk)
+        if hasattr(function, "name") and function.name:
+            tool_call["name"] = function.name
+
+        # Accumulate arguments (incremental JSON string)
+        if hasattr(function, "arguments") and function.arguments:
+            tool_call["arguments_json"] += function.arguments
+
+        # Note: We don't emit immediately - wait for finalize_pending_calls()
+        # to ensure complete JSON before parsing
+        return None
+
+    def finalize_pending_calls(self):
+        """Finalize all pending tool calls at end of stream.
+
+        Parses accumulated JSON arguments and yields complete tool calls.
+
+        Yields:
+            Dict[str, Any]: {"type": "tool_call", "content": {...}}
+        """
+        for index in sorted(self._tools_by_index.keys()):
+            tool_call = self._tools_by_index[index]
+            if not tool_call["complete"]:
+                # Parse accumulated JSON
+                try:
+                    args_json = tool_call["arguments_json"]
+                    arguments = json.loads(args_json) if args_json else {}
+                except json.JSONDecodeError as e:
+                    logger.warning("Failed to parse tool call arguments for index %s: %s", index, e)
+                    arguments = {}
+
+                logger.debug(
+                    "Finalizing tool_call: index=%s, id=%s, name=%s",
+                    index,
+                    tool_call["id"],
+                    tool_call["name"],
+                )
+
+                yield {
+                    "type": "tool_call",
+                    "content": {
+                        "tool_name": tool_call["name"],
+                        "arguments": arguments,
+                        "tool_call_id": tool_call["id"],
+                    },
+                }
+                tool_call["complete"] = True
 
 
 class GeminiToolCallAssembler:
@@ -699,18 +896,15 @@ class ChatGPTProvider(LLMProvider):
         Args:
             history: Conversation history
             system_prompt: Optional system instruction
-            tools: Optional MCP tools (currently not supported)
+            tools: Optional MCP tools to convert to OpenAI format
 
-        Raises:
-            ValueError: If tools are provided (not yet supported)
+        Yields:
+            Dict with "type" and "content" keys:
+                {"type": "text", "content": str} or
+                {"type": "tool_call", "content": {...}}
         """
         if not OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is not set")
-        if tools:
-            raise ValueError(
-                "ChatGPTProvider does not support tools yet. "
-                "Use @gemini mention or wait for future implementation."
-            )
 
         # Build messages for OpenAI format
         messages = []
@@ -721,15 +915,35 @@ class ChatGPTProvider(LLMProvider):
         chatgpt_history = self.format_history(history)
         messages.extend(chatgpt_history)
 
-        # Call API with streaming
-        stream = self._client.chat.completions.create(
-            model=CHATGPT_MODEL, messages=messages, stream=True
-        )
+        # Prepare API call parameters
+        api_params = {"model": CHATGPT_MODEL, "messages": messages, "stream": True}
 
+        # Add tools if provided
+        if tools:
+            openai_tools = mcp_tools_to_openai_format(tools)
+            if openai_tools:
+                api_params["tools"] = openai_tools
+                api_params["tool_choice"] = "auto"
+
+        # Call API with streaming
+        stream = self._client.chat.completions.create(**api_params)
+
+        # Process stream with tool call assembler
+        assembler = OpenAIToolCallAssembler()
         for chunk in stream:
+            # Check for tool calls
+            if hasattr(chunk.choices[0].delta, "tool_calls") and chunk.choices[0].delta.tool_calls:
+                for tool_call_delta in chunk.choices[0].delta.tool_calls:
+                    assembler.process_tool_call(tool_call_delta)
+
+            # Check for text content
             text_content = self.extract_text_from_chunk(chunk)
             if text_content:
                 yield {"type": "text", "content": text_content}
+
+        # Finalize any pending tool calls
+        for result in assembler.finalize_pending_calls():
+            yield result
 
     def extract_text_from_chunk(self, chunk):
         """Extract text from ChatGPT response chunk
