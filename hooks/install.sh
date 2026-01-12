@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install Git hooks from the hooks/ directory
 
-HOOKS_DIR="$(dirname "$0")/hooks"
+HOOKS_DIR="$(dirname "$0")"
 GIT_HOOKS_DIR=".git/hooks"
 
 echo "Installing Git hooks..."
