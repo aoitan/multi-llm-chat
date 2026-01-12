@@ -275,10 +275,16 @@ def test_estimate_tokens_mixed():
 
 def test_extract_text_from_chunk_gemini():
     """extract_text_from_chunk should extract text from Gemini chunk"""
-    # Create a mock Gemini chunk
-    chunk = type("Chunk", (), {"text": "Hello from Gemini"})()
+    # Create a new dictionary-based chunk
+    chunk = {"type": "text", "content": "Hello from Gemini"}
+    # The model name 'gemini' will cause the GeminiProvider to be used
     result = core.extract_text_from_chunk(chunk, "gemini")
     assert result == "Hello from Gemini"
+
+    # Test with a non-text chunk, which should return empty
+    chunk = {"type": "tool_call", "content": {}}
+    result = core.extract_text_from_chunk(chunk, "gemini")
+    assert result == ""
 
 
 def test_extract_text_from_chunk_chatgpt_string():

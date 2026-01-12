@@ -14,7 +14,11 @@ def _create_mock_provider(response_text, provider_type="gemini"):
     """
     mock_provider = MagicMock()
 
-    mock_provider.stream_text_events.return_value = iter([response_text])
+    if provider_type == "gemini":
+        # Gemini now uses call_api and a structured dictionary
+        mock_provider.call_api.return_value = iter([{"type": "text", "content": response_text}])
+    else:  # chatgpt
+        mock_provider.stream_text_events.return_value = iter([response_text])
 
     return mock_provider
 

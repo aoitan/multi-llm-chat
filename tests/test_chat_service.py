@@ -74,7 +74,9 @@ class TestChatServiceProcessMessage(unittest.TestCase):
         """Should call Gemini API for @gemini mention"""
         # Setup mock provider
         mock_provider = MagicMock()
-        mock_provider.stream_text_events.return_value = iter(["Test ", "response"])
+        mock_provider.call_api.return_value = iter(
+            [{"type": "text", "content": "Test "}, {"type": "text", "content": "response"}]
+        )
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()
@@ -162,11 +164,18 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
         def create_mock_provider(provider_name):
             mock_provider = MagicMock()
 
-            def capture_stream(history, system_prompt=None):
-                captured_histories.append((provider_name, [h.copy() for h in history]))
-                return iter(["Gemini" if provider_name == "gemini" else "ChatGPT"])
+            def capture_stream_gemini(history, system_prompt=None, tools=None):
+                captured_histories.append(("gemini", [h.copy() for h in history]))
+                return iter([{"type": "text", "content": "Gemini"}])
 
-            mock_provider.stream_text_events.side_effect = capture_stream
+            def capture_stream_chatgpt(history, system_prompt=None):
+                captured_histories.append(("chatgpt", [h.copy() for h in history]))
+                return iter(["ChatGPT"])
+
+            if provider_name == "gemini":
+                mock_provider.call_api.side_effect = capture_stream_gemini
+            else:  # chatgpt
+                mock_provider.stream_text_events.side_effect = capture_stream_chatgpt
             return mock_provider
 
         # Return different providers for each call
@@ -178,8 +187,12 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
         service = ChatService()
         list(service.process_message("@all test"))
 
-        # Both should have received same history (user message only)
+        # Both should have been called
         assert len(captured_histories) == 2
+
+        # Sort by provider name to ensure consistent order
+        captured_histories.sort(key=lambda x: x[0])
+
         gemini_hist = captured_histories[0][1]
         chatgpt_hist = captured_histories[1][1]
 
@@ -196,14 +209,15 @@ class TestChatServiceSystemPrompt(unittest.TestCase):
     def test_system_prompt_passed_to_api(self, mock_create_provider):
         """System prompt should be passed to LLM API"""
         mock_provider = MagicMock()
-        mock_provider.stream_text_events.return_value = iter(["Response"])
+        mock_provider.call_api.return_value = iter([{"type": "text", "content": "Response"}])
         mock_create_provider.return_value = mock_provider
 
         service = ChatService(system_prompt="You are a helpful assistant")
         list(service.process_message("@gemini hello"))
 
-        # Check that system prompt was passed (2nd positional argument)
-        call_args = mock_provider.stream_text_events.call_args
+        # Check that system prompt was passed (2nd positional argument to call_api)
+        mock_provider.call_api.assert_called_once()
+        call_args = mock_provider.call_api.call_args
         assert call_args[0][1] == "You are a helpful assistant"
 
     def test_update_system_prompt(self):
@@ -221,7 +235,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
     def test_network_error_handling(self, mock_create_provider):
         """Network errors should be caught and added to history as error message"""
         mock_provider = MagicMock()
-        mock_provider.stream_text_events.side_effect = ConnectionError("Network error")
+        mock_provider.call_api.side_effect = ConnectionError("Network error")
         mock_create_provider.return_value = mock_provider
 
         service = ChatService()

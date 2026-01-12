@@ -198,35 +198,76 @@ class GeminiProvider(LLMProvider):
 
     @staticmethod
     def format_history(history):
-        """Convert history to Gemini API format.
+        """Convert structured history to Gemini API format.
 
-        Handles structured history entries containing text and tool calls.
+        Handles structured history entries containing text, tool calls, and tool results.
         Filters out responses from other LLMs (e.g., ChatGPT).
         """
         gemini_history = []
         for entry in history:
-            role = entry["role"]
-            content = entry.get("content", "")
-            tool_calls = entry.get("tool_calls")
+            role = entry.get("role")
+            content_list = entry.get("content", [])
 
-            # Only include user messages and Gemini's own responses
+            # Ensure content is always a list for consistent processing
+            if not isinstance(content_list, list):
+                # Handle legacy string format for backward compatibility
+                content_list = [{"type": "text", "content": str(content_list)}]
+
+            parts = []
             if role == "user":
-                gemini_history.append({"role": "user", "parts": [content]})
+                # User messages contain text parts
+                for item in content_list:
+                    if item.get("type") == "text":
+                        parts.append({"text": item.get("content", "")})
+                if parts:
+                    gemini_history.append({"role": "user", "parts": parts})
+
             elif role == "gemini":
-                parts = []
-                if content:
-                    parts.append(content)
-                if tool_calls:
-                    for tool_call in tool_calls:
-                        # Convert internal tool_call format to Gemini's expected format
-                        gemini_formatted_tool_call = {
+                # Model messages can contain text and function calls
+                for item in content_list:
+                    if item.get("type") == "text":
+                        parts.append({"text": item.get("content", "")})
+                    elif item.get("type") == "tool_call":
+                        tool_call = item.get("content", {})
+                        parts.append({
+                            "function_call": {
+                                "name": tool_call.get("name"),
+                                "args": tool_call.get("arguments", {}),
+                            }
+                        })
+                if parts:
+                    gemini_history.append({"role": "model", "parts": parts})
+
+            elif role == "tool":
+                # Tool messages contain function responses
+                for item in content_list:
+                    if item.get("type") == "tool_result":
+                        parts.append({
+                            "function_response": {
+                                "name": item.get("tool_name"),
+                                "response": {"content": item.get("content")},
+                            }
+                        })
+                if parts:
+                    gemini_history.append({"role": "function", "parts": parts})
+
+            # Legacy handling for "tool_calls" key (can be removed later)
+            if entry.get("tool_calls"):
+                legacy_parts = []
+                for tool_call in entry.get("tool_calls"):
+                    legacy_parts.append({
+                        "function_call": {
                             "name": tool_call.get("name"),
                             "args": tool_call.get("arguments", {}),
                         }
-                        parts.append({"function_call": gemini_formatted_tool_call})
-                if parts:
-                    gemini_history.append({"role": "model", "parts": parts})
-            # Skip chatgpt, system, and other roles
+                    })
+                if legacy_parts:
+                    # Merge with existing parts if any
+                    if gemini_history and gemini_history[-1]["role"] == "model":
+                        gemini_history[-1]["parts"].extend(legacy_parts)
+                    else:
+                        gemini_history.append({"role": "model", "parts": legacy_parts})
+
         return gemini_history
 
     def call_api(
