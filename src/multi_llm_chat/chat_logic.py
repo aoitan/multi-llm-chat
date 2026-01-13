@@ -189,17 +189,20 @@ class ChatService:
             else:
                 input_history = self.logic_history
 
-            initial_input_len = len(input_history)
             any_yielded = False
 
             try:
-                async for chunk in execute_with_tools(
+                # Execute with tools and get result
+                result = await execute_with_tools(
                     provider,
                     input_history,
                     self.system_prompt,
                     mcp_client=self.mcp_client,
                     tools=tools,
-                ):
+                )
+
+                # Stream chunks from result (buffered streaming)
+                for chunk in result.chunks:
                     any_yielded = True
                     chunk_type = chunk.get("type")
                     content = chunk.get("content", "")
@@ -209,6 +212,16 @@ class ChatService:
                             self.display_history[-1][1] += content
 
                     yield self.display_history, self.logic_history, chunk
+
+                # Update history with delta
+                if mention == "all":
+                    # For @all, extend logic_history with new entries
+                    self.logic_history.extend(result.history_delta)
+                else:
+                    # For specific mention, input_history is self.logic_history
+                    # execute_with_tools no longer mutates history,
+                    # so we extend it explicitly
+                    input_history.extend(result.history_delta)
 
                 if not any_yielded:
                     error_message = (
@@ -223,10 +236,6 @@ class ChatService:
                         self.logic_history.append(new_entry)
                     else:
                         self.logic_history.append(new_entry)
-                elif mention == "all":
-                    # Append new entries from input_history to self.logic_history
-                    new_entries = input_history[initial_input_len:]
-                    self.logic_history.extend(new_entries)
 
             except (ValueError, Exception) as e:
                 self._handle_api_error(e, model_name)

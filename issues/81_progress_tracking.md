@@ -11,45 +11,46 @@ LLMがツール呼び出しを行った際に、実際にMCPサーバーのツ�
 **目的**: 既存機能を壊さず、アーキテクチャの健全性を回復
 
 ### Task 1.1: `AgenticLoopResult` の導入と不変性対応
-- [ ] `AgenticLoopResult` データクラスを定義
-  - [ ] `chunks: List[Dict]` - ストリーミングチャンク
-  - [ ] `history_delta: List[Dict]` - 追加する履歴エントリ
-  - [ ] `final_text: str` - 最終的なテキスト応答
-  - [ ] `iterations_used: int` - 使用したイテレーション数
-  - [ ] `timed_out: bool` - タイムアウトフラグ
-  - [ ] `error: Optional[str]` - エラーメッセージ
+- [x] `AgenticLoopResult` データクラスを定義
+  - [x] `chunks: List[Dict]` - ストリーミングチャンク
+  - [x] `history_delta: List[Dict]` - 追加する履歴エントリ
+  - [x] `final_text: str` - 最終的なテキスト応答
+  - [x] `iterations_used: int` - 使用したイテレーション数
+  - [x] `timed_out: bool` - タイムアウトフラグ
+  - [x] `error: Optional[str]` - エラーメッセージ
 
-- [ ] `execute_with_tools()` を不変性に対応
-  - [ ] `history` 引数を読み取り専用として扱う
-  - [ ] 内部で `deepcopy` して `working_history` を作成
-  - [ ] `working_history` のみを変更
-  - [ ] `AgenticLoopResult` オブジェクトを返す
+- [x] `execute_with_tools()` を不変性に対応
+  - [x] `history` 引数を読み取り専用として扱う
+  - [x] 内部で `deepcopy` して `working_history` を作成
+  - [x] `working_history` のみを変更
+  - [x] `AgenticLoopResult` オブジェクトを返す
 
-- [ ] テストの追加
-  - [ ] `test_result_immutability()` - 結果オブジェクトが不変
-  - [ ] `test_history_not_mutated()` - 元の history が変更されない
-  - [ ] `test_history_delta_contains_only_new_entries()` - delta が正しい
+- [x] テストの追加
+  - [x] `test_result_immutability()` - 結果オブジェクトが不変
+  - [x] `test_history_not_mutated()` - 元の history が変更されない
+  - [x] `test_history_delta_contains_only_new_entries()` - delta が正しい
 
-- [ ] 既存テストの更新
-  - [ ] `test_execute_with_tools_single_iteration`
-  - [ ] `test_execute_with_tools_max_iterations`
-  - [ ] `test_execute_with_tools_timeout`
-  - [ ] `test_execute_with_tools_tool_error`
+- [x] 既存テストの更新
+  - [x] `test_execute_with_tools_single_iteration`
+  - [x] `test_execute_with_tools_max_iterations`
+  - [x] `test_execute_with_tools_timeout`
+  - [x] `test_execute_with_tools_tool_error`
+  - [x] `test_execute_with_tools_missing_mcp_client`
 
 ### Task 1.2: 同期ラッパーの追加
-- [ ] `execute_with_tools_sync()` 関数を実装
-  - [ ] イベントループの存在チェック
-  - [ ] 既存ループがある場合は `RuntimeError`
-  - [ ] `asyncio.run()` で非同期関数を実行
+- [x] `execute_with_tools_sync()` 関数を実装
+  - [x] イベントループの存在チェック
+  - [x] 既存ループがある場合は `RuntimeError`
+  - [x] `asyncio.run()` で非同期関数を実行
 
-- [ ] テストの追加
-  - [ ] `test_sync_wrapper_works_in_sync_context()` - 同期環境で動作
-  - [ ] `test_sync_wrapper_raises_in_async_context()` - 非同期環境でエラー
+- [x] テストの追加
+  - [x] `test_execute_with_tools_sync_wrapper()` - 同期環境で動作
+  - [x] `test_sync_wrapper_raises_in_async_context()` - 非同期環境でエラー
 
 ### Task 1.3: 呼び出し側の更新
-- [ ] `ChatService` の更新
-  - [ ] `result = execute_with_tools()` で結果取得
-  - [ ] `history.extend(result.history_delta)` で明示的に更新
+- [x] `ChatService` の更新
+  - [x] `result = execute_with_tools()` で結果取得
+  - [x] `history.extend(result.history_delta)` で明示的に更新
 
 - [ ] CLI の更新
   - [ ] `execute_with_tools_sync()` を使用
@@ -58,11 +59,12 @@ LLMがツール呼び出しを行った際に、実際にMCPサーバーのツ�
 - [ ] WebUI の更新（Phase 3 で実施）
 
 ### Phase 1 完了条件
-- [ ] 全既存テスト（261テスト）が通過
-- [ ] 新規テスト（10件）が通過
-- [ ] `execute_with_tools()` が history を変更しない（不変性確認）
-- [ ] 同期ラッパーで既存コードと互換性維持
+- [x] 全既存テスト（262テスト）が通過
+- [x] 新規テスト（5件）が通過
+- [x] `execute_with_tools()` が history を変更しない（不変性確認）
+- [x] 同期ラッパーで既存コードと互換性維持
 - [ ] パフォーマンス劣化 < 10%（ベンチマーク）
+- [ ] CLI の更新（現時点では ChatService 経由で動作しているため、優先度低）
 
 **PR**: `feature/81-phase1-immutability` → `main`
 

@@ -1,6 +1,7 @@
 import asyncio
 import os
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 import google.generativeai as genai
 import openai
@@ -62,6 +63,30 @@ from .validation import (
 )
 
 load_dotenv()
+
+
+@dataclass(frozen=True)
+class AgenticLoopResult:
+    """Result of execute_with_tools() execution.
+
+    This is an immutable data structure that contains all information
+    about the Agentic Loop execution without side effects.
+
+    Attributes:
+        chunks: List of streaming chunks emitted during execution
+        history_delta: New history entries to append (caller's responsibility)
+        final_text: Final text response from LLM
+        iterations_used: Number of iterations actually used
+        timed_out: Whether execution was terminated due to timeout
+        error: Error message if execution failed (None on success)
+    """
+
+    chunks: List[Dict[str, Any]]
+    history_delta: List[Dict[str, Any]]
+    final_text: str
+    iterations_used: int
+    timed_out: bool
+    error: Optional[str] = None
 
 
 def load_api_key(env_var_name):
@@ -321,7 +346,7 @@ async def execute_with_tools(
     max_iterations: int = 10,
     timeout: float = 120.0,
     tools: Optional[List[Dict[str, Any]]] = None,
-) -> AsyncGenerator[Dict[str, Any], None]:
+) -> AgenticLoopResult:
     """Execute LLM call with Agentic Loop for tool execution.
 
     Repeatedly calls LLM and executes tools until:
@@ -332,7 +357,7 @@ async def execute_with_tools(
 
     Args:
         provider: LLM provider instance (Gemini/ChatGPT)
-        history: Conversation history (will be mutated)
+        history: Conversation history (read-only, will NOT be mutated)
         system_prompt: Optional system prompt
         mcp_client: Optional MCP client for tool execution
         max_iterations: Maximum number of LLM calls (default: 10)
@@ -340,163 +365,258 @@ async def execute_with_tools(
         tools: Optional tool definitions (JSON Schema format).
                If None, tools will be fetched from mcp_client.
 
-    Yields:
-        Streaming chunks from LLM:
-        - {"type": "text", "content": str}
-        - {"type": "tool_call", "content": {...}}
-        - {"type": "tool_result", "content": {...}}
+    Returns:
+        AgenticLoopResult: Immutable result object containing:
+            - chunks: All streaming chunks
+            - history_delta: New entries to append to history
+            - final_text: Final text response
+            - iterations_used: Number of iterations used
+            - timed_out: Whether execution timed out
 
     Raises:
         TimeoutError: If execution exceeds timeout
         ValueError: If tool call is requested but mcp_client is None
     """
+    import copy
     import logging
     import time
 
     logger = logging.getLogger(__name__)
     start_time = time.time()
 
+    # Create working copy of history (do not mutate original)
+    working_history = copy.deepcopy(history)
+    chunks = []
+    final_text = ""
+    timed_out = False
+    error = None
+
     # Use provided tools if any, otherwise list from MCP client
     if tools is None and mcp_client:
         tools = await mcp_client.list_tools()
 
-    _iteration = 0
-    for _iteration in range(max_iterations):
-        # Check timeout before each iteration
-        if time.time() - start_time > timeout:
-            raise TimeoutError(f"Agentic loop exceeded {timeout}s timeout")
-
-        # Call LLM
-        tool_calls_in_turn = []
-        thought_text = ""
-        async for chunk in provider.call_api(history, system_prompt, tools):
-            # Check timeout during streaming
+    iterations_used = 0
+    try:
+        for iterations_used in range(max_iterations):
+            # Check timeout before each iteration
             if time.time() - start_time > timeout:
-                raise TimeoutError(f"Agentic loop exceeded {timeout}s timeout")
+                timed_out = True
+                break
 
-            chunk_type = chunk.get("type")
+            # Call LLM
+            tool_calls_in_turn = []
+            thought_text = ""
+            async for chunk in provider.call_api(working_history, system_prompt, tools):
+                # Check timeout during streaming
+                if time.time() - start_time > timeout:
+                    timed_out = True
+                    break
 
-            if chunk_type == "text":
-                content = chunk.get("content", "")
-                thought_text += content
-                yield chunk
-            elif chunk_type == "tool_call":
-                tool_call = chunk.get("content", {})
-                tool_calls_in_turn.append(tool_call)
-                yield chunk  # Notify UI
+                chunk_type = chunk.get("type")
 
-        # If no tool calls, loop ends (final response)
-        if not tool_calls_in_turn:
-            # Add final text to history if it exists
-            if thought_text:
-                history.append(
-                    {"role": provider.name, "content": [{"type": "text", "content": thought_text}]}
-                )
-            break
+                if chunk_type == "text":
+                    content = chunk.get("content", "")
+                    thought_text += content
+                    chunks.append(chunk)
+                elif chunk_type == "tool_call":
+                    tool_call = chunk.get("content", {})
+                    tool_calls_in_turn.append(tool_call)
+                    chunks.append(chunk)
 
-        # Tool calls received - execute them
-        if tool_calls_in_turn and not mcp_client:
-            error_text = (
-                "[System: ツール呼び出しが要求されましたが、MCPクライアントが設定されていません。]"
-            )
-            logger.error("Tool call received but mcp_client is None")
-            # Append error to history and notify UI
-            history.append(
-                {
-                    "role": provider.name,
-                    "content": [
-                        {"type": "text", "content": thought_text if thought_text else ""},
-                        *[{"type": "tool_call", **tc} for tc in tool_calls_in_turn],
-                    ],
-                }
-            )
-            history.append(
-                {
-                    "role": "tool",
-                    "content": [
+            if timed_out:
+                break
+
+            # If no tool calls, loop ends (final response)
+            if not tool_calls_in_turn:
+                # Add final text to working_history if it exists
+                if thought_text:
+                    working_history.append(
                         {
-                            "type": "tool_result",
-                            "name": tc.get("name"),
-                            "content": error_text,
-                            "tool_call_id": tc.get("tool_call_id"),
+                            "role": provider.name,
+                            "content": [{"type": "text", "content": thought_text}],
                         }
-                        for tc in tool_calls_in_turn
-                    ],
+                    )
+                    final_text = thought_text
+                break
+
+            # Tool calls received - execute them
+            if tool_calls_in_turn and not mcp_client:
+                error_text = (
+                    "[System: ツール呼び出しが要求されましたが、"
+                    "MCPクライアントが設定されていません。]"
+                )
+                logger.error("Tool call received but mcp_client is None")
+                error = error_text
+
+                # Append error to working_history
+                working_history.append(
+                    {
+                        "role": provider.name,
+                        "content": [
+                            {"type": "text", "content": thought_text if thought_text else ""},
+                            *[{"type": "tool_call", **tc} for tc in tool_calls_in_turn],
+                        ],
+                    }
+                )
+                working_history.append(
+                    {
+                        "role": "tool",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "name": tc.get("name"),
+                                "content": error_text,
+                                "tool_call_id": tc.get("tool_call_id"),
+                            }
+                            for tc in tool_calls_in_turn
+                        ],
+                    }
+                )
+                chunks.append({"type": "text", "content": f"\n{error_text}"})
+                break
+
+            # Execute tools and collect results
+            tool_results = []
+            for tool_call in tool_calls_in_turn:
+                name = tool_call.get("name")
+                arguments = tool_call.get("arguments", {})
+                tool_call_id = tool_call.get("tool_call_id")  # OpenAI only
+
+                try:
+                    # Per-tool timeout (e.g., 60s) to prevent single tool from hanging the loop
+                    result = await asyncio.wait_for(
+                        mcp_client.call_tool(name, arguments), timeout=60.0
+                    )
+
+                    # Extract text content (simplify for LLM)
+                    text_parts = [
+                        item.get("text", "")
+                        for item in result.get("content", [])
+                        if item.get("type") == "text"
+                    ]
+                    result_text = "\n".join(text_parts) if text_parts else "(no text output)"
+
+                    tool_result = {
+                        "name": name,
+                        "content": result_text,
+                    }
+                    if tool_call_id:
+                        tool_result["tool_call_id"] = tool_call_id
+
+                    tool_results.append(tool_result)
+                    chunks.append({"type": "tool_result", "content": tool_result})
+
+                except ConnectionError:
+                    # MCP server is down - cannot continue
+                    logger.error("MCP connection error during tool execution: %s", name)
+                    raise
+                except Exception as e:
+                    # Tool execution failed - report to LLM
+                    logger.warning("Tool execution failed for %s: %s", name, e)
+                    error_text = f"ツール実行に失敗しました: {str(e)}"
+                    tool_result = {
+                        "name": name,
+                        "content": error_text,
+                    }
+                    if tool_call_id:
+                        tool_result["tool_call_id"] = tool_call_id
+
+                    tool_results.append(tool_result)
+                    chunks.append({"type": "tool_result", "content": tool_result})
+
+            # Append tool_call and tool_result to working_history
+            assistant_entry = {"role": provider.name, "content": []}
+            if thought_text:
+                assistant_entry["content"].append({"type": "text", "content": thought_text})
+            for tc in tool_calls_in_turn:
+                assistant_entry["content"].append({"type": "tool_call", **tc})
+            working_history.append(assistant_entry)
+
+            # Tool results as separate tool message (role: 'tool')
+            tool_entry = {"role": "tool", "content": []}
+            for tr in tool_results:
+                tool_result_item = {
+                    "type": "tool_result",
+                    "name": tr.get("name"),
+                    "content": tr["content"],
                 }
-            )
-            yield {"type": "text", "content": f"\n{error_text}"}
-            break
+                if "tool_call_id" in tr:
+                    tool_result_item["tool_call_id"] = tr["tool_call_id"]
+                tool_entry["content"].append(tool_result_item)
+            working_history.append(tool_entry)
 
-        # Execute tools and collect results
-        tool_results = []
-        for tool_call in tool_calls_in_turn:
-            name = tool_call.get("name")
-            arguments = tool_call.get("arguments", {})
-            tool_call_id = tool_call.get("tool_call_id")  # OpenAI only
+            iterations_used += 1
+        else:
+            # Loop reached max_iterations without breaking
+            logger.info("Agentic loop reached max_iterations=%d", max_iterations)
+            iterations_used = max_iterations
 
-            try:
-                # Per-tool timeout (e.g., 60s) to prevent single tool from hanging the loop
-                result = await asyncio.wait_for(mcp_client.call_tool(name, arguments), timeout=60.0)
+    except TimeoutError:
+        timed_out = True
+        raise
+    except Exception as e:
+        error = str(e)
+        raise
 
-                # Extract text content (simplify for LLM)
-                text_parts = [
-                    item.get("text", "")
-                    for item in result.get("content", [])
-                    if item.get("type") == "text"
-                ]
-                result_text = "\n".join(text_parts) if text_parts else "(no text output)"
+    # Calculate history_delta (only new entries)
+    history_delta = working_history[len(history) :]
 
-                tool_result = {
-                    "name": name,
-                    "content": result_text,
-                }
-                if tool_call_id:
-                    tool_result["tool_call_id"] = tool_call_id
+    return AgenticLoopResult(
+        chunks=chunks,
+        history_delta=history_delta,
+        final_text=final_text,
+        iterations_used=iterations_used,
+        timed_out=timed_out,
+        error=error,
+    )
 
-                tool_results.append(tool_result)
 
-                # Notify UI
-                yield {"type": "tool_result", "content": tool_result}
+def execute_with_tools_sync(
+    provider,
+    history: List[Dict],
+    system_prompt: Optional[str] = None,
+    mcp_client=None,
+    max_iterations: int = 5,
+    timeout: float = 120.0,
+) -> AgenticLoopResult:
+    """
+    Synchronous wrapper for execute_with_tools().
 
-            except ConnectionError:
-                # MCP server is down - cannot continue
-                logger.error("MCP connection error during tool execution: %s", name)
-                raise
-            except Exception as e:
-                # Tool execution failed - report to LLM
-                logger.warning("Tool execution failed for %s: %s", name, e)
-                error_text = f"ツール実行に失敗しました: {str(e)}"
-                tool_result = {
-                    "name": name,
-                    "content": error_text,
-                }
-                if tool_call_id:
-                    tool_result["tool_call_id"] = tool_call_id
+    Args:
+        provider: LLM provider instance
+        history: Conversation history (will be deep-copied, not mutated)
+        system_prompt: Optional system prompt
+        mcp_client: MCP client for tool execution
+        max_iterations: Maximum tool loop iterations
+        timeout: Maximum total execution time in seconds
 
-                tool_results.append(tool_result)
-                yield {"type": "tool_result", "content": tool_result}
+    Returns:
+        AgenticLoopResult with chunks, history_delta, final_text, etc.
 
-        # Append tool_call and tool_result to history
-        # Note: Standardized flat schema used here
-        assistant_entry = {"role": provider.name, "content": []}
-        if thought_text:
-            assistant_entry["content"].append({"type": "text", "content": thought_text})
-        for tc in tool_calls_in_turn:
-            assistant_entry["content"].append({"type": "tool_call", **tc})
-        history.append(assistant_entry)
+    Raises:
+        RuntimeError: If called from within an async context
+        TimeoutError: If execution exceeds timeout
+    """
+    # Check if we're in an async context
+    try:
+        asyncio.get_running_loop()
+        raise RuntimeError(
+            "execute_with_tools_sync() cannot be called from an async context. "
+            "Use 'await execute_with_tools()' instead."
+        )
+    except RuntimeError as e:
+        if "async context" in str(e):
+            raise
+        # No running loop - proceed with asyncio.run()
 
-        # Tool results as separate tool message (role: 'tool')
-        tool_entry = {"role": "tool", "content": []}
-        for tr in tool_results:
-            tool_result_item = {
-                "type": "tool_result",
-                "name": tr.get("name"),
-                "content": tr["content"],
-            }
-            if "tool_call_id" in tr:
-                tool_result_item["tool_call_id"] = tr["tool_call_id"]
-            tool_entry["content"].append(tool_result_item)
-        history.append(tool_entry)
-    else:
-        # Loop reached max_iterations without breaking
-        logger.info("Agentic loop reached max_iterations=%d", max_iterations)
+    # Run the async function
+    return asyncio.run(
+        execute_with_tools(
+            provider=provider,
+            history=history,
+            system_prompt=system_prompt,
+            mcp_client=mcp_client,
+            max_iterations=max_iterations,
+            timeout=timeout,
+        )
+    )

@@ -52,10 +52,8 @@ async def test_execute_with_tools_single_iteration():
 
     # Execute
     history = []
-    chunks = []
-
-    async for chunk in execute_with_tools(mock_provider, history, mcp_client=mock_mcp):
-        chunks.append(chunk)
+    result = await execute_with_tools(mock_provider, history, mcp_client=mock_mcp)
+    chunks = result.chunks
 
     # Verify: tool_call → tool_result → text
     assert len(chunks) >= 3
@@ -63,15 +61,16 @@ async def test_execute_with_tools_single_iteration():
     assert chunks[1]["type"] == "tool_result"
     assert any(c["type"] == "text" for c in chunks)
 
-    # Verify history structure
-    assert len(history) == 3  # assistant (tool_call) + tool (tool_result) + assistant (final text)
-    assert history[0]["role"] == "gemini"
-    assert history[0]["content"][0]["type"] == "tool_call"
-    assert history[0]["content"][0]["name"] == "get_weather"
-    assert history[1]["role"] == "tool"
-    assert history[1]["content"][0]["type"] == "tool_result"
-    assert history[2]["role"] == "gemini"
-    assert history[2]["content"][0]["type"] == "text"
+    # Verify history structure (use history_delta)
+    # assistant (tool_call) + tool (tool_result) + assistant (final text)
+    assert len(result.history_delta) == 3
+    assert result.history_delta[0]["role"] == "gemini"
+    assert result.history_delta[0]["content"][0]["type"] == "tool_call"
+    assert result.history_delta[0]["content"][0]["name"] == "get_weather"
+    assert result.history_delta[1]["role"] == "tool"
+    assert result.history_delta[1]["content"][0]["type"] == "tool_result"
+    assert result.history_delta[2]["role"] == "gemini"
+    assert result.history_delta[2]["content"][0]["type"] == "text"
 
 
 @pytest.mark.asyncio
@@ -102,16 +101,13 @@ async def test_execute_with_tools_max_iterations():
 
     # Execute with max_iterations=3
     history = []
-    chunks = []
-
-    async for chunk in execute_with_tools(
-        mock_provider, history, mcp_client=mock_mcp, max_iterations=3
-    ):
-        chunks.append(chunk)
+    result = await execute_with_tools(mock_provider, history, mcp_client=mock_mcp, max_iterations=3)
+    chunks = result.chunks
 
     # Should stop at 3 iterations
     tool_call_count = len([c for c in chunks if c["type"] == "tool_call"])
     assert tool_call_count == 3
+    assert result.iterations_used == 3
 
 
 @pytest.mark.asyncio
@@ -139,9 +135,10 @@ async def test_execute_with_tools_timeout():
     mock_mcp.list_tools = AsyncMock(return_value=[])
 
     # Execute with short timeout
-    with pytest.raises(TimeoutError):
-        async for _ in execute_with_tools(mock_provider, [], mcp_client=mock_mcp, timeout=0.5):
-            pass
+    result = await execute_with_tools(mock_provider, [], mcp_client=mock_mcp, timeout=0.5)
+
+    # Should set timed_out flag instead of raising
+    assert result.timed_out is True
 
 
 @pytest.mark.asyncio
@@ -186,10 +183,8 @@ async def test_execute_with_tools_tool_error():
 
     # Execute
     history = []
-    chunks = []
-
-    async for chunk in execute_with_tools(mock_provider, history, mcp_client=mock_mcp):
-        chunks.append(chunk)
+    result = await execute_with_tools(mock_provider, history, mcp_client=mock_mcp)
+    chunks = result.chunks
 
     # Should yield tool_result with error message
     tool_results = [c for c in chunks if c["type"] == "tool_result"]
@@ -214,14 +209,12 @@ async def test_execute_with_tools_missing_mcp_client():
     mock_provider.call_api = mock_call_api
 
     history = []
-    chunks = []
-    # Should NOT raise ValueError, but yield an error text chunk
-    async for chunk in execute_with_tools(mock_provider, history, mcp_client=None):
-        chunks.append(chunk)
+    result = await execute_with_tools(mock_provider, history, mcp_client=None)
+    chunks = result.chunks
 
     assert any("MCPクライアントが設定されていません" in str(c.get("content", "")) for c in chunks)
-    assert any(h["role"] == "tool" for h in history)
-    assert "MCPクライアントが設定されていません" in history[-1]["content"][0]["content"]
 
-    # Verify history has role 'tool'
-    assert any(h["role"] == "tool" for h in history)
+    # Verify history_delta has role 'tool' with error message
+    assert any(h["role"] == "tool" for h in result.history_delta)
+    error_msg = result.history_delta[-1]["content"][0]["content"]
+    assert "MCPクライアントが設定されていません" in error_msg
