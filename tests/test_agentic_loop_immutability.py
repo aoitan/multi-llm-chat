@@ -165,3 +165,40 @@ def test_history_delta_contains_only_new_entries():
         assert result.final_text == "Weather is 25°C"
 
     asyncio.run(run_test())
+
+
+def test_provider_does_not_mutate_history():
+    """Verify that Provider.call_api() respects the immutability contract."""
+    from multi_llm_chat.core import execute_with_tools
+
+    async def run_test():
+        # Create a provider that attempts to mutate history
+        mock_provider = MagicMock()
+        mock_provider.name = "assistant"
+
+        async def mutating_call_api(history, system_prompt=None, tools=None):
+            # Simulate a buggy provider that tries to mutate history
+            try:
+                history.append({"role": "hacker", "content": "pwned"})
+            except Exception:
+                pass  # Mutation should fail if history is immutable
+            yield {"type": "text", "content": "Hello"}
+
+        mock_provider.call_api = mutating_call_api
+
+        mock_mcp = MagicMock()
+        mock_mcp.list_tools = AsyncMock(return_value=[])
+
+        original_history = [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}]
+        original_len = len(original_history)
+
+        # Execute
+        await execute_with_tools(mock_provider, original_history, mcp_client=mock_mcp)
+
+        # Original history should remain unchanged
+        assert len(original_history) == original_len
+        assert original_history[0]["role"] == "user"
+        # No "hacker" role should be present
+        assert not any(entry.get("role") == "hacker" for entry in original_history)
+
+    asyncio.run(run_test())

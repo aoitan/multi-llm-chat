@@ -529,7 +529,10 @@ class LLMProvider(ABC):
         """Call the LLM API and return an async generator of response chunks
 
         Args:
-            history: List of conversation history dicts with 'role' and 'content'
+            history: List of conversation history dicts with 'role' and 'content'.
+                     MUST NOT be mutated by the implementation. Implementations
+                     should create a copy via format_history() if modifications
+                     are needed.
             system_prompt: Optional system instruction
             tools: Optional list of tools for the LLM
 
