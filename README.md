@@ -247,6 +247,7 @@ src/multi_llm_chat/
 ├── providers/       # LLMプロバイダー実装
 │   ├── base.py      # 共通インターフェース（LLMProvider抽象基底クラス）
 │   ├── openai.py    # OpenAI/ChatGPT実装
+│   ├── gemini.py    # Google Gemini実装
 │   └── __init__.py  # パッケージ公開API
 ├── cli.py           # CLIインターフェース
 ├── webui.py         # Web UIインターフェース

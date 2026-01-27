@@ -95,8 +95,8 @@ graph TB
 **責務**: LLMプロバイダー実装の独立化（戦略パターン）。
 
 - `base.py`: `LLMProvider`抽象基底クラス（共通インターフェース定義）
-- `openai.py`: OpenAI/ChatGPT実装（`ChatGPTProvider`クラス）
-- Gemini実装は現在`llm_provider.py`に残存（今後の分離対象）
+- `gemini.py`: Google Gemini実装（`GeminiProvider`, `GeminiToolCallAssembler`クラス）
+- `openai.py`: OpenAI/ChatGPT実装（`ChatGPTProvider`, `OpenAIToolCallAssembler`クラス）
 
 ### 2. ビジネスロジック層 (Epic 017追加)
 
