@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from unittest.mock import patch
@@ -71,7 +72,7 @@ def test_cli_history_save_and_load(tmp_path, monkeypatch):
 
     with patch("builtins.input", side_effect=inputs):
         with patch("builtins.print"):
-            history, system_prompt = cli.main()
+            history, system_prompt = asyncio.run(cli.main())
 
     assert system_prompt == ""
     # After load, it should restore the history as it was when saved—containing only "hello"—
@@ -102,7 +103,7 @@ def test_cli_history_overwrite_prompt(tmp_path, monkeypatch):
     with patch("multi_llm_chat.cli._confirm", side_effect=fake_confirm):
         with patch("builtins.input", side_effect=inputs):
             with patch("builtins.print"):
-                history, _ = cli.main()
+                history, _ = asyncio.run(cli.main())
 
     # Overwrite accepted on second prompt; history should contain the latest single message
     assert [entry["content"] for entry in history] == [[{"type": "text", "content": "first"}]]
@@ -122,7 +123,7 @@ def test_cli_history_invalid_name_and_missing(tmp_path, monkeypatch):
 
     with patch("builtins.input", side_effect=inputs):
         with patch("builtins.print") as mock_print:
-            history, _ = cli.main()
+            history, _ = asyncio.run(cli.main())
 
     # No history should be saved or loaded
     assert history == []
@@ -143,7 +144,7 @@ def test_cli_history_list_outputs_saved_names(tmp_path, monkeypatch):
 
     with patch("builtins.input", side_effect=inputs):
         with patch("builtins.print") as mock_print:
-            _, _ = cli.main()
+            _, _ = asyncio.run(cli.main())
 
     assert any("chat1" in str(call) for call in mock_print.call_args_list)
 

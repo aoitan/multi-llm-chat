@@ -58,10 +58,10 @@ class TestLLMProviderFactory(unittest.TestCase):
             get_provider("unknown")
 
 
-class TestGeminiProvider(unittest.TestCase):
+class TestGeminiProvider:
     """Test GeminiProvider implementation"""
 
-    def setUp(self):
+    def setup_method(self):
         self.history = [{"role": "user", "content": "Hello"}]
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -88,7 +88,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "text", "content": "Hello"},
             {"type": "text", "content": " world"},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
         mock_model.generate_content.assert_called_once()
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -130,7 +130,7 @@ class TestGeminiProvider(unittest.TestCase):
                 "content": {"name": "get_weather", "arguments": {"location": "Tokyo"}},
             }
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -187,7 +187,7 @@ class TestGeminiProvider(unittest.TestCase):
                 "content": {"name": "get_time", "arguments": {"timezone": "JST"}},
             },
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -214,15 +214,12 @@ class TestGeminiProvider(unittest.TestCase):
             )
         )
 
-        self.assertEqual(
-            result,
-            [
-                {
-                    "type": "tool_call",
-                    "content": {"name": "get_weather", "arguments": {}},
-                }
-            ],
-        )
+        assert result == [
+            {
+                "type": "tool_call",
+                "content": {"name": "get_weather", "arguments": {}},
+            }
+        ]
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -264,7 +261,7 @@ class TestGeminiProvider(unittest.TestCase):
                 "content": {"name": "search", "arguments": {"query": "python"}},
             },
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -311,7 +308,7 @@ class TestGeminiProvider(unittest.TestCase):
                 "content": {"name": "get_weather", "arguments": {"location": "Tokyo"}},
             }
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -369,7 +366,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -423,7 +420,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -484,7 +481,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -566,7 +563,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     @patch("multi_llm_chat.llm_provider.genai")
@@ -627,24 +624,24 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
             {"type": "tool_call", "content": {"name": "tool_c", "arguments": {"value": "C"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_extract_text_from_chunk(self):
         """extract_text_from_chunk should process unified dictionaries."""
         provider = GeminiProvider()
 
         text_chunk = {"type": "text", "content": "Hello, world!"}
-        self.assertEqual(provider.extract_text_from_chunk(text_chunk), "Hello, world!")
+        assert provider.extract_text_from_chunk(text_chunk) == "Hello, world!"
 
         tool_chunk = {"type": "tool_call", "content": {"name": "test", "arguments": {}}}
-        self.assertEqual(provider.extract_text_from_chunk(tool_chunk), "")
+        assert provider.extract_text_from_chunk(tool_chunk) == ""
 
         invalid_chunk = {"type": "other", "content": "something"}
-        self.assertEqual(provider.extract_text_from_chunk(invalid_chunk), "")
+        assert provider.extract_text_from_chunk(invalid_chunk) == ""
 
         # Test backward compatibility with old chunk format (should return empty)
         old_chunk = MagicMock(text="some text")
-        self.assertEqual(provider.extract_text_from_chunk(old_chunk), "")
+        assert provider.extract_text_from_chunk(old_chunk) == ""
 
     def test_get_token_info_returns_dict(self):
         """GeminiProvider should return token info dictionary"""
@@ -742,7 +739,7 @@ class TestGeminiProvider(unittest.TestCase):
         ]
 
         formatted_history = GeminiProvider.format_history(logic_history)
-        self.assertEqual(formatted_history, expected_gemini_history)
+        assert formatted_history == expected_gemini_history
 
     def test_format_history_wraps_non_json_tool_result(self):
         """format_history should wrap non-JSON tool results for Gemini responses."""
@@ -776,7 +773,7 @@ class TestGeminiProvider(unittest.TestCase):
         ]
 
         formatted_history = GeminiProvider.format_history(logic_history)
-        self.assertEqual(formatted_history, expected)
+        assert formatted_history == expected
 
     def test_format_history_wraps_non_object_json_tool_result(self):
         """format_history should wrap non-object JSON tool results for Gemini responses."""
@@ -810,7 +807,7 @@ class TestGeminiProvider(unittest.TestCase):
         ]
 
         formatted_history = GeminiProvider.format_history(logic_history)
-        self.assertEqual(formatted_history, expected)
+        assert formatted_history == expected
 
     def test_format_history_handles_unexpected_content_types(self):
         """format_history should convert unexpected types to string (Issue #79 Review Fix)."""
@@ -837,7 +834,7 @@ class TestGeminiProvider(unittest.TestCase):
         ]
 
         formatted_history = GeminiProvider.format_history(logic_history)
-        self.assertEqual(formatted_history, [])
+        assert formatted_history == []
 
     def test_parse_tool_response_payload_handles_type_error(self):
         """_parse_tool_response_payload should handle TypeError and raise (Priority B1)"""
@@ -858,15 +855,15 @@ class TestGeminiProvider(unittest.TestCase):
 
         # Test with invalid JSON
         result = _parse_tool_response_payload("not valid json")
-        self.assertEqual(result, {"result": "not valid json"})
+        assert result == {"result": "not valid json"}
 
         # Test with None
         result = _parse_tool_response_payload(None)
-        self.assertEqual(result, {})
+        assert result == {}
 
         # Test with already a dict
         result = _parse_tool_response_payload({"key": "value"})
-        self.assertEqual(result, {"key": "value"})
+        assert result == {"key": "value"}
 
     def test_parse_tool_response_payload_whitelisted_types(self):
         """_parse_tool_response_payload should handle whitelisted types (Priority B1)"""
@@ -874,44 +871,48 @@ class TestGeminiProvider(unittest.TestCase):
 
         # Test int
         result = _parse_tool_response_payload(42)
-        self.assertEqual(result, {"result": 42})
+        assert result == {"result": 42}
 
         # Test float
         result = _parse_tool_response_payload(3.14)
-        self.assertEqual(result, {"result": 3.14})
+        assert result == {"result": 3.14}
 
         # Test list
         result = _parse_tool_response_payload([1, 2, 3])
-        self.assertEqual(result, {"result": [1, 2, 3]})
+        assert result == {"result": [1, 2, 3]}
 
         # Test bool
         result = _parse_tool_response_payload(True)
-        self.assertEqual(result, {"result": True})
+        assert result == {"result": True}
 
-    def test_parse_tool_response_payload_logs_warning_for_unexpected_types(self):
+    def test_parse_tool_response_payload_logs_warning_for_unexpected_types(self, caplog):
         """_parse_tool_response_payload should log warning for unexpected types (Priority B1)"""
+        import logging
+
         from multi_llm_chat.llm_provider import _parse_tool_response_payload
 
         # bytes should trigger warning and str() conversion
-        with self.assertLogs("multi_llm_chat.llm_provider", level="WARNING") as log_context:
+        with caplog.at_level(logging.WARNING, logger="multi_llm_chat.llm_provider"):
             result = _parse_tool_response_payload(b"binary data")
 
-        self.assertIn("unexpected type", log_context.output[0])
-        self.assertEqual(result, {"result": "b'binary data'"})
+        assert "unexpected type" in caplog.text
+        assert result == {"result": "b'binary data'"}
+
+        caplog.clear()
 
         # Custom object should also trigger warning
         class CustomObject:
             def __str__(self):
                 return "custom_string"
 
-        with self.assertLogs("multi_llm_chat.llm_provider", level="WARNING") as log_context:
+        with caplog.at_level(logging.WARNING, logger="multi_llm_chat.llm_provider"):
             result = _parse_tool_response_payload(CustomObject())
 
-        self.assertIn("unexpected type", log_context.output[0])
-        self.assertEqual(result, {"result": "custom_string"})
+        assert "unexpected type" in caplog.text
+        assert result == {"result": "custom_string"}
 
 
-class TestChatGPTProvider(unittest.TestCase):
+class TestChatGPTProvider:
     """Test ChatGPTProvider implementation"""
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
@@ -979,8 +980,8 @@ class TestChatGPTProvider(unittest.TestCase):
 
         # Verify API was called with tools
         call_args = mock_client.chat.completions.create.call_args
-        self.assertIn("tools", call_args.kwargs)
-        self.assertIn("tool_choice", call_args.kwargs)
+        assert "tools" in call_args.kwargs
+        assert "tool_choice" in call_args.kwargs
 
     def test_extract_text_from_chunk(self):
         """ChatGPTProvider should extract text from response chunk"""
@@ -1130,7 +1131,7 @@ class TestGeminiToolCallEmptyArgs(unittest.TestCase):
         assert pending[0]["content"]["arguments"] == {}
 
 
-class TestParseToolResponsePayload(unittest.TestCase):
+class TestParseToolResponsePayload:
     """Test JSON error handling in tool response parsing (Issue #79 Review Fix)"""
 
     def test_parse_invalid_json_catches_json_decode_error(self):

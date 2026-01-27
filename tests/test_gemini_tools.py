@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -8,33 +9,19 @@ from multi_llm_chat.llm_provider import (
     mcp_tools_to_gemini_format,
 )
 
-"""Tests for Gemini Tools integration (Issue #79)
 
-TDD Development Notes (2026-01-12):
-    This test suite was developed following the Red-Green-Refactor TDD cycle
-    to implement parallel function calling support for GeminiProvider.
-
-    RED Phase:
-        - test_call_api_handles_interleaved_parallel_tool_calls (added to test_llm_provider.py)
-          → FAILED due to FIFO index assignment causing argument mismatch
-    
-    GREEN Phase:
-        - Refactored GeminiToolCallAssembler to use hybrid index/FIFO tracking
-        - Indexed parts (parallel calls): Dictionary-based tracking by part.index
-        - Non-indexed parts (sequential calls): FIFO queue strategy
-        → ALL TESTS PASSED
-    
-    REFACTOR Phase:
-        - Removed dead code (_last_key variable)
-        - Added detailed docstrings explaining state management
-        - Added logging for debugging parallel tool call assembly
-    
-    Critical Fix:
-        The original FIFO-only implementation failed when Gemini API sent
-        parallel tool calls with interleaved argument chunks. The hybrid
-        approach correctly matches arguments to their corresponding tool names
-        using the part.index attribute when available.
-"""
+async def consume_async_gen(gen):
+    """Helper to consume a generator (sync or async) and return all yielded items."""
+    results = []
+    # Check if it's an async generator
+    if hasattr(gen, "__aiter__"):
+        async for item in gen:
+            results.append(item)
+    else:
+        # Synchronous generator
+        for item in gen:
+            results.append(item)
+    return results
 
 
 class TestGeminiToolsIntegration(unittest.TestCase):
@@ -91,9 +78,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
     def test_gemini_response_with_function_call(self, mock_model_class):
         """Geminiからのツール呼び出しレスポンスを共通形式にパースして返す"""
         mock_model = MagicMock()
-        mock_response = MagicMock()
         mock_model_class.return_value = mock_model
-        mock_model.generate_content.return_value = mock_response
 
         # Mock stream for text followed by a tool call
         mock_text_chunk = MagicMock(text="Some text", parts=[])
@@ -114,11 +99,19 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         mock_fc_chunk2 = MagicMock(text=None, parts=[part2])
         # --- End Tool Call Part ---
 
-        mock_response.__iter__.return_value = iter(
-            [mock_text_chunk, mock_fc_chunk1, mock_fc_chunk2]
-        )
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            # Return an iterable (not async)
+            return iter([mock_text_chunk, mock_fc_chunk1, mock_fc_chunk2])
 
-        chunks = list(self.provider.call_api(self.history, tools=self.mcp_tools))
+        mock_model.generate_content.side_effect = mock_generate_content
+
+        async def run_test():
+            return await consume_async_gen(
+                self.provider.call_api(self.history, tools=self.mcp_tools)
+            )
+
+        chunks = asyncio.run(run_test())
 
         self.assertEqual(len(chunks), 2)
 
@@ -137,9 +130,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
     def test_gemini_tool_call_order_is_preserved(self, mock_model_class):
         """ツール呼び出しがテキストより先に来た場合の順序を保証する"""
         mock_model = MagicMock()
-        mock_response = MagicMock()
         mock_model_class.return_value = mock_model
-        mock_model.generate_content.return_value = mock_response
 
         fc1 = MagicMock()
         fc1.name = "get_weather"
@@ -157,11 +148,18 @@ class TestGeminiToolsIntegration(unittest.TestCase):
 
         mock_text_chunk = MagicMock(text="Done", parts=[])
 
-        mock_response.__iter__.return_value = iter(
-            [mock_fc_chunk1, mock_fc_chunk2, mock_text_chunk]
-        )
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            return iter([mock_fc_chunk1, mock_fc_chunk2, mock_text_chunk])
 
-        chunks = list(self.provider.call_api(self.history, tools=self.mcp_tools))
+        mock_model.generate_content.side_effect = mock_generate_content
+
+        async def run_test():
+            return await consume_async_gen(
+                self.provider.call_api(self.history, tools=self.mcp_tools)
+            )
+
+        chunks = asyncio.run(run_test())
 
         self.assertEqual([chunk["type"] for chunk in chunks], ["tool_call", "text"])
         self.assertEqual(chunks[0]["content"]["name"], "get_weather")
@@ -169,13 +167,11 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         self.assertEqual(chunks[1]["content"], "Done")
 
     @patch("multi_llm_chat.llm_provider.genai.GenerativeModel")
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test_key")
+    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     def test_gemini_tool_call_args_after_text_are_preserved(self, mock_model_class):
         """ツール呼び出しの引数がテキスト後に届いても欠落しないこと"""
         mock_model = MagicMock()
-        mock_response = MagicMock()
         mock_model_class.return_value = mock_model
-        mock_model.generate_content.return_value = mock_response
 
         fc1 = MagicMock()
         fc1.name = "get_weather"
@@ -193,11 +189,18 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         part2.function_call = fc2
         mock_fc_chunk2 = MagicMock(text=None, parts=[part2])
 
-        mock_response.__iter__.return_value = iter(
-            [mock_fc_chunk1, mock_text_chunk, mock_fc_chunk2]
-        )
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            return iter([mock_fc_chunk1, mock_text_chunk, mock_fc_chunk2])
 
-        chunks = list(self.provider.call_api(self.history, tools=self.mcp_tools))
+        mock_model.generate_content.side_effect = mock_generate_content
+
+        async def run_test():
+            return await consume_async_gen(
+                self.provider.call_api(self.history, tools=self.mcp_tools)
+            )
+
+        chunks = asyncio.run(run_test())
 
         self.assertEqual([chunk["type"] for chunk in chunks], ["text", "tool_call"])
         self.assertEqual(chunks[0]["content"], "Streaming text")
@@ -205,7 +208,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         self.assertEqual(chunks[1]["content"]["arguments"], {"location": "Nagoya"})
 
     @patch("multi_llm_chat.llm_provider.genai.GenerativeModel")
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test_key")
+    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     def test_no_tool_calls_emitted_on_blocked_prompt(self, mock_model_class):
         """BlockedPromptExceptionが発生した場合、未完のツール呼び出しを出力しない"""
         import google.generativeai as genai
@@ -213,24 +216,27 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         mock_model = MagicMock()
         mock_model_class.return_value = mock_model
 
-        # Simulate BlockedPromptException immediately
+        # Simulate BlockedPromptException immediately (synchronous version)
         mock_model.generate_content.side_effect = genai.types.BlockedPromptException(
             "Safety filter triggered"
         )
 
+        async def run_test():
+            return await consume_async_gen(
+                self.provider.call_api(self.history, tools=self.mcp_tools)
+            )
+
         with self.assertRaises(ValueError) as context:
-            list(self.provider.call_api(self.history, tools=self.mcp_tools))
+            asyncio.run(run_test())
 
         self.assertIn("blocked", str(context.exception).lower())
 
     @patch("multi_llm_chat.llm_provider.genai.GenerativeModel")
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test_key")
+    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     def test_no_tool_calls_emitted_on_api_error(self, mock_model_class):
         """API エラーが発生した場合、未完のツール呼び出しを出力しない"""
         mock_model = MagicMock()
-        mock_response = MagicMock()
         mock_model_class.return_value = mock_model
-        mock_model.generate_content.return_value = mock_response
 
         # Function call name chunk only (no args)
         fc1 = MagicMock()
@@ -240,26 +246,34 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         part1.function_call = fc1
         mock_fc_chunk1 = MagicMock(text=None, parts=[part1])
 
-        # Simulate generic exception after partial tool call
-        def raise_exception():
-            yield mock_fc_chunk1
-            raise Exception("API connection error")
+        # Simulate generic exception after partial tool call (synchronous version)
+        def mock_generate_content(*args, **kwargs):
+            def gen():
+                yield mock_fc_chunk1
+                raise Exception("API connection error")
 
-        mock_response.__iter__.return_value = raise_exception()
+            return gen()
+
+        mock_model.generate_content.side_effect = mock_generate_content
+
+        async def run_test():
+            return await consume_async_gen(
+                self.provider.call_api(self.history, tools=self.mcp_tools)
+            )
 
         with self.assertRaises(Exception) as context:
-            list(self.provider.call_api(self.history, tools=self.mcp_tools))
+            asyncio.run(run_test())
 
+        # The error might be the original exception or the TypeError from mock_aiter
+        # Actually I fixed mock_aiter to take self=None.
         self.assertIn("API connection error", str(context.exception))
 
     @patch("multi_llm_chat.llm_provider.genai.GenerativeModel")
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test_key")
+    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
     def test_tool_calls_emitted_only_on_success(self, mock_model_class):
         """ストリームが正常に完了した場合のみ、未完のツール呼び出しを出力する"""
         mock_model = MagicMock()
-        mock_response = MagicMock()
         mock_model_class.return_value = mock_model
-        mock_model.generate_content.return_value = mock_response
 
         # Function call name chunk
         fc1 = MagicMock()
@@ -278,12 +292,25 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         mock_fc_chunk2 = MagicMock(text=None, parts=[part2])
 
         # Normal successful stream
-        mock_response.__iter__.return_value = iter([mock_fc_chunk1, mock_fc_chunk2])
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            return iter([mock_fc_chunk1, mock_fc_chunk2])
 
-        chunks = list(self.provider.call_api(self.history, tools=self.mcp_tools))
+        mock_model.generate_content.side_effect = mock_generate_content
+
+        async def run_test():
+            return await consume_async_gen(
+                self.provider.call_api(self.history, tools=self.mcp_tools)
+            )
+
+        chunks = asyncio.run(run_test())
 
         # Should emit the complete tool call
         self.assertEqual(len(chunks), 1)
         self.assertEqual(chunks[0]["type"], "tool_call")
         self.assertEqual(chunks[0]["content"]["name"], "get_weather")
         self.assertEqual(chunks[0]["content"]["arguments"], {"location": "Tokyo"})
+
+
+if __name__ == "__main__":
+    unittest.main()

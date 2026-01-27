@@ -8,7 +8,28 @@ from .chat_logic import ChatService
 from .history import HistoryStore, get_llm_response, reset_history, sanitize_name
 
 
-def _process_service_stream(service, user_message):
+def _display_tool_response(response_type, content):
+    """Display tool call or tool result with visual markers.
+
+    Args:
+        response_type: "tool_call" or "tool_result"
+        content: Tool call or result content dict
+    """
+    if response_type == "tool_call":
+        name = content.get("name", "unknown")
+        args = content.get("arguments", {})
+        print(f"\n[Tool Call: {name}]", flush=True)
+        if args:
+            print(f"  Args: {args}", flush=True)
+    elif response_type == "tool_result":
+        name = content.get("name", "unknown")
+        result_content = content.get("content", "")
+        print(f"[Tool Result: {name}]", flush=True)
+        print(f"  {result_content}", flush=True)
+        print()  # Blank line
+
+
+async def _process_service_stream(service, user_message):
     """Process ChatService stream and print responses for CLI with real-time streaming.
 
     Args:
@@ -24,11 +45,19 @@ def _process_service_stream(service, user_message):
     last_model_name = None  # Track model name to detect switches (for @all)
 
     # Process message through ChatService with streaming
-    for display_hist, logic_hist in service.process_message(user_message):  # noqa: B007
+    async for display_hist, logic_hist, chunk in service.process_message(user_message):  # noqa: B007
         # Print only new content from display_history (incremental streaming)
         # display_history format: [[user_msg, assistant_msg], ...]
 
         if not display_hist:
+            continue
+
+        chunk_type = chunk.get("type")
+        if chunk_type in ["tool_call", "tool_result"]:
+            # Handle tool call/result visualization
+            # We reset last_content_length because we printed markers outside the normal flow
+            _display_tool_response(chunk_type, chunk.get("content", {}))
+            last_content_length = 0
             continue
 
         # Check if there's a new exchange (new user message added)
@@ -47,14 +76,11 @@ def _process_service_stream(service, user_message):
         # Format: "**Gemini:**\nActual content" or "**ChatGPT:**\nContent"
         if assistant_msg.startswith("**Gemini:**"):
             model_name = "Gemini"
-            full_content = assistant_msg[len("**Gemini:**\n") :]
         elif assistant_msg.startswith("**ChatGPT:**"):
             model_name = "ChatGPT"
-            full_content = assistant_msg[len("**ChatGPT:**\n") :]
         else:
             # Fallback for unexpected format
             model_name = "Assistant"
-            full_content = assistant_msg
 
         # Detect model switch (e.g., @all: Gemini -> ChatGPT)
         if last_model_name is not None and model_name != last_model_name:
@@ -62,20 +88,28 @@ def _process_service_stream(service, user_message):
             print()
             last_content_length = 0
 
-        # Print only the new part (incremental streaming)
-        if len(full_content) > last_content_length:
-            new_content = full_content[last_content_length:]
+        # Calculate full content without labels/tool markers for clean output
+        # But wait, ChatService added tool markers to display_history
+        # We want to skip them because we already printed them via _display_tool_response
 
-            # Print model label only on first chunk
-            if last_content_length == 0:
-                print(f"[{model_name}]: ", end="", flush=True)
-                last_model_name = model_name
+        # Simple way to skip tool markers in incremental printing:
+        # We only print if it's NOT a tool marker.
+        # However, display_history includes EVERYTHING.
 
-            print(new_content, end="", flush=True)
-            last_content_length = len(full_content)
+        # Let's try a different approach: only print "text" chunks for the text part
+        if chunk_type == "text":
+            text = chunk.get("content", "")
+            if text:
+                # Print model label only on first chunk of text
+                if last_content_length == 0:
+                    print(f"[{model_name}]: ", end="", flush=True)
+                    last_model_name = model_name
+
+                print(text, end="", flush=True)
+                last_content_length += len(text)
 
     # Add final newline after streaming completes
-    if last_content_length > 0:
+    if last_content_length > 0 or last_model_name:
         print()
 
     return display_hist, logic_hist
@@ -323,8 +357,11 @@ def _handle_copy_command(args, history):
         print("エラー: クリップボードへのコピーに失敗しました。")
 
 
-def main():
+async def main():
     """Main CLI loop"""
+
+    from .mcp.client import MCPClient
+
     store = HistoryStore()
     user_id = _prompt_user_id()
 
@@ -335,51 +372,84 @@ def main():
     # Create session-scoped ChatService for provider reuse
     service = ChatService()
 
-    while True:
-        prompt = input("> ").strip()
+    # MCP support
+    mcp_enabled = core.MCP_ENABLED
+    mcp_client = None
 
-        if prompt.lower() in ["exit", "quit"]:
-            break
+    if mcp_enabled:
+        # TODO: Load command/args from config
+        mcp_client = MCPClient("uvx", ["mcp-server-weather"])
 
-        # Handle commands
-        if prompt.startswith("/"):
-            parts = prompt.split(None, 1)
-            command = parts[0]
-            args = parts[1] if len(parts) > 1 else ""
+    async def run_cli():
+        nonlocal history, system_prompt, is_dirty
 
-            if command == "/system":
-                new_prompt = _handle_system_command(args, system_prompt)
-                if new_prompt != system_prompt:
-                    system_prompt = new_prompt
-                    is_dirty = True
-            elif command == "/reset":
-                if is_dirty and not _confirm("現在の会話は保存されていません。リセットしますか？"):
-                    continue
-                history = reset_history()
-                is_dirty = bool(system_prompt)  # system promptのみの場合はdirty扱いを継続
-                print("チャット履歴をリセットしました。")
-            elif command == "/history":
-                history, system_prompt, is_dirty = _handle_history_command(
-                    args, user_id, store, history, system_prompt, is_dirty
-                )
-            elif command == "/copy":
-                _handle_copy_command(args, history)
-            else:
-                print(
-                    f"エラー: `{command}` は不明なコマンドです。"
-                    f"利用可能なコマンドは `/system` などです。"
-                )
-            continue
+        # Use MCP client if enabled
+        if mcp_client:
+            async with mcp_client:
+                service.mcp_client = mcp_client
+                await _cli_loop()
+        else:
+            await _cli_loop()
 
-        # Use ChatService for message processing (Issue #62)
-        # ChatService handles mention parsing, LLM routing, and history updates
-        # Update service state with current history and system prompt
-        service.display_history = []  # CLI doesn't use Gradio-style display history
-        service.logic_history = history
-        service.system_prompt = system_prompt
+    async def _cli_loop():
+        nonlocal history, system_prompt, is_dirty
+        while True:
+            try:
+                prompt = input("> ").strip()
+            except EOFError:
+                break
 
-        # Process message through ChatService and handle CLI-specific display
-        _, history = _process_service_stream(service, prompt)
-        is_dirty = True
+            if prompt.lower() in ["exit", "quit"]:
+                break
 
+            # Handle commands
+            if prompt.startswith("/"):
+                parts = prompt.split(None, 1)
+                command = parts[0]
+                args = parts[1] if len(parts) > 1 else ""
+
+                if command == "/system":
+                    new_prompt = _handle_system_command(args, system_prompt)
+                    if new_prompt != system_prompt:
+                        system_prompt = new_prompt
+                        is_dirty = True
+                elif command == "/reset":
+                    if is_dirty and not _confirm(
+                        "現在の会話は保存されていません。リセットしますか？"
+                    ):
+                        continue
+                    history = reset_history()
+                    is_dirty = bool(system_prompt)  # system promptのみの場合はdirty扱いを継続
+                    print("チャット履歴をリセットしました。")
+                elif command == "/history":
+                    history, system_prompt, is_dirty = _handle_history_command(
+                        args, user_id, store, history, system_prompt, is_dirty
+                    )
+                elif command == "/copy":
+                    _handle_copy_command(args, history)
+                else:
+                    print(
+                        f"エラー: `{command}` は不明なコマンドです。"
+                        f"利用可能なコマンドは `/system` などです。"
+                    )
+                continue
+
+            # Use ChatService for message processing (Issue #62)
+            # ChatService handles mention parsing, LLM routing, and history updates
+            # Update service state with current history and system prompt
+            service.display_history = []  # CLI doesn't use Gradio-style display history
+            service.logic_history = history
+            service.system_prompt = system_prompt
+
+            # Process message through ChatService and handle CLI-specific display
+            _, history = await _process_service_stream(service, prompt)
+            is_dirty = True
+
+    await run_cli()
     return history, system_prompt
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())

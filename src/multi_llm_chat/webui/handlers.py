@@ -10,6 +10,30 @@ from .components import ASSISTANT_LABELS, ASSISTANT_ROLES
 logger = logging.getLogger(__name__)
 
 
+def format_tool_response(response_type, content):
+    """Format tool call or tool result as Markdown.
+
+    Args:
+        response_type: "tool_call" or "tool_result"
+        content: Tool call or result content dict
+
+    Returns:
+        str: Formatted Markdown string
+    """
+    if response_type == "tool_call":
+        name = content.get("name", "unknown")
+        args = content.get("arguments", {})
+        args_str = f" `{args}`" if args else ""
+        return f"\n\n🔧 **Tool Call**: {name}{args_str}\n"
+    elif response_type == "tool_result":
+        name = content.get("name", "unknown")
+        result_content = content.get("content", "")
+        # Truncate long results for display
+        truncated = result_content[:100] + "..." if len(result_content) > 100 else result_content
+        return f"✅ **Result** ({name}): {truncated}\n"
+    return ""
+
+
 def logic_history_to_display(logic_history):
     """Converts logic history to display history format."""
     display_history = []
@@ -181,7 +205,9 @@ def has_history_for_user(user_id: str) -> bool:
     return len(get_history_list(user_id)) > 0
 
 
-def respond(user_message, display_history, logic_history, system_prompt, user_id, chat_service):
+async def respond(
+    user_message, display_history, logic_history, system_prompt, user_id, chat_service
+):
     """
     検証済みの入力に基づき、チャットの中核的な応答ロジック（LLM呼び出し、履歴管理）を実行します。
 
@@ -210,11 +236,18 @@ def respond(user_message, display_history, logic_history, system_prompt, user_id
     chat_service.logic_history = logic_history
     chat_service.system_prompt = system_prompt
 
-    for updated_display, updated_logic in chat_service.process_message(user_message):
+    async for updated_display, updated_logic, chunk in chat_service.process_message(user_message):
+        chunk_type = chunk.get("type")
+        if chunk_type in ["tool_call", "tool_result"]:
+            # Format and add tool response to display history
+            formatted = format_tool_response(chunk_type, chunk.get("content", {}))
+            if formatted:
+                updated_display[-1][1] += formatted
+
         yield updated_display, updated_display, updated_logic, chat_service
 
 
-def validate_and_respond(
+async def validate_and_respond(
     user_message, display_history, logic_history, system_prompt, user_id, chat_service
 ):
     """
@@ -226,6 +259,7 @@ def validate_and_respond(
         yield display_history, display_history, logic_history, chat_service
         return
 
-    yield from respond(
+    async for result in respond(
         user_message, display_history, logic_history, system_prompt, user_id, chat_service
-    )
+    ):
+        yield result
