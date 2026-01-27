@@ -12,7 +12,6 @@ from multi_llm_chat.llm_provider import ChatGPTProvider
 class TestChatGPTProvider:
     """Test ChatGPTProvider implementation"""
 
-    @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
     @patch("openai.OpenAI")
     def test_call_api_basic(self, mock_openai_class):
         """ChatGPTProvider.call_api should return a generator"""
@@ -33,7 +32,6 @@ class TestChatGPTProvider:
         list(result)  # Consume generator
         mock_client.chat.completions.create.assert_called_once()
 
-    @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
     @patch("openai.OpenAI")
     def test_call_api_yields_text_chunks(self, mock_openai_class):
         """ChatGPTProvider.call_api should yield unified text chunks."""
@@ -57,7 +55,6 @@ class TestChatGPTProvider:
             {"type": "text", "content": " world"},
         ]
 
-    @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
     @patch("openai.OpenAI")
     def test_call_api_with_tools(self, mock_openai_class):
         """ChatGPTProvider.call_api should accept tools parameter (Issue #80)."""

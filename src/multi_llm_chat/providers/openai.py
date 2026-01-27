@@ -24,7 +24,6 @@ from .base import LLMProvider
 logger = logging.getLogger(__name__)
 
 # Environment variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
 
@@ -243,10 +242,11 @@ class ChatGPTProvider(LLMProvider):
     the same client instance without additional locking.
     """
 
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self._client = None
-        if OPENAI_API_KEY:
-            self._client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        if self.api_key:
+            self._client = openai.OpenAI(api_key=self.api_key)
 
     @staticmethod
     def format_history(history):
@@ -415,7 +415,7 @@ class ChatGPTProvider(LLMProvider):
                 {"type": "text", "content": str} or
                 {"type": "tool_call", "content": {...}}
         """
-        if not OPENAI_API_KEY:
+        if not self.api_key:
             raise ValueError("OPENAI_API_KEY is not set")
 
         # Build messages for OpenAI format

@@ -88,7 +88,15 @@ graph TB
 
 #### 1.6 `src/multi_llm_chat/llm_provider.py`
 
-**責務**: 各LLMプロバイダー（Gemini, ChatGPT）の抽象化と実際のAPI呼び出しの実装（戦略パターン）。
+**責務**: 各LLMプロバイダーへのルーティング層。後方互換性を維持しつつ、`providers/`パッケージへ委譲。
+
+#### 1.7 `src/multi_llm_chat/providers/`
+
+**責務**: LLMプロバイダー実装の独立化（戦略パターン）。
+
+- `base.py`: `LLMProvider`抽象基底クラス（共通インターフェース定義）
+- `openai.py`: OpenAI/ChatGPT実装（`ChatGPTProvider`クラス）
+- Gemini実装は現在`llm_provider.py`に残存（今後の分離対象）
 
 ### 2. ビジネスロジック層 (Epic 017追加)
 

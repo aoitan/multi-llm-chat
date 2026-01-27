@@ -35,8 +35,7 @@ async def consume_async_gen(gen):
 class TestGeminiConcurrentSafety(unittest.TestCase):
     """Test concurrent safety for GeminiProvider"""
 
-    @patch("multi_llm_chat.llm_provider.genai")
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_gemini_concurrent_different_prompts(self, mock_genai):
         """Test that concurrent requests with different system prompts don't interfere"""
         import time
@@ -151,8 +150,7 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
                 f"Expected '{expected_prompt}' in response, got: {response}",
             )
 
-    @patch("multi_llm_chat.llm_provider.genai")
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_gemini_cache_thread_safety(self, mock_genai):
         """Test that cache operations are thread-safe during concurrent access"""
         import time
@@ -253,8 +251,7 @@ class TestChatGPTConcurrentSafety(unittest.TestCase):
     """Test concurrent safety for ChatGPTProvider"""
 
     @pytest.mark.skip(reason="Needs fixing for sync generator compatibility after merge with main")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
-    @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
+    @patch("multi_llm_chat.providers.openai.openai.OpenAI")
     def test_chatgpt_concurrent_requests(self, mock_openai_class):
         """Test that ChatGPT client handles concurrent requests safely"""
         # Setup mock client
@@ -323,8 +320,7 @@ class TestChatGPTConcurrentSafety(unittest.TestCase):
 class TestSessionScopedProviders(unittest.TestCase):
     """Test session-scoped provider isolation"""
 
-    @patch("multi_llm_chat.llm_provider.genai")
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_session_isolated_providers(self, mock_genai):
         """Test that different sessions have isolated provider instances"""
         # Setup mock
@@ -372,8 +368,7 @@ class TestSessionScopedProviders(unittest.TestCase):
             "Each session should have its own cached models, not share them",
         )
 
-    @patch("multi_llm_chat.llm_provider.genai")
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_provider_injection_in_chatservice(self, mock_genai):
         """Test that ChatService accepts provider injection for DI"""
         # Setup mock

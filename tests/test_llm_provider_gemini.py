@@ -20,10 +20,10 @@ class TestGeminiProvider:
     """Test GeminiProvider implementation"""
 
     def setup_method(self):
+        """Setup common test data"""
         self.history = [{"role": "user", "content": "Hello"}]
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_yields_text_chunks(self, mock_genai):
         """call_api should yield unified text dictionaries."""
         # Mock the Gemini API response stream
@@ -49,8 +49,7 @@ class TestGeminiProvider:
         assert result == expected
         mock_model.generate_content.assert_called_once()
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_yields_single_tool_call(self, mock_genai):
         """call_api should yield a unified tool_call dictionary for a single tool call."""
         # Mock the Gemini API response for a tool call
@@ -90,8 +89,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_yields_multiple_tool_calls(self, mock_genai):
         """call_api should yield multiple tool_call dictionaries."""
         # Mock stream for two separate tool calls
@@ -147,8 +145,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_allows_tool_call_without_args(self, mock_genai):
         """call_api should allow tool calls with empty args."""
         fc1 = MagicMock()
@@ -179,8 +176,7 @@ class TestGeminiProvider:
             }
         ]
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_handles_mixed_text_and_tool_call(self, mock_genai):
         """call_api should handle responses with both text and tool calls."""
         text_part = MagicMock(text="Thinking about it...", parts=[])
@@ -221,8 +217,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_handles_chunk_text_value_error(self, mock_genai):
         """call_api should handle chunks that raise on .text access."""
 
@@ -268,8 +263,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_maps_tool_calls_by_index(self, mock_genai):
         """call_api should map tool call args to matching indexed calls."""
         fc_name_a = MagicMock()
@@ -326,8 +320,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_maps_tool_calls_without_index(self, mock_genai):
         """call_api should map tool call args in the same order when indexes are missing."""
         fc_name_a = MagicMock()
@@ -380,8 +373,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_handles_interleaved_parallel_tool_calls(self, mock_genai):
         """並列ツール呼び出しでパーツが交互に到着する場合のテスト"""
         # Simulate interleaved stream: name_a -> name_b -> args_b -> args_a
@@ -441,8 +433,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_finalizes_pending_calls_once_on_error(self, mock_genai):
         """例外発生時は未完のツール呼び出しを出力しない（Issue #79 Review Fix）"""
 
@@ -480,8 +471,7 @@ class TestGeminiProvider:
         tool_calls = [r for r in results if r.get("type") == "tool_call"]
         assert len(tool_calls) == 0, "No tool calls should be emitted on error"
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_handles_name_and_args_in_same_chunk(self, mock_genai):
         """nameとargsが同一チャンクで到着した場合の処理テスト (Critical Fix A1)"""
         # First tool call with both name and args in single chunk
@@ -523,8 +513,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_call_api_handles_mixed_chunk_patterns(self, mock_genai):
         """複数の順次ツール呼び出しでチャンクパターンが混在するケース (Critical Fix A1)"""
         # tool_a: name+args in same chunk
@@ -610,8 +599,7 @@ class TestGeminiProvider:
         assert "input_tokens" in result
         assert "max_tokens" in result
 
-    @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.genai")
+    @patch("multi_llm_chat.providers.gemini.genai")
     def test_model_cache(self, mock_genai):
         """GeminiProvider should cache model instances based on system prompt"""
         # Ensure GenerativeModel returns a new mock each time it's called

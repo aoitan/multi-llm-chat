@@ -243,7 +243,11 @@ src/multi_llm_chat/
 ├── history_utils.py # 履歴整形ユーティリティ
 ├── compression.py   # 履歴圧縮ロジック
 ├── validation.py    # 検証ロジック
-├── llm_provider.py  # LLMプロバイダー抽象化
+├── llm_provider.py  # LLMプロバイダー抽象化（ルーティング層）
+├── providers/       # LLMプロバイダー実装
+│   ├── base.py      # 共通インターフェース（LLMProvider抽象基底クラス）
+│   ├── openai.py    # OpenAI/ChatGPT実装
+│   └── __init__.py  # パッケージ公開API
 ├── cli.py           # CLIインターフェース
 ├── webui.py         # Web UIインターフェース
 ├── app.py           # 互換性レイヤー
