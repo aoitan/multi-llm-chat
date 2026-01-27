@@ -492,11 +492,20 @@ async def execute_with_tools_stream(
                             "type": "tool_result",
                             "name": tc.get("name"),
                             "content": error_text,
+                            # tool_call_id is required; use fallback if missing (defensive)
                             "tool_call_id": tc.get("tool_call_id") or tc.get("name") or "unknown",
                         }
                         for tc in tool_calls_in_turn
                     ],
                 }
+                # Warn if any tool_call_id is missing
+                for tc in tool_calls_in_turn:
+                    if not tc.get("tool_call_id"):
+                        logger.warning(
+                            "Tool call missing tool_call_id during timeout; "
+                            "using fallback (name=%s)",
+                            tc.get("name"),
+                        )
                 _validate_history_entry(tool_error_entry)
                 working_history.append(tool_error_entry)
                 error_chunk = {"type": "text", "content": f"\n{error_text}"}
@@ -579,11 +588,15 @@ async def execute_with_tools_stream(
                 "content": [],
             }
             for tr in tool_results:
+                if not tr.get("tool_call_id"):
+                    logger.warning(
+                        "Tool result missing tool_call_id; using fallback (name=%s)", tr.get("name")
+                    )
                 tool_result_item = {
                     "type": "tool_result",
                     "name": tr.get("name"),
                     "content": tr["content"],
-                    # tool_call_id is required; fallback to name if missing (shouldn't happen)
+                    # tool_call_id is required; fallback to name if missing (defensive)
                     "tool_call_id": tr.get("tool_call_id") or tr.get("name") or "unknown",
                 }
                 tool_entry["content"].append(tool_result_item)

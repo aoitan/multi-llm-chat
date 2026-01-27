@@ -212,9 +212,11 @@ async def test_execute_with_tools_missing_mcp_client():
 
     assert any("MCPクライアントが設定されていません" in str(c.get("content", "")) for c in chunks)
 
-    # Verify history_delta has role 'tool' for tool_result
-    assert any(h.get("role") == "tool" for h in result.history_delta)
-    error_msg = result.history_delta[-1]["content"][0]["content"]
+    # Verify history_delta structure: assistant (tool_call) + tool (error) expected
+    assert len(result.history_delta) >= 2, "Expected at least assistant + tool entries"
+    tool_entries = [h for h in result.history_delta if h.get("role") == "tool"]
+    assert len(tool_entries) >= 1, "Expected at least one tool entry with error"
+    error_msg = tool_entries[0]["content"][0]["content"]
     assert "MCPクライアントが設定されていません" in error_msg
 
 

@@ -145,6 +145,14 @@ def parse_openai_tool_call(tool_call: dict) -> Dict[str, Any]:
     args_json = function.get("arguments", "{}")
     tool_call_id = tool_call.get("id")
 
+    # OpenAI spec requires 'id' field; warn if missing
+    if not tool_call_id:
+        logger.warning(
+            "OpenAI tool_call missing required 'id' field (name=%s). "
+            "This may indicate an invalid API response.",
+            name,
+        )
+
     # Parse JSON arguments
     try:
         arguments = json.loads(args_json) if args_json else {}
@@ -935,8 +943,15 @@ class ChatGPTProvider(LLMProvider):
                     if tool_call_items:
                         valid_tool_calls = []
                         for item in tool_call_items:
-                            if not item.get("tool_call_id") or not item.get("name"):
-                                logger.warning("Skipping incomplete tool_call in history: %s", item)
+                            if not item.get("tool_call_id"):
+                                logger.warning(
+                                    "Skipping tool_call without required tool_call_id (name=%s). "
+                                    "This may indicate invalid history data.",
+                                    item.get("name"),
+                                )
+                                continue
+                            if not item.get("name"):
+                                logger.warning("Skipping tool_call without name: %s", item)
                                 continue
                             valid_tool_calls.append(
                                 {
@@ -969,7 +984,11 @@ class ChatGPTProvider(LLMProvider):
                 # 3-2. Tool result messages (if any)
                 for item in tool_result_items:
                     if not item.get("tool_call_id"):
-                        logger.warning("Skipping tool_result without tool_call_id: %s", item)
+                        logger.warning(
+                            "Skipping tool_result without required tool_call_id (name=%s). "
+                            "OpenAI spec requires tool_call_id for tool role messages.",
+                            item.get("name"),
+                        )
                         continue
                     chatgpt_history.append(
                         {

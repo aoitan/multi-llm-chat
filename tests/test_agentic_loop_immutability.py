@@ -157,9 +157,14 @@ async def test_history_delta_contains_only_new_entries():
     # Execute
     result = await execute_with_tools(mock_provider, original_history, mcp_client=mock_mcp)
 
-    # history_delta should contain only new entries (not the original 2)
-    assert len(result.history_delta) >= 2  # At least: assistant (tool_call) + tool (result)
-    assert result.history_delta[0]["role"] in ["assistant", "tool"]
+    # history_delta: assistant (tool_call) + tool (result) + assistant (final)
+    assert len(result.history_delta) == 3, f"Expected 3 entries, got {len(result.history_delta)}"
+    assert result.history_delta[0]["role"] == "assistant"  # First: assistant with tool_call
+    assert any(
+        item.get("type") == "tool_call" for item in result.history_delta[0].get("content", [])
+    )
+    assert result.history_delta[1]["role"] == "tool"  # Second: tool result
+    assert result.history_delta[2]["role"] == "assistant"  # Third: final assistant response
     assert result.final_text == "Weather is 25°C"
 
 

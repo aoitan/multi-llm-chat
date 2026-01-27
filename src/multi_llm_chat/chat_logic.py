@@ -215,15 +215,19 @@ class ChatService:
                     yield self.display_history, self.logic_history, chunk
 
                 # Update history with delta
-                if result:
-                    if mention == "all":
-                        # For @all, extend logic_history with new entries
-                        self.logic_history.extend(result.history_delta)
-                    else:
-                        # For specific mention, input_history is self.logic_history
-                        # execute_with_tools_stream no longer mutates history,
-                        # so we extend it explicitly
-                        input_history.extend(result.history_delta)
+                if result is None:
+                    logger.warning(
+                        "execute_with_tools_stream did not yield AgenticLoopResult; "
+                        "history not updated"
+                    )
+                elif mention == "all":
+                    # For @all, extend logic_history with new entries
+                    self.logic_history.extend(result.history_delta)
+                else:
+                    # For specific mention, input_history is self.logic_history
+                    # execute_with_tools_stream no longer mutates history,
+                    # so we extend it explicitly
+                    input_history.extend(result.history_delta)
 
                 if not any_yielded:
                     error_message = (
