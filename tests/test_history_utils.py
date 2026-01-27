@@ -1,11 +1,14 @@
 import logging
 
+import pytest
+
 from multi_llm_chat.history_utils import (
     content_to_text,
     get_provider_name_from_model,
     history_contains_tools,
     normalize_history_turns,
     prepare_request,
+    validate_history_entry,
 )
 
 
@@ -162,3 +165,102 @@ def test_history_contains_tools_without_tools():
 def test_history_contains_tools_empty_history():
     """Empty history should return False"""
     assert history_contains_tools([]) is False
+
+
+# =============================================================================
+# validate_history_entry() tests
+# =============================================================================
+
+
+def test_validate_history_entry_valid_user_string_content():
+    """Valid user entry with string content should pass"""
+    entry = {"role": "user", "content": "Hello"}
+    validate_history_entry(entry)  # Should not raise
+
+
+def test_validate_history_entry_valid_user_structured_content():
+    """Valid user entry with structured content should pass"""
+    entry = {"role": "user", "content": [{"type": "text", "content": "Hello"}]}
+    validate_history_entry(entry)  # Should not raise
+
+
+def test_validate_history_entry_valid_tool_role():
+    """Valid tool role entry should pass validation"""
+    entry = {
+        "role": "tool",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_123",
+                "content": "20°C",
+            }
+        ],
+    }
+    validate_history_entry(entry)  # Should not raise
+
+
+def test_validate_history_entry_invalid_role():
+    """Invalid role should raise ValueError"""
+    entry = {"role": "invalid_role", "content": "test"}
+    with pytest.raises(ValueError, match="Invalid role"):
+        validate_history_entry(entry)
+
+
+def test_validate_history_entry_missing_content():
+    """Missing content field should raise ValueError"""
+    entry = {"role": "user"}
+    with pytest.raises(ValueError, match="must have 'content' field"):
+        validate_history_entry(entry)
+
+
+def test_validate_history_entry_not_dict():
+    """Non-dict entry should raise ValueError"""
+    with pytest.raises(ValueError, match="must be dict"):
+        validate_history_entry("not a dict")
+
+
+def test_validate_history_entry_tool_role_invalid_content_type():
+    """Invalid content type in tool role should raise"""
+    entry = {
+        "role": "tool",
+        "content": [
+            {"type": "text", "content": "invalid"}  # ← type should be "tool_result"
+        ],
+    }
+    with pytest.raises(ValueError, match="can only contain type='tool_result'"):
+        validate_history_entry(entry)
+
+
+def test_validate_history_entry_tool_role_missing_tool_call_id():
+    """Missing tool_call_id in tool_result should raise"""
+    entry = {
+        "role": "tool",
+        "content": [
+            {
+                "type": "tool_result",
+                # Missing "tool_call_id"
+                "content": "OK",
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="must have 'tool_call_id' field"):
+        validate_history_entry(entry)
+
+
+def test_validate_history_entry_tool_role_empty_content():
+    """Empty content in tool role should raise"""
+    entry = {"role": "tool", "content": []}
+    with pytest.raises(ValueError, match="must have non-empty content"):
+        validate_history_entry(entry)
+
+
+def test_validate_history_entry_tool_role_non_dict_item():
+    """Non-dict items in tool content should raise"""
+    entry = {
+        "role": "tool",
+        "content": [
+            "string_instead_of_dict"  # ← Should be dict
+        ],
+    }
+    with pytest.raises(ValueError, match="must be dict"):
+        validate_history_entry(entry)

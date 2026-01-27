@@ -94,9 +94,6 @@ class ChatService:
         """Lazy-initialized Gemini provider"""
         if self._gemini_provider is None:
             self._gemini_provider = create_provider("gemini")
-        # Add name attribute for execute_with_tools
-        if not hasattr(self._gemini_provider, "name"):
-            self._gemini_provider.name = "gemini"
         return self._gemini_provider
 
     @property
@@ -104,9 +101,6 @@ class ChatService:
         """Lazy-initialized ChatGPT provider"""
         if self._chatgpt_provider is None:
             self._chatgpt_provider = create_provider("chatgpt")
-        # Add name attribute for execute_with_tools
-        if not hasattr(self._chatgpt_provider, "name"):
-            self._chatgpt_provider.name = "chatgpt"
         return self._chatgpt_provider
 
     def _handle_api_error(self, error, provider_name):
@@ -147,7 +141,7 @@ class ChatService:
         """
         import copy
 
-        from .core import execute_with_tools
+        from .core import execute_with_tools_stream
 
         mention = parse_mention(user_message)
 
@@ -190,19 +184,26 @@ class ChatService:
                 input_history = self.logic_history
 
             any_yielded = False
+            result = None
 
             try:
-                # Execute with tools and get result
-                result = await execute_with_tools(
+                # Execute with tools and stream chunks in real-time
+                async for item in execute_with_tools_stream(
                     provider,
                     input_history,
                     self.system_prompt,
                     mcp_client=self.mcp_client,
                     tools=tools,
-                )
+                ):
+                    # Check if this is the final result
+                    from .core import AgenticLoopResult
 
-                # Stream chunks from result (buffered streaming)
-                for chunk in result.chunks:
+                    if isinstance(item, AgenticLoopResult):
+                        result = item
+                        continue
+
+                    # This is a streaming chunk
+                    chunk = item
                     any_yielded = True
                     chunk_type = chunk.get("type")
                     content = chunk.get("content", "")
@@ -214,14 +215,15 @@ class ChatService:
                     yield self.display_history, self.logic_history, chunk
 
                 # Update history with delta
-                if mention == "all":
-                    # For @all, extend logic_history with new entries
-                    self.logic_history.extend(result.history_delta)
-                else:
-                    # For specific mention, input_history is self.logic_history
-                    # execute_with_tools no longer mutates history,
-                    # so we extend it explicitly
-                    input_history.extend(result.history_delta)
+                if result:
+                    if mention == "all":
+                        # For @all, extend logic_history with new entries
+                        self.logic_history.extend(result.history_delta)
+                    else:
+                        # For specific mention, input_history is self.logic_history
+                        # execute_with_tools_stream no longer mutates history,
+                        # so we extend it explicitly
+                        input_history.extend(result.history_delta)
 
                 if not any_yielded:
                     error_message = (
@@ -281,7 +283,12 @@ class ChatService:
             )
 
         if content_parts:
-            self.logic_history.append({"role": "tool", "content": content_parts})
+            self.logic_history.append(
+                {
+                    "role": "tool",
+                    "content": content_parts,
+                }
+            )
 
 
 def main():

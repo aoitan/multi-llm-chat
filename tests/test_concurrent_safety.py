@@ -55,16 +55,11 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
             mock_chunk = MagicMock()
             mock_chunk.parts = [mock_part]
 
-            async def mock_aiter(instance=None):
-                yield mock_chunk
+            # Mock synchronous generate_content (used by asyncio.to_thread)
+            def mock_generate_content(*args, **kwargs):
+                return iter([mock_chunk])
 
-            mock_response = MagicMock()
-            mock_response.__aiter__ = mock_aiter
-
-            async def mock_generate_content_async(*args, **kwargs):
-                return mock_response
-
-            mock_model.generate_content_async = mock_generate_content_async
+            mock_model.generate_content = mock_generate_content
 
             # Track creation without lock to detect race conditions
             created_models.append(mock_model)
@@ -162,16 +157,11 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
         def create_slow_model(model_name, system_instruction=None):
             mock_model = MagicMock()
 
-            async def mock_aiter(instance=None):
-                yield MagicMock(text="response")
+            # Mock synchronous generate_content (used by asyncio.to_thread)
+            def mock_generate_content(*args, **kwargs):
+                return iter([MagicMock(text="response")])
 
-            mock_response = MagicMock()
-            mock_response.__aiter__ = mock_aiter
-
-            async def mock_generate_content_async(*args, **kwargs):
-                return mock_response
-
-            mock_model.generate_content_async = mock_generate_content_async
+            mock_model.generate_content = mock_generate_content
 
             # Simulate model creation taking time to increase chance of race
             time.sleep(0.02)
@@ -319,16 +309,11 @@ class TestSessionScopedProviders(unittest.TestCase):
             # Each model has unique ID to track instance isolation
             mock_model._test_id = id(mock_model)
 
-            async def mock_aiter(instance=None):
-                yield MagicMock(text="response")
+            # Mock synchronous generate_content (used by asyncio.to_thread)
+            def mock_generate_content(*args, **kwargs):
+                return iter([MagicMock(text="response")])
 
-            mock_response = MagicMock()
-            mock_response.__aiter__ = mock_aiter
-
-            async def mock_generate_content_async(*args, **kwargs):
-                return mock_response
-
-            mock_model.generate_content_async = mock_generate_content_async
+            mock_model.generate_content = mock_generate_content
             return mock_model
 
         mock_model_class.side_effect = create_mock_model
@@ -370,16 +355,11 @@ class TestSessionScopedProviders(unittest.TestCase):
 
         mock_model = MagicMock()
 
-        async def mock_aiter(instance=None):
-            yield MagicMock(text="response")
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            return iter([MagicMock(text="response")])
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_model_class.return_value = mock_model
 
         # Create a provider instance
@@ -406,7 +386,6 @@ class TestSessionScopedProviders(unittest.TestCase):
 
         # Verify the injected provider's model was used
         # Since we use side_effect or assign directly, we check if our mock was called
-        # mock_model.generate_content_async is our async function
 
 
 if __name__ == "__main__":

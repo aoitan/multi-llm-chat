@@ -3,7 +3,68 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 LLM_ROLES = {"gemini", "chatgpt"}
+TOOL_ROLES = {"tool"}
+ALL_ROLES = LLM_ROLES | {"user"} | TOOL_ROLES
 logger = logging.getLogger(__name__)
+
+
+def validate_history_entry(entry: Dict[str, Any]) -> None:
+    """Validate a single history entry for structural correctness.
+
+    Args:
+        entry: History entry to validate
+
+    Raises:
+        ValueError: If entry structure is invalid
+
+    Examples:
+        >>> validate_history_entry({"role": "user", "content": "hello"})
+        # Valid - no exception
+
+        >>> validate_history_entry({"role": "tool", "content": [
+        ...     {"type": "tool_result", "tool_call_id": "call_123", "content": "OK"}
+        ... ]})
+        # Valid - no exception
+
+        >>> validate_history_entry({"role": "invalid_role", "content": "test"})
+        # Raises ValueError
+    """
+    if not isinstance(entry, dict):
+        raise ValueError(f"History entry must be dict, got {type(entry).__name__}")
+
+    role = entry.get("role")
+    if role not in ALL_ROLES:
+        raise ValueError(f"Invalid role: '{role}'. Must be one of {ALL_ROLES}")
+
+    content = entry.get("content")
+    if content is None:
+        raise ValueError("History entry must have 'content' field")
+
+    # String content is legacy but still allowed (will be deprecated in v2.0.0)
+    if isinstance(content, str):
+        return
+
+    # Structured content must be a list
+    if not isinstance(content, list):
+        raise ValueError(f"Structured content must be list, got {type(content).__name__}")
+
+    # Special validation for role: "tool"
+    if role == "tool":
+        if not content:
+            raise ValueError("role='tool' must have non-empty content")
+        for i, item in enumerate(content):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"role='tool' content[{i}] must be dict, got {type(item).__name__}"
+                )
+            item_type = item.get("type")
+            if item_type != "tool_result":
+                raise ValueError(
+                    f"role='tool' can only contain type='tool_result', "
+                    f"got type='{item_type}' at content[{i}]"
+                )
+            if not item.get("tool_call_id"):
+                raise ValueError(f"tool_result must have 'tool_call_id' field at content[{i}]")
 
 
 def history_contains_tools(history: List[Dict[str, Any]]) -> bool:

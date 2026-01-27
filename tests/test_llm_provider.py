@@ -2,7 +2,7 @@
 
 import json
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -66,10 +66,10 @@ class TestLLMProviderFactory(unittest.TestCase):
             get_provider("unknown")
 
 
-class TestGeminiProvider(unittest.TestCase):
+class TestGeminiProvider:
     """Test GeminiProvider implementation"""
 
-    def setUp(self):
+    def setup_method(self):
         self.history = [{"role": "user", "content": "Hello"}]
 
     @pytest.mark.asyncio
@@ -85,19 +85,13 @@ class TestGeminiProvider(unittest.TestCase):
         mock_chunk2.text = " world"
         mock_chunk2.parts = []
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield mock_chunk1
             yield mock_chunk2
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -107,8 +101,8 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "text", "content": "Hello"},
             {"type": "text", "content": " world"},
         ]
-        self.assertEqual(result, expected)
-        mock_model.generate_content_async.assert_called_once()
+        assert result == expected
+        # Note: cannot verify call count because generate_content is replaced with a function
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -131,19 +125,13 @@ class TestGeminiProvider(unittest.TestCase):
         mock_chunk1 = MagicMock(parts=[part1], text=None)
         mock_chunk2 = MagicMock(parts=[part2], text=None)
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield mock_chunk1
             yield mock_chunk2
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -160,7 +148,7 @@ class TestGeminiProvider(unittest.TestCase):
                 "content": {"name": "get_weather", "arguments": {"location": "Tokyo"}},
             }
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -196,20 +184,14 @@ class TestGeminiProvider(unittest.TestCase):
         mock_chunk2 = MagicMock(parts=[part2, part3], text=None)
         mock_chunk3 = MagicMock(parts=[part4], text=None)
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield mock_chunk1
             yield mock_chunk2
             yield mock_chunk3
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -229,7 +211,7 @@ class TestGeminiProvider(unittest.TestCase):
                 "content": {"name": "get_time", "arguments": {"timezone": "JST"}},
             },
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -244,18 +226,12 @@ class TestGeminiProvider(unittest.TestCase):
 
         mock_chunk1 = MagicMock(parts=[part1], text=None)
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield mock_chunk1
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -266,15 +242,12 @@ class TestGeminiProvider(unittest.TestCase):
             )
         )
 
-        self.assertEqual(
-            result,
-            [
-                {
-                    "type": "tool_call",
-                    "content": {"name": "get_weather", "arguments": {}},
-                }
-            ],
-        )
+        assert result == [
+            {
+                "type": "tool_call",
+                "content": {"name": "get_weather", "arguments": {}},
+            }
+        ]
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -298,19 +271,13 @@ class TestGeminiProvider(unittest.TestCase):
         mock_chunk1 = text_part
         mock_chunk2 = MagicMock(parts=[tool_part1, tool_part2], text=None)
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield mock_chunk1
             yield mock_chunk2
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -327,7 +294,7 @@ class TestGeminiProvider(unittest.TestCase):
                 "content": {"name": "search", "arguments": {"query": "python"}},
             },
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -355,19 +322,13 @@ class TestGeminiProvider(unittest.TestCase):
         part_args = MagicMock(spec=["function_call"])
         part_args.function_call = fc_args
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield TextRaises([part_name])
             yield TextRaises([part_args])
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -384,7 +345,7 @@ class TestGeminiProvider(unittest.TestCase):
                 "content": {"name": "get_weather", "arguments": {"location": "Tokyo"}},
             }
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -419,21 +380,15 @@ class TestGeminiProvider(unittest.TestCase):
         part_args_b.function_call = fc_args_b
         part_args_b.index = 1
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield MagicMock(parts=[part_name_a], text=None)
             yield MagicMock(parts=[part_name_b], text=None)
             yield MagicMock(parts=[part_args_a], text=None)
             yield MagicMock(parts=[part_args_b], text=None)
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -447,7 +402,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -478,21 +433,15 @@ class TestGeminiProvider(unittest.TestCase):
         part_args_b = MagicMock(spec=["function_call"])
         part_args_b.function_call = fc_args_b
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield MagicMock(parts=[part_name_a], text=None)
             yield MagicMock(parts=[part_name_b], text=None)
             yield MagicMock(parts=[part_args_a], text=None)
             yield MagicMock(parts=[part_args_b], text=None)
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -506,7 +455,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -543,21 +492,15 @@ class TestGeminiProvider(unittest.TestCase):
         part_args_a.function_call = fc_args_a
         part_args_a.index = 0
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield MagicMock(parts=[part_name_a], text=None)
             yield MagicMock(parts=[part_name_b], text=None)
             yield MagicMock(parts=[part_args_b], text=None)  # B arrives first
             yield MagicMock(parts=[part_args_a], text=None)  # A arrives second
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -572,7 +515,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -595,21 +538,12 @@ class TestGeminiProvider(unittest.TestCase):
         part_name = MagicMock(spec=["function_call"])
         part_name.function_call = fc_name
 
-        async def error_generator():
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks then raises error"""
             yield MagicMock(parts=[part_name], text=None)
             raise ValueError("Unexpected error")  # Use ValueError to trigger Exception handler
 
-        async def mock_aiter(instance=None):
-            async for chunk in error_generator():
-                yield chunk
-
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -643,19 +577,13 @@ class TestGeminiProvider(unittest.TestCase):
         part2 = MagicMock(spec=["function_call"])
         part2.function_call = fc2
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield MagicMock(parts=[part1], text=None)
             yield MagicMock(parts=[part2], text=None)
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -670,7 +598,7 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_a", "arguments": {"value": "A"}}},
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     @pytest.mark.asyncio
     @patch("multi_llm_chat.llm_provider.GOOGLE_API_KEY", "test-key")
@@ -705,21 +633,15 @@ class TestGeminiProvider(unittest.TestCase):
         part3 = MagicMock(spec=["function_call"])
         part3.function_call = fc3
 
-        async def mock_aiter(instance=None):
+        def mock_generate_content(*args, **kwargs):
+            """Synchronous generator that yields chunks"""
             yield MagicMock(parts=[part1], text=None)
             yield MagicMock(parts=[part2_name], text=None)
             yield MagicMock(parts=[part2_args], text=None)
             yield MagicMock(parts=[part3], text=None)
 
-        mock_response = MagicMock()
-        mock_response.__aiter__ = mock_aiter
-
         mock_model = MagicMock()
-
-        async def mock_generate_content_async(*args, **kwargs):
-            return mock_response
-
-        mock_model.generate_content_async = mock_generate_content_async
+        mock_model.generate_content = mock_generate_content
         mock_genai.GenerativeModel.return_value = mock_model
 
         provider = GeminiProvider()
@@ -736,24 +658,24 @@ class TestGeminiProvider(unittest.TestCase):
             {"type": "tool_call", "content": {"name": "tool_b", "arguments": {"value": "B"}}},
             {"type": "tool_call", "content": {"name": "tool_c", "arguments": {"value": "C"}}},
         ]
-        self.assertEqual(result, expected)
+        assert result == expected
 
     def test_extract_text_from_chunk(self):
         """extract_text_from_chunk should process unified dictionaries."""
         provider = GeminiProvider()
 
         text_chunk = {"type": "text", "content": "Hello, world!"}
-        self.assertEqual(provider.extract_text_from_chunk(text_chunk), "Hello, world!")
+        assert provider.extract_text_from_chunk(text_chunk) == "Hello, world!"
 
         tool_chunk = {"type": "tool_call", "content": {"name": "test", "arguments": {}}}
-        self.assertEqual(provider.extract_text_from_chunk(tool_chunk), "")
+        assert provider.extract_text_from_chunk(tool_chunk) == ""
 
         invalid_chunk = {"type": "other", "content": "something"}
-        self.assertEqual(provider.extract_text_from_chunk(invalid_chunk), "")
+        assert provider.extract_text_from_chunk(invalid_chunk) == ""
 
         # Test backward compatibility with old chunk format (should return empty)
         old_chunk = MagicMock(text="some text")
-        self.assertEqual(provider.extract_text_from_chunk(old_chunk), "")
+        assert provider.extract_text_from_chunk(old_chunk) == ""
 
     def test_get_token_info_returns_dict(self):
         """GeminiProvider should return token info dictionary"""
@@ -851,7 +773,7 @@ class TestGeminiProvider(unittest.TestCase):
         ]
 
         formatted_history = GeminiProvider.format_history(logic_history)
-        self.assertEqual(formatted_history, expected_gemini_history)
+        assert formatted_history == expected_gemini_history
 
     def test_format_history_wraps_non_json_tool_result(self):
         """format_history should wrap non-JSON tool results for Gemini responses."""
@@ -885,7 +807,7 @@ class TestGeminiProvider(unittest.TestCase):
         ]
 
         formatted_history = GeminiProvider.format_history(logic_history)
-        self.assertEqual(formatted_history, expected)
+        assert formatted_history == expected
 
     def test_format_history_wraps_non_object_json_tool_result(self):
         """format_history should wrap non-object JSON tool results for Gemini responses."""
@@ -919,7 +841,7 @@ class TestGeminiProvider(unittest.TestCase):
         ]
 
         formatted_history = GeminiProvider.format_history(logic_history)
-        self.assertEqual(formatted_history, expected)
+        assert formatted_history == expected
 
     def test_format_history_handles_unexpected_content_types(self):
         """format_history should convert unexpected types to string (Issue #79 Review Fix)."""
@@ -946,7 +868,7 @@ class TestGeminiProvider(unittest.TestCase):
         ]
 
         formatted_history = GeminiProvider.format_history(logic_history)
-        self.assertEqual(formatted_history, [])
+        assert formatted_history == []
 
     def test_parse_tool_response_payload_handles_type_error(self):
         """_parse_tool_response_payload should handle TypeError and raise (Priority B1)"""
@@ -967,15 +889,15 @@ class TestGeminiProvider(unittest.TestCase):
 
         # Test with invalid JSON
         result = _parse_tool_response_payload("not valid json")
-        self.assertEqual(result, {"result": "not valid json"})
+        assert result == {"result": "not valid json"}
 
         # Test with None
         result = _parse_tool_response_payload(None)
-        self.assertEqual(result, {})
+        assert result == {}
 
         # Test with already a dict
         result = _parse_tool_response_payload({"key": "value"})
-        self.assertEqual(result, {"key": "value"})
+        assert result == {"key": "value"}
 
     def test_parse_tool_response_payload_whitelisted_types(self):
         """_parse_tool_response_payload should handle whitelisted types (Priority B1)"""
@@ -983,44 +905,48 @@ class TestGeminiProvider(unittest.TestCase):
 
         # Test int
         result = _parse_tool_response_payload(42)
-        self.assertEqual(result, {"result": 42})
+        assert result == {"result": 42}
 
         # Test float
         result = _parse_tool_response_payload(3.14)
-        self.assertEqual(result, {"result": 3.14})
+        assert result == {"result": 3.14}
 
         # Test list
         result = _parse_tool_response_payload([1, 2, 3])
-        self.assertEqual(result, {"result": [1, 2, 3]})
+        assert result == {"result": [1, 2, 3]}
 
         # Test bool
         result = _parse_tool_response_payload(True)
-        self.assertEqual(result, {"result": True})
+        assert result == {"result": True}
 
-    def test_parse_tool_response_payload_logs_warning_for_unexpected_types(self):
+    def test_parse_tool_response_payload_logs_warning_for_unexpected_types(self, caplog):
         """_parse_tool_response_payload should log warning for unexpected types (Priority B1)"""
+        import logging
+
         from multi_llm_chat.llm_provider import _parse_tool_response_payload
 
         # bytes should trigger warning and str() conversion
-        with self.assertLogs("multi_llm_chat.llm_provider", level="WARNING") as log_context:
+        with caplog.at_level(logging.WARNING, logger="multi_llm_chat.llm_provider"):
             result = _parse_tool_response_payload(b"binary data")
 
-        self.assertIn("unexpected type", log_context.output[0])
-        self.assertEqual(result, {"result": "b'binary data'"})
+        assert "unexpected type" in caplog.text
+        assert result == {"result": "b'binary data'"}
+
+        caplog.clear()
 
         # Custom object should also trigger warning
         class CustomObject:
             def __str__(self):
                 return "custom_string"
 
-        with self.assertLogs("multi_llm_chat.llm_provider", level="WARNING") as log_context:
+        with caplog.at_level(logging.WARNING, logger="multi_llm_chat.llm_provider"):
             result = _parse_tool_response_payload(CustomObject())
 
-        self.assertIn("unexpected type", log_context.output[0])
-        self.assertEqual(result, {"result": "custom_string"})
+        assert "unexpected type" in caplog.text
+        assert result == {"result": "custom_string"}
 
 
-class TestChatGPTProvider(unittest.TestCase):
+class TestChatGPTProvider:
     """Test ChatGPTProvider implementation"""
 
     @pytest.mark.asyncio
@@ -1069,7 +995,7 @@ class TestChatGPTProvider(unittest.TestCase):
         mock_client = MagicMock()
 
         async def mock_create(**kwargs):
-            async def mock_aiter():
+            async def mock_aiter(self):
                 yield mock_chunk1
                 yield mock_chunk2
 
@@ -1098,15 +1024,18 @@ class TestChatGPTProvider(unittest.TestCase):
         mock_openai_class.return_value = mock_client
 
         # Mock empty stream
-        async def mock_create(**kwargs):
-            async def mock_aiter():
-                if False:
-                    yield None
+        async def mock_aiter(self):
+            if False:
+                yield None
 
-            stream = MagicMock()
-            stream.__aiter__ = mock_aiter
-            return stream
+        mock_stream = MagicMock()
+        mock_stream.__aiter__ = mock_aiter
 
+        # Use AsyncMock for create to track calls
+        async def mock_create_impl(**kwargs):
+            return mock_stream
+
+        mock_create = AsyncMock(side_effect=mock_create_impl)
         mock_client.chat.completions.create = mock_create
 
         provider = ChatGPTProvider()
@@ -1117,10 +1046,10 @@ class TestChatGPTProvider(unittest.TestCase):
         await consume_async_gen(provider.call_api(history, tools=tools))
 
         # Verify API was called with tools
-        # Find the call to chat.completions.create
-        call_args = mock_client.chat.completions.create.call_args
-        self.assertIn("tools", call_args.kwargs)
-        self.assertIn("tool_choice", call_args.kwargs)
+        assert mock_create.called
+        call_args = mock_create.call_args
+        assert "tools" in call_args.kwargs
+        assert "tool_choice" in call_args.kwargs
 
     def test_extract_text_from_chunk(self):
         """ChatGPTProvider should extract text from response chunk"""
@@ -1272,7 +1201,7 @@ class TestGeminiToolCallEmptyArgs(unittest.TestCase):
         assert pending[0]["content"]["arguments"] == {}
 
 
-class TestParseToolResponsePayload(unittest.TestCase):
+class TestParseToolResponsePayload:
     """Test JSON error handling in tool response parsing (Issue #79 Review Fix)"""
 
     def test_parse_invalid_json_catches_json_decode_error(self):

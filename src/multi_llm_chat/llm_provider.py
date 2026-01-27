@@ -4,6 +4,7 @@ This module provides a unified interface for different LLM providers (Gemini, Ch
 making it easy to add new providers without modifying existing code.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -28,7 +29,11 @@ except ImportError:
 from .history_utils import content_to_text
 from .token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
 
-load_dotenv()
+# Load .env with override protection (only if not already loaded)
+# This ensures safety even when llm_provider is imported directly
+if not os.getenv("_MULTI_LLM_CHAT_ENV_LOADED"):
+    load_dotenv()
+    os.environ["_MULTI_LLM_CHAT_ENV_LOADED"] = "1"
 
 logger = logging.getLogger(__name__)
 
@@ -519,6 +524,10 @@ class GeminiToolCallAssembler:
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
+    def __init__(self):
+        """Initialize provider with default name"""
+        self.name: str = "unknown"
+
     @abstractmethod
     async def call_api(
         self,
@@ -583,6 +592,8 @@ class GeminiProvider(LLMProvider):
     """Google Gemini LLM provider with thread-safe LRU caching for models"""
 
     def __init__(self):
+        super().__init__()  # 基底クラスの初期化を呼び出す
+        self.name = "gemini"  # プロバイダー名を明示的に設定
         self._default_model = None
         self._models_cache = OrderedDict()  # LRU cache: hash -> (prompt, model)
         self._cache_max_size = 10  # Limit cache size to prevent memory leak
@@ -780,11 +791,36 @@ class GeminiProvider(LLMProvider):
         stream_completed_successfully = False
 
         try:
-            response = await model.generate_content_async(
-                gemini_history, stream=True, tools=gemini_tools
-            )
+            # google.generativeai には非同期APIが存在しないため、
+            # 同期ストリーミングAPIを非同期ジェネレーターに変換
+            async def _async_wrapper():
+                """Wrap synchronous generator in async context"""
 
-            async for chunk in response:
+                def _generate():
+                    return model.generate_content(
+                        gemini_history,
+                        stream=True,
+                        tools=gemini_tools,
+                    )
+
+                # Execute synchronous generate_content in thread
+                response_stream = await asyncio.to_thread(_generate)
+
+                # Iterate through synchronous generator without blocking event loop
+                def get_next_chunk(stream):
+                    """Get next chunk from synchronous generator"""
+                    try:
+                        return next(stream)
+                    except StopIteration:
+                        return None
+
+                while True:
+                    chunk = await asyncio.to_thread(get_next_chunk, response_stream)
+                    if chunk is None:
+                        break
+                    yield chunk
+
+            async for chunk in _async_wrapper():
                 parts = getattr(chunk, "parts", None)
                 if parts:
                     for part in parts:
@@ -874,6 +910,8 @@ class ChatGPTProvider(LLMProvider):
     """
 
     def __init__(self):
+        super().__init__()  # 基底クラスの初期化を呼び出す
+        self.name = "chatgpt"  # プロバイダー名を明示的に設定
         self._client = None
         if OPENAI_API_KEY:
             self._client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)

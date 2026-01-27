@@ -134,11 +134,9 @@ async def test_execute_with_tools_timeout():
     mock_mcp = AsyncMock()
     mock_mcp.list_tools = AsyncMock(return_value=[])
 
-    # Execute with short timeout
-    result = await execute_with_tools(mock_provider, [], mcp_client=mock_mcp, timeout=0.5)
-
-    # Should set timed_out flag instead of raising
-    assert result.timed_out is True
+    # Execute with short timeout - should raise TimeoutError
+    with pytest.raises(TimeoutError, match="Execution exceeded timeout of 0.5 seconds"):
+        await execute_with_tools(mock_provider, [], mcp_client=mock_mcp, timeout=0.5)
 
 
 @pytest.mark.asyncio
@@ -214,7 +212,118 @@ async def test_execute_with_tools_missing_mcp_client():
 
     assert any("MCPクライアントが設定されていません" in str(c.get("content", "")) for c in chunks)
 
-    # Verify history_delta has role 'tool' with error message
-    assert any(h["role"] == "tool" for h in result.history_delta)
+    # Verify history_delta has role 'tool' for tool_result
+    assert any(h.get("role") == "tool" for h in result.history_delta)
     error_msg = result.history_delta[-1]["content"][0]["content"]
     assert "MCPクライアントが設定されていません" in error_msg
+
+
+@pytest.mark.asyncio
+async def test_execute_with_tools_stream_realtime_output():
+    """Test that execute_with_tools_stream yields chunks in real-time."""
+    import time
+
+    from multi_llm_chat.core import AgenticLoopResult, execute_with_tools_stream
+
+    # Mock provider
+    mock_provider = MagicMock()
+    mock_provider.name = "gemini"
+
+    # Mock provider returns chunks with delay to simulate streaming
+    async def delayed_chunks(*args, **kwargs):
+        for i in range(3):
+            await asyncio.sleep(0.1)  # 100ms delay per chunk
+            yield {"type": "text", "content": f"chunk{i}"}
+
+    mock_provider.call_api = delayed_chunks
+
+    history = [{"role": "user", "content": [{"type": "text", "content": "test"}]}]
+
+    start_time = time.time()
+    chunk_times = []
+    result = None
+
+    async for item in execute_with_tools_stream(mock_provider, history, mcp_client=None):
+        if isinstance(item, AgenticLoopResult):
+            result = item
+        else:
+            chunk_times.append(time.time() - start_time)
+
+    # Chunks should be yielded in real-time (not buffered)
+    assert len(chunk_times) == 3, f"Expected 3 chunks, got {len(chunk_times)}"
+    assert chunk_times[0] < 0.15, f"First chunk too slow: {chunk_times[0]:.3f}s"
+    assert chunk_times[1] > 0.1, f"Second chunk too fast: {chunk_times[1]:.3f}s"
+    assert chunk_times[2] > 0.2, f"Third chunk too fast: {chunk_times[2]:.3f}s"
+
+    # Final result should be yielded
+    assert result is not None
+    assert result.final_text == "chunk0chunk1chunk2"
+    assert len(result.chunks) == 3
+
+
+@pytest.mark.asyncio
+async def test_execute_with_tools_stream_tool_execution():
+    """Test that execute_with_tools_stream yields tool results in real-time."""
+    from multi_llm_chat.core import AgenticLoopResult, execute_with_tools_stream
+
+    # Mock provider
+    mock_provider = MagicMock()
+    mock_provider.name = "gemini"
+
+    # First call: tool_call
+    async def first_call(*args, **kwargs):
+        yield {
+            "type": "tool_call",
+            "content": {"name": "get_time", "arguments": {}},
+        }
+
+    # Second call: final text
+    async def second_call(*args, **kwargs):
+        yield {"type": "text", "content": "The time is 12:00."}
+
+    call_count = [0]
+
+    async def mock_call_api(*args, **kwargs):
+        if call_count[0] == 0:
+            call_count[0] += 1
+            async for chunk in first_call():
+                yield chunk
+        else:
+            async for chunk in second_call():
+                yield chunk
+
+    mock_provider.call_api = mock_call_api
+
+    # Mock MCP client
+    mock_mcp = AsyncMock()
+    mock_mcp.list_tools = AsyncMock(
+        return_value=[{"name": "get_time", "description": "Get current time", "inputSchema": {}}]
+    )
+    mock_mcp.call_tool = AsyncMock(
+        return_value={"content": [{"type": "text", "text": "12:00"}], "isError": False}
+    )
+
+    history = [{"role": "user", "content": [{"type": "text", "content": "What time is it?"}]}]
+
+    chunks_received = []
+    result = None
+
+    async for item in execute_with_tools_stream(mock_provider, history, mcp_client=mock_mcp):
+        if isinstance(item, AgenticLoopResult):
+            result = item
+        else:
+            chunks_received.append(item)
+
+    # Should receive: tool_call, tool_result, text
+    assert len(chunks_received) >= 3, f"Expected at least 3 chunks, got {len(chunks_received)}"
+
+    # Verify chunk types
+    chunk_types = [c.get("type") for c in chunks_received]
+    assert "tool_call" in chunk_types
+    assert "tool_result" in chunk_types
+    assert "text" in chunk_types
+
+    # Final result should be present
+    assert result is not None
+    assert "12:00" in result.final_text
+    assert len(result.history_delta) > 0

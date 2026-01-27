@@ -93,16 +93,12 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         mock_fc_chunk2 = MagicMock(text=None, parts=[part2])
         # --- End Tool Call Part ---
 
-        async def mock_generate_content_async(*args, **kwargs):
-            async def mock_aiter(instance=None):
-                for chunk in [mock_text_chunk, mock_fc_chunk1, mock_fc_chunk2]:
-                    yield chunk
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            # Return an iterable (not async)
+            return iter([mock_text_chunk, mock_fc_chunk1, mock_fc_chunk2])
 
-            mock_response = MagicMock()
-            mock_response.__aiter__ = mock_aiter
-            return mock_response
-
-        mock_model.generate_content_async.side_effect = mock_generate_content_async
+        mock_model.generate_content.side_effect = mock_generate_content
 
         async def run_test():
             return await consume_async_gen(
@@ -146,16 +142,11 @@ class TestGeminiToolsIntegration(unittest.TestCase):
 
         mock_text_chunk = MagicMock(text="Done", parts=[])
 
-        async def mock_generate_content_async(*args, **kwargs):
-            async def mock_aiter(instance=None):
-                for chunk in [mock_fc_chunk1, mock_fc_chunk2, mock_text_chunk]:
-                    yield chunk
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            return iter([mock_fc_chunk1, mock_fc_chunk2, mock_text_chunk])
 
-            mock_response = MagicMock()
-            mock_response.__aiter__ = mock_aiter
-            return mock_response
-
-        mock_model.generate_content_async.side_effect = mock_generate_content_async
+        mock_model.generate_content.side_effect = mock_generate_content
 
         async def run_test():
             return await consume_async_gen(
@@ -192,16 +183,11 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         part2.function_call = fc2
         mock_fc_chunk2 = MagicMock(text=None, parts=[part2])
 
-        async def mock_generate_content_async(*args, **kwargs):
-            async def mock_aiter(instance=None):
-                for chunk in [mock_fc_chunk1, mock_text_chunk, mock_fc_chunk2]:
-                    yield chunk
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            return iter([mock_fc_chunk1, mock_text_chunk, mock_fc_chunk2])
 
-            mock_response = MagicMock()
-            mock_response.__aiter__ = mock_aiter
-            return mock_response
-
-        mock_model.generate_content_async.side_effect = mock_generate_content_async
+        mock_model.generate_content.side_effect = mock_generate_content
 
         async def run_test():
             return await consume_async_gen(
@@ -224,8 +210,8 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         mock_model = MagicMock()
         mock_model_class.return_value = mock_model
 
-        # Simulate BlockedPromptException immediately
-        mock_model.generate_content_async.side_effect = genai.types.BlockedPromptException(
+        # Simulate BlockedPromptException immediately (synchronous version)
+        mock_model.generate_content.side_effect = genai.types.BlockedPromptException(
             "Safety filter triggered"
         )
 
@@ -254,17 +240,15 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         part1.function_call = fc1
         mock_fc_chunk1 = MagicMock(text=None, parts=[part1])
 
-        # Simulate generic exception after partial tool call
-        async def mock_generate_content_async(*args, **kwargs):
-            async def mock_aiter(instance=None):
+        # Simulate generic exception after partial tool call (synchronous version)
+        def mock_generate_content(*args, **kwargs):
+            def gen():
                 yield mock_fc_chunk1
                 raise Exception("API connection error")
 
-            mock_response = MagicMock()
-            mock_response.__aiter__ = mock_aiter
-            return mock_response
+            return gen()
 
-        mock_model.generate_content_async.side_effect = mock_generate_content_async
+        mock_model.generate_content.side_effect = mock_generate_content
 
         async def run_test():
             return await consume_async_gen(
@@ -302,16 +286,11 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         mock_fc_chunk2 = MagicMock(text=None, parts=[part2])
 
         # Normal successful stream
-        async def mock_generate_content_async(*args, **kwargs):
-            async def mock_aiter(instance=None):
-                yield mock_fc_chunk1
-                yield mock_fc_chunk2
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            return iter([mock_fc_chunk1, mock_fc_chunk2])
 
-            mock_response = MagicMock()
-            mock_response.__aiter__ = mock_aiter
-            return mock_response
-
-        mock_model.generate_content_async.side_effect = mock_generate_content_async
+        mock_model.generate_content.side_effect = mock_generate_content
 
         async def run_test():
             return await consume_async_gen(
