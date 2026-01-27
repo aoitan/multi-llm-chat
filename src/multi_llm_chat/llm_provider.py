@@ -997,6 +997,33 @@ class ChatGPTProvider(LLMProvider):
                             "content": json.dumps(item.get("result", "")),
                         }
                     )
+            elif role == "tool":
+                # Handle tool results from Agentic Loop
+                # role="tool" entries contain tool_result items
+                items = content if isinstance(content, list) else [content]
+                for item in items:
+                    if not isinstance(item, dict):
+                        logger.warning("Skipping non-dict item in role='tool' content: %s", item)
+                        continue
+                    if item.get("type") != "tool_result":
+                        logger.warning(
+                            "Skipping non-tool_result item in role='tool': type=%s",
+                            item.get("type"),
+                        )
+                        continue
+                    if not item.get("tool_call_id"):
+                        logger.warning(
+                            "Skipping tool_result without required tool_call_id (name=%s)",
+                            item.get("name"),
+                        )
+                        continue
+                    chatgpt_history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": item["tool_call_id"],
+                            "content": item.get("content", ""),
+                        }
+                    )
             # Skip gemini and other roles - they shouldn't be sent to ChatGPT
         return chatgpt_history
 

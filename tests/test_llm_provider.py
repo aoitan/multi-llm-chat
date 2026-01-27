@@ -1032,6 +1032,63 @@ class TestChatGPTProvider:
         assert "input_tokens" in result
         assert "max_tokens" in result
 
+    def test_format_history_with_tool_role(self):
+        """ChatGPTProvider.format_history should handle role='tool' entries from Agentic Loop"""
+        logic_history = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "content": "Get weather"}],
+            },
+            {
+                "role": "chatgpt",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "tool_call_id": "call_123",
+                        "name": "get_weather",
+                        "arguments": {"location": "Tokyo"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_call_id": "call_123",
+                        "name": "get_weather",
+                        "content": "25°C",
+                    }
+                ],
+            },
+        ]
+
+        expected_chatgpt_history = [
+            {"role": "user", "content": "Get weather"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_123",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": json.dumps({"location": "Tokyo"}),
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_123",
+                "content": "25°C",
+            },
+        ]
+
+        formatted_history = ChatGPTProvider.format_history(logic_history)
+        assert formatted_history == expected_chatgpt_history
+
 
 class TestProviderCaching(unittest.TestCase):
     """Test provider instance caching"""
