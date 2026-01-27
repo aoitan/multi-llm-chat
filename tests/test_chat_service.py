@@ -78,7 +78,7 @@ class TestChatServiceMessageParsing(unittest.TestCase):
         assert mention == "gemini"
 
 
-class TestChatServiceProcessMessage(unittest.TestCase):
+class TestChatServiceProcessMessage:
     """Test main message processing logic"""
 
     @patch("multi_llm_chat.chat_logic.create_provider")
@@ -317,8 +317,10 @@ class TestChatServiceProcessMessage(unittest.TestCase):
             }
         ]
 
-    def test_append_tool_results_logs_invalid_input(self):
+    def test_append_tool_results_logs_invalid_input(self, caplog):
         """不正な型のツール結果が渡された場合に警告ログを出力すること"""
+        import logging
+
         service = ChatService()
 
         # Mix valid and invalid tool results
@@ -329,12 +331,13 @@ class TestChatServiceProcessMessage(unittest.TestCase):
             {"name": "valid2", "content": "ok2"},
         ]
 
-        with self.assertLogs("multi_llm_chat.chat_logic", level="WARNING") as log_context:
+        with caplog.at_level(logging.WARNING, logger="multi_llm_chat.chat_logic"):
             service.append_tool_results(tool_results)
 
         # Check that warnings were logged for invalid entries
-        assert any("Invalid tool result type: str" in message for message in log_context.output)
-        assert any("Invalid tool result type: int" in message for message in log_context.output)
+        log_lines = caplog.text.splitlines()
+        assert any("Invalid tool result type: str" in message for message in log_lines)
+        assert any("Invalid tool result type: int" in message for message in log_lines)
 
         # Check that only valid results were added
         assert len(service.logic_history) == 1

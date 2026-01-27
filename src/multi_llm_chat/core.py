@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -9,6 +10,9 @@ from dotenv import load_dotenv
 
 # Load environment variables BEFORE importing modules that depend on them
 load_dotenv()
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # Import after load_dotenv() to ensure env vars are available  # noqa: E402
 from .compression import (
@@ -117,17 +121,33 @@ def format_history_for_chatgpt(history):
     return ChatGPTProvider.format_history(history)
 
 
-def list_gemini_models():
-    """List available Gemini models"""
+def list_gemini_models(verbose: bool = True):
+    """List available Gemini models (debug utility)
+
+    Args:
+        verbose: If True, print models to stdout (default: True)
+
+    Returns:
+        list: List of available model names, or empty list if API key not configured
+    """
     if not GOOGLE_API_KEY:
-        print("Error: GOOGLE_API_KEY not found in environment variables or .env file.")
-        return
+        logger.error("GOOGLE_API_KEY not found in environment variables or .env file.")
+        return []
 
     genai.configure(api_key=GOOGLE_API_KEY)
-    print("利用可能なGeminiモデル:")
+    models = []
     for m in genai.list_models():
         if "generateContent" in m.supported_generation_methods:
-            print(f"  - {m.name}")
+            models.append(m.name)
+            logger.debug("Available Gemini model: %s", m.name)
+
+    if verbose:
+        print("利用可能なGeminiモデル:")
+        for name in models:
+            print(f"  - {name}")
+
+    logger.info("Found %d Gemini models", len(models))
+    return models
 
 
 async def call_gemini_api_async(history, system_prompt=None):
@@ -400,9 +420,9 @@ async def execute_with_tools_stream(
     if tools is None and mcp_client:
         tools = await mcp_client.list_tools()
 
-    iterations_used = 0
+    iterations_count = 0
     try:
-        for iterations_used in range(max_iterations):
+        for _iteration_index in range(max_iterations):
             # Check timeout before each iteration
             if time.time() - start_time > timeout:
                 logger.warning("Agentic loop timed out after %.1f seconds", timeout)
@@ -429,6 +449,9 @@ async def execute_with_tools_stream(
                     tool_calls_in_turn.append(tool_call)
                     chunks.append(chunk)
                     yield chunk  # ← Real-time streaming
+
+            # Count iteration after LLM call completes
+            iterations_count += 1
 
             # If no tool calls, loop ends (final response)
             if not tool_calls_in_turn:
@@ -484,14 +507,22 @@ async def execute_with_tools_stream(
             # Execute tools and collect results
             tool_results = []
             for tool_call in tool_calls_in_turn:
+                # Check timeout before each tool execution
+                elapsed = time.time() - start_time
+                if elapsed > timeout:
+                    logger.warning("Agentic loop timed out before tool execution")
+                    raise TimeoutError(f"Execution exceeded timeout of {timeout} seconds")
+
                 name = tool_call.get("name")
                 arguments = tool_call.get("arguments", {})
                 tool_call_id = tool_call.get("tool_call_id")  # OpenAI only
 
                 try:
-                    # Per-tool timeout (e.g., 60s) to prevent single tool from hanging the loop
+                    # Calculate remaining timeout for this tool
+                    remaining_timeout = max(0.1, timeout - elapsed)  # Minimum 0.1s
+
                     result = await asyncio.wait_for(
-                        mcp_client.call_tool(name, arguments), timeout=60.0
+                        mcp_client.call_tool(name, arguments), timeout=remaining_timeout
                     )
 
                     # Extract text content (simplify for LLM)
@@ -559,11 +590,9 @@ async def execute_with_tools_stream(
             _validate_history_entry(tool_entry)
             working_history.append(tool_entry)
 
-            iterations_used += 1
         else:
             # Loop reached max_iterations without breaking
             logger.info("Agentic loop reached max_iterations=%d", max_iterations)
-            iterations_used = max_iterations
 
     except TimeoutError:
         timed_out = True
@@ -580,7 +609,7 @@ async def execute_with_tools_stream(
         chunks=chunks,
         history_delta=history_delta,
         final_text=final_text,
-        iterations_used=iterations_used,
+        iterations_used=iterations_count,
         timed_out=timed_out,
         error=error,
     )
