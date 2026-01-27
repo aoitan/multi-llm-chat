@@ -11,10 +11,16 @@ from multi_llm_chat.llm_provider import (
 
 
 async def consume_async_gen(gen):
-    """Helper to consume an async generator and return all yielded items."""
+    """Helper to consume a generator (sync or async) and return all yielded items."""
     results = []
-    async for item in gen:
-        results.append(item)
+    # Check if it's an async generator
+    if hasattr(gen, "__aiter__"):
+        async for item in gen:
+            results.append(item)
+    else:
+        # Synchronous generator
+        for item in gen:
+            results.append(item)
     return results
 
 

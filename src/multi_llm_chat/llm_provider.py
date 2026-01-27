@@ -4,7 +4,6 @@ This module provides a unified interface for different LLM providers (Gemini, Ch
 making it easy to add new providers without modifying existing code.
 """
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -29,11 +28,7 @@ except ImportError:
 from .history_utils import content_to_text
 from .token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
 
-# Load .env with override protection (only if not already loaded)
-# This ensures safety even when llm_provider is imported directly
-if not os.getenv("_MULTI_LLM_CHAT_ENV_LOADED"):
-    load_dotenv()
-    os.environ["_MULTI_LLM_CHAT_ENV_LOADED"] = "1"
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -524,18 +519,9 @@ class GeminiToolCallAssembler:
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
-    def __init__(self):
-        """Initialize provider with default name"""
-        self.name: str = "unknown"
-
     @abstractmethod
-    async def call_api(
-        self,
-        history: List[Dict[str, Any]],
-        system_prompt: Optional[str] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
-    ):
-        """Call the LLM API and return an async generator of response chunks
+    def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
+        """Call the LLM API and return a generator of response chunks
 
         Args:
             history: List of conversation history dicts with 'role' and 'content'.
@@ -576,9 +562,9 @@ class LLMProvider(ABC):
         """
         pass
 
-    async def stream_text_events(self, history, system_prompt=None):
+    def stream_text_events(self, history, system_prompt=None):
         """Stream normalized text events from the unified dictionary stream."""
-        async for chunk in self.call_api(history, system_prompt):
+        for chunk in self.call_api(history, system_prompt):
             # Support both dict and legacy string format
             if isinstance(chunk, dict):
                 if chunk.get("type") == "text":
@@ -592,8 +578,6 @@ class GeminiProvider(LLMProvider):
     """Google Gemini LLM provider with thread-safe LRU caching for models"""
 
     def __init__(self):
-        super().__init__()  # 基底クラスの初期化を呼び出す
-        self.name = "gemini"  # プロバイダー名を明示的に設定
         self._default_model = None
         self._models_cache = OrderedDict()  # LRU cache: hash -> (prompt, model)
         self._cache_max_size = 10  # Limit cache size to prevent memory leak
@@ -697,18 +681,15 @@ class GeminiProvider(LLMProvider):
                     if item.get("type") == "text":
                         parts.append({"text": item.get("content", "")})
                     elif item.get("type") == "tool_call":
-                        # Support both flat schema and nested content for backward compatibility
-                        name = item.get("name") or item.get("content", {}).get("name")
-                        args = item.get("arguments") or item.get("content", {}).get("arguments", {})
-                        if name:
-                            parts.append(
-                                {
-                                    "function_call": {
-                                        "name": name,
-                                        "args": args,
-                                    }
+                        tool_call = item.get("content", {})
+                        parts.append(
+                            {
+                                "function_call": {
+                                    "name": tool_call.get("name"),
+                                    "args": tool_call.get("arguments", {}),
                                 }
-                            )
+                            }
+                        )
                 if parts:
                     gemini_history.append({"role": "model", "parts": parts})
 
@@ -716,9 +697,7 @@ class GeminiProvider(LLMProvider):
                 # Tool messages contain function responses
                 for item in content_list:
                     if item.get("type") == "tool_result":
-                        # Support 'content' as result payload
-                        payload = item.get("content") or item.get("result")
-                        response_payload = _parse_tool_response_payload(payload)
+                        response_payload = _parse_tool_response_payload(item.get("content"))
                         tool_call_id = item.get("tool_call_id")
                         function_response = {
                             "name": item.get("name"),
@@ -751,7 +730,7 @@ class GeminiProvider(LLMProvider):
 
         return gemini_history
 
-    async def call_api(
+    def call_api(
         self,
         history: List[Dict[str, Any]],
         system_prompt: Optional[str] = None,
@@ -791,36 +770,9 @@ class GeminiProvider(LLMProvider):
         stream_completed_successfully = False
 
         try:
-            # google.generativeai には非同期APIが存在しないため、
-            # 同期ストリーミングAPIを非同期ジェネレーターに変換
-            async def _async_wrapper():
-                """Wrap synchronous generator in async context"""
+            response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
 
-                def _generate():
-                    return model.generate_content(
-                        gemini_history,
-                        stream=True,
-                        tools=gemini_tools,
-                    )
-
-                # Execute synchronous generate_content in thread
-                response_stream = await asyncio.to_thread(_generate)
-
-                # Iterate through synchronous generator without blocking event loop
-                def get_next_chunk(stream):
-                    """Get next chunk from synchronous generator"""
-                    try:
-                        return next(stream)
-                    except StopIteration:
-                        return None
-
-                while True:
-                    chunk = await asyncio.to_thread(get_next_chunk, response_stream)
-                    if chunk is None:
-                        break
-                    yield chunk
-
-            async for chunk in _async_wrapper():
+            for chunk in response:
                 parts = getattr(chunk, "parts", None)
                 if parts:
                     for part in parts:
@@ -854,8 +806,7 @@ class GeminiProvider(LLMProvider):
         finally:
             # Only emit pending tool calls if stream completed successfully
             if stream_completed_successfully:
-                for tool_call in assembler.finalize_pending_calls():
-                    yield tool_call
+                yield from assembler.finalize_pending_calls()
 
     def extract_text_from_chunk(self, chunk: Any):
         """Extract text from a unified response chunk."""
@@ -910,11 +861,9 @@ class ChatGPTProvider(LLMProvider):
     """
 
     def __init__(self):
-        super().__init__()  # 基底クラスの初期化を呼び出す
-        self.name = "chatgpt"  # プロバイダー名を明示的に設定
         self._client = None
         if OPENAI_API_KEY:
-            self._client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
+            self._client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
     @staticmethod
     def format_history(history):
@@ -935,26 +884,6 @@ class ChatGPTProvider(LLMProvider):
                 chatgpt_history.append({"role": "system", "content": content_to_text(content)})
             elif role == "user":
                 chatgpt_history.append({"role": "user", "content": content_to_text(content)})
-            elif role == "tool":
-                # Step 1: Normalize content to list
-                items = content if isinstance(content, list) else [content]
-                for item in items:
-                    if not isinstance(item, dict) or item.get("type") != "tool_result":
-                        continue
-                    if not item.get("tool_call_id"):
-                        logger.warning("Skipping tool_result without tool_call_id: %s", item)
-                        continue
-                    # Standardize payload key to 'content'
-                    # Standardize payload key to 'content'
-                    payload = item.get("content") or item.get("result") or ""
-                    content_val = json.dumps(payload) if not isinstance(payload, str) else payload
-                    chatgpt_history.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": item["tool_call_id"],
-                            "content": content_val,
-                        }
-                    )
             elif role == "chatgpt":
                 # Step 1: Normalize content to list
                 items = []
@@ -1006,31 +935,16 @@ class ChatGPTProvider(LLMProvider):
                     if tool_call_items:
                         valid_tool_calls = []
                         for item in tool_call_items:
-                            # Support both flat and nested content for backward compatibility
-                            name = item.get("name") or item.get("content", {}).get("name")
-                            tool_call_id = item.get("tool_call_id") or item.get("content", {}).get(
-                                "tool_call_id"
-                            )
-                            arguments = item.get("arguments") or item.get("content", {}).get(
-                                "arguments", {}
-                            )
-
-                            if not tool_call_id or not name:
+                            if not item.get("tool_call_id") or not item.get("name"):
                                 logger.warning("Skipping incomplete tool_call in history: %s", item)
                                 continue
-
-                            args_json = (
-                                json.dumps(arguments)
-                                if not isinstance(arguments, str)
-                                else arguments
-                            )
                             valid_tool_calls.append(
                                 {
-                                    "id": tool_call_id,
+                                    "id": item["tool_call_id"],
                                     "type": "function",
                                     "function": {
-                                        "name": name,
-                                        "arguments": args_json,
+                                        "name": item["name"],
+                                        "arguments": json.dumps(item["arguments"]),
                                     },
                                 }
                             )
@@ -1039,8 +953,16 @@ class ChatGPTProvider(LLMProvider):
                             message["tool_calls"] = valid_tool_calls
 
                     # Only append if we have actual content (text) or valid tool_calls
-                    if "content" in message or "tool_calls" in message:
-                        if "tool_calls" in message and not text_items:
+                    # If neither exist, skip this message entirely
+                    has_content = "content" in message
+                    has_tool_calls = "tool_calls" in message
+
+                    if has_content or has_tool_calls:
+                        # OpenAI API specification:
+                        # - content and tool_calls can coexist (mixed content is valid)
+                        # - content should be None only when no text is present
+                        # Reference: https://platform.openai.com/docs/guides/function-calling
+                        if has_tool_calls and not text_items:
                             message["content"] = None
                         chatgpt_history.append(message)
 
@@ -1049,25 +971,17 @@ class ChatGPTProvider(LLMProvider):
                     if not item.get("tool_call_id"):
                         logger.warning("Skipping tool_result without tool_call_id: %s", item)
                         continue
-                    # Standardize payload key to 'content'
-                    payload = item.get("content") or item.get("result") or ""
-                    content_val = json.dumps(payload) if not isinstance(payload, str) else payload
                     chatgpt_history.append(
                         {
                             "role": "tool",
                             "tool_call_id": item["tool_call_id"],
-                            "content": content_val,
+                            "content": json.dumps(item.get("result", "")),
                         }
                     )
             # Skip gemini and other roles - they shouldn't be sent to ChatGPT
         return chatgpt_history
 
-    async def call_api(
-        self,
-        history: List[Dict[str, Any]],
-        system_prompt: Optional[str] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
-    ):
+    def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
         """Call ChatGPT API and yield unified dictionary objects.
 
         Args:
@@ -1103,11 +1017,11 @@ class ChatGPTProvider(LLMProvider):
                 api_params["tool_choice"] = "auto"
 
         # Call API with streaming
-        stream = await self._client.chat.completions.create(**api_params)
+        stream = self._client.chat.completions.create(**api_params)
 
         # Process stream with tool call assembler
         assembler = OpenAIToolCallAssembler()
-        async for chunk in stream:
+        for chunk in stream:
             finish_reason = None
             # Check for tool calls and finish reason
             if hasattr(chunk, "choices") and chunk.choices:

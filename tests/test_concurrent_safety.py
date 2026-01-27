@@ -17,10 +17,16 @@ from multi_llm_chat.llm_provider import ChatGPTProvider, GeminiProvider, create_
 
 
 async def consume_async_gen(gen):
-    """Helper to consume an async generator and return all yielded items."""
+    """Helper to consume a generator (sync or async) and return all yielded items."""
     results = []
-    async for item in gen:
-        results.append(item)
+    # Check if it's an async generator
+    if hasattr(gen, "__aiter__"):
+        async for item in gen:
+            results.append(item)
+    else:
+        # Synchronous generator
+        for item in gen:
+            results.append(item)
     return results
 
 
@@ -91,8 +97,14 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
 
                 async def run_test():
                     chunks = []
-                    async for c in provider.call_api(history, system_prompt=prompt_text):
-                        chunks.append(c)
+                    gen = provider.call_api(history, system_prompt=prompt_text)
+                    # Handle both sync and async generators
+                    if hasattr(gen, "__aiter__"):
+                        async for c in gen:
+                            chunks.append(c)
+                    else:
+                        for c in gen:
+                            chunks.append(c)
                     return chunks
 
                 chunks = asyncio.run(run_test())
@@ -188,8 +200,14 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
                 history = [{"role": "user", "content": f"Call {call_id}"}]
 
                 async def run_test():
-                    async for _ in provider.call_api(history, system_prompt=shared_prompt):
-                        pass
+                    gen = provider.call_api(history, system_prompt=shared_prompt)
+                    # Handle both sync and async generators
+                    if hasattr(gen, "__aiter__"):
+                        async for _ in gen:
+                            pass
+                    else:
+                        for _ in gen:
+                            pass
 
                 asyncio.run(run_test())
                 with completed_lock:
@@ -232,7 +250,7 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
 class TestChatGPTConcurrentSafety(unittest.TestCase):
     """Test concurrent safety for ChatGPTProvider"""
 
-    @patch("multi_llm_chat.llm_provider.openai.AsyncOpenAI")
+    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
     def test_chatgpt_concurrent_requests(self, mock_openai_class):
         """Test that ChatGPT client handles concurrent requests safely"""
@@ -240,17 +258,17 @@ class TestChatGPTConcurrentSafety(unittest.TestCase):
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
 
-        # Mock streaming response
-        async def create_mock_stream(*args, **kwargs):
+        # Mock streaming response (synchronous generator)
+        def create_mock_stream(*args, **kwargs):
             mock_chunk = MagicMock()
             mock_chunk.choices = [MagicMock()]
             mock_chunk.choices[0].delta.content = "response"
 
-            async def mock_aiter(instance=None):
+            def mock_iter():
                 yield mock_chunk
 
             mock_stream = MagicMock()
-            mock_stream.__aiter__ = mock_aiter
+            mock_stream.__iter__ = mock_iter
             return mock_stream
 
         mock_client.chat.completions.create = create_mock_stream
@@ -268,8 +286,14 @@ class TestChatGPTConcurrentSafety(unittest.TestCase):
 
                 async def run_test():
                     chunks = []
-                    async for c in provider.call_api(history, system_prompt=system_prompt):
-                        chunks.append(c)
+                    gen = provider.call_api(history, system_prompt=system_prompt)
+                    # Handle both sync and async generators
+                    if hasattr(gen, "__aiter__"):
+                        async for c in gen:
+                            chunks.append(c)
+                    else:
+                        for c in gen:
+                            chunks.append(c)
                     return chunks
 
                 chunks = asyncio.run(run_test())

@@ -1,4 +1,3 @@
-import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -8,19 +7,30 @@ from multi_llm_chat.llm_provider import (
     parse_openai_tool_call,
 )
 
+"""Tests for ChatGPT Tools integration (Issue #80)
 
-async def async_gen_from_list(items):
-    """Helper to create an async generator from a list."""
-    for item in items:
-        yield item
+TDD Development:
+    This test suite follows the Red-Green-Refactor TDD cycle to implement
+    tools parameter support for ChatGPTProvider.
 
-
-async def consume_async_gen(gen):
-    """Helper to consume an async generator and return all yielded items."""
-    results = []
-    async for item in gen:
-        results.append(item)
-    return results
+    Test Cases:
+        Phase 1 (Conversion Functions):
+            1. test_mcp_to_openai_tool_conversion
+            2. test_mcp_to_openai_with_empty_tools
+            3. test_parse_openai_tool_call
+            4. test_parse_openai_tool_call_with_invalid_json
+        
+        Phase 2 (Provider Integration):
+            5. test_chatgpt_provider_call_api_with_tools
+            6. test_chatgpt_response_with_tool_call
+            7. test_chatgpt_streaming_tool_arguments
+            8. test_chatgpt_parallel_tool_calls
+        
+        Phase 3 (Error Handling):
+            9. test_invalid_tool_arguments_json
+            10. test_missing_tool_call_id
+            11. test_tool_call_without_name
+"""
 
 
 class TestOpenAIToolConversion(unittest.TestCase):
@@ -170,33 +180,27 @@ class TestChatGPTProviderTools(unittest.TestCase):
         self.history = [{"role": "user", "content": "What's the weather in Tokyo?"}]
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.AsyncOpenAI")
+    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
     def test_chatgpt_provider_call_api_with_tools(self, mock_openai_class):
         """tools引数がOpenAI APIに正しく渡されること"""
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
 
-        async def mock_create(**kwargs):
-            return async_gen_from_list([])
-
-        mock_client.chat.completions.create = MagicMock(side_effect=mock_create)
+        # Mock streaming response with no chunks (just test API call)
+        mock_stream = iter([])
+        mock_client.chat.completions.create.return_value = mock_stream
 
         provider = ChatGPTProvider()
-
-        async def run_test():
-            await consume_async_gen(provider.call_api(self.history, tools=self.mcp_tools))
-
-        asyncio.run(run_test())
+        list(provider.call_api(self.history, tools=self.mcp_tools))
 
         # Verify API was called with tools
-        mock_client.chat.completions.create.assert_called_once()
         call_args = mock_client.chat.completions.create.call_args
         self.assertIn("tools", call_args.kwargs)
         self.assertIn("tool_choice", call_args.kwargs)
         self.assertEqual(call_args.kwargs["tool_choice"], "auto")
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.AsyncOpenAI")
+    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
     def test_chatgpt_response_with_tool_call(self, mock_openai_class):
         """ストリーミング中のtool_callを正しく検出すること"""
         mock_client = MagicMock()
@@ -208,6 +212,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         chunk1.choices[0].delta = MagicMock()
         chunk1.choices[0].delta.content = None
 
+        # Create function mock with proper attributes
         function_mock = MagicMock()
         function_mock.name = "get_weather"
         function_mock.arguments = '{"location": "Tokyo"}'
@@ -219,17 +224,11 @@ class TestChatGPTProviderTools(unittest.TestCase):
 
         chunk1.choices[0].delta.tool_calls = [tool_call_mock]
 
-        async def mock_create(**kwargs):
-            return async_gen_from_list([chunk1])
-
-        mock_client.chat.completions.create = MagicMock(side_effect=mock_create)
+        mock_stream = iter([chunk1])
+        mock_client.chat.completions.create.return_value = mock_stream
 
         provider = ChatGPTProvider()
-
-        async def run_test():
-            return await consume_async_gen(provider.call_api(self.history, tools=self.mcp_tools))
-
-        results = asyncio.run(run_test())
+        results = list(provider.call_api(self.history, tools=self.mcp_tools))
 
         # Should emit tool_call event
         tool_calls = [r for r in results if r["type"] == "tool_call"]
@@ -237,7 +236,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         self.assertEqual(tool_calls[0]["content"]["name"], "get_weather")
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.AsyncOpenAI")
+    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
     def test_chatgpt_streaming_tool_arguments(self, mock_openai_class):
         """複数チャンクに分割されたargumentsを正しく組み立てること"""
         mock_client = MagicMock()
@@ -286,17 +285,11 @@ class TestChatGPTProviderTools(unittest.TestCase):
         tool_call3.function = function3
         chunk3.choices[0].delta.tool_calls = [tool_call3]
 
-        async def mock_create(**kwargs):
-            return async_gen_from_list([chunk1, chunk2, chunk3])
-
-        mock_client.chat.completions.create = MagicMock(side_effect=mock_create)
+        mock_stream = iter([chunk1, chunk2, chunk3])
+        mock_client.chat.completions.create.return_value = mock_stream
 
         provider = ChatGPTProvider()
-
-        async def run_test():
-            return await consume_async_gen(provider.call_api(self.history, tools=self.mcp_tools))
-
-        results = asyncio.run(run_test())
+        results = list(provider.call_api(self.history, tools=self.mcp_tools))
 
         # Should emit single tool_call with complete arguments
         tool_calls = [r for r in results if r["type"] == "tool_call"]
@@ -304,7 +297,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         self.assertEqual(tool_calls[0]["content"]["arguments"]["location"], "Tokyo")
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.AsyncOpenAI")
+    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
     def test_chatgpt_parallel_tool_calls(self, mock_openai_class):
         """並列ツール呼び出し（複数index）を正しく処理すること"""
         mock_client = MagicMock()
@@ -339,17 +332,11 @@ class TestChatGPTProviderTools(unittest.TestCase):
         tool_call_b.function = function_b
         chunk2.choices[0].delta.tool_calls = [tool_call_b]
 
-        async def mock_create(**kwargs):
-            return async_gen_from_list([chunk1, chunk2])
-
-        mock_client.chat.completions.create = MagicMock(side_effect=mock_create)
+        mock_stream = iter([chunk1, chunk2])
+        mock_client.chat.completions.create.return_value = mock_stream
 
         provider = ChatGPTProvider()
-
-        async def run_test():
-            return await consume_async_gen(provider.call_api(self.history, tools=self.mcp_tools))
-
-        results = asyncio.run(run_test())
+        results = list(provider.call_api(self.history, tools=self.mcp_tools))
 
         # Should emit two separate tool_calls
         tool_calls = [r for r in results if r["type"] == "tool_call"]
@@ -618,7 +605,3 @@ class TestChatGPTFormatHistory(unittest.TestCase):
         # Check tool_calls contents
         tool_names = {tc["function"]["name"] for tc in formatted[0]["tool_calls"]}
         self.assertEqual(tool_names, {"tool_a", "tool_b"})
-
-
-if __name__ == "__main__":
-    unittest.main()
