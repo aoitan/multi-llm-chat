@@ -916,7 +916,7 @@ class TestChatGPTProvider:
     """Test ChatGPTProvider implementation"""
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
+    @patch("openai.OpenAI")
     def test_call_api_basic(self, mock_openai_class):
         """ChatGPTProvider.call_api should return a generator"""
         # Setup mock
@@ -937,7 +937,7 @@ class TestChatGPTProvider:
         mock_client.chat.completions.create.assert_called_once()
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
+    @patch("openai.OpenAI")
     def test_call_api_yields_text_chunks(self, mock_openai_class):
         """ChatGPTProvider.call_api should yield unified text chunks."""
         mock_chunk1 = MagicMock()
@@ -961,7 +961,7 @@ class TestChatGPTProvider:
         ]
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
+    @patch("openai.OpenAI")
     def test_call_api_with_tools(self, mock_openai_class):
         """ChatGPTProvider.call_api should accept tools parameter (Issue #80)."""
         mock_client = MagicMock()
@@ -1126,6 +1126,9 @@ class DummyProvider(LLMProvider):
 
     def get_token_info(self, text, history=None, model_name=None):
         return {"input_tokens": 0, "max_tokens": 0}
+
+    def format_history(self, history):
+        return history
 
 
 def test_stream_text_events_filters_empty_strings():

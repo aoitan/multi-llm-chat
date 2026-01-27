@@ -180,7 +180,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         self.history = [{"role": "user", "content": "What's the weather in Tokyo?"}]
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
+    @patch("openai.OpenAI")
     def test_chatgpt_provider_call_api_with_tools(self, mock_openai_class):
         """tools引数がOpenAI APIに正しく渡されること"""
         mock_client = MagicMock()
@@ -200,7 +200,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         self.assertEqual(call_args.kwargs["tool_choice"], "auto")
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
+    @patch("openai.OpenAI")
     def test_chatgpt_response_with_tool_call(self, mock_openai_class):
         """ストリーミング中のtool_callを正しく検出すること"""
         mock_client = MagicMock()
@@ -236,7 +236,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         self.assertEqual(tool_calls[0]["content"]["name"], "get_weather")
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
+    @patch("openai.OpenAI")
     def test_chatgpt_streaming_tool_arguments(self, mock_openai_class):
         """複数チャンクに分割されたargumentsを正しく組み立てること"""
         mock_client = MagicMock()
@@ -297,7 +297,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         self.assertEqual(tool_calls[0]["content"]["arguments"]["location"], "Tokyo")
 
     @patch("multi_llm_chat.llm_provider.OPENAI_API_KEY", "test-key")
-    @patch("multi_llm_chat.llm_provider.openai.OpenAI")
+    @patch("openai.OpenAI")
     def test_chatgpt_parallel_tool_calls(self, mock_openai_class):
         """並列ツール呼び出し（複数index）を正しく処理すること"""
         mock_client = MagicMock()
