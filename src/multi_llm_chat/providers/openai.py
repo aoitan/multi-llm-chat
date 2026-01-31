@@ -243,6 +243,7 @@ class ChatGPTProvider(LLMProvider):
     """
 
     def __init__(self, api_key: Optional[str] = None):
+        self.name = "chatgpt"  # Provider identifier for history tracking
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self._client = None
         if self.api_key:
@@ -402,7 +403,9 @@ class ChatGPTProvider(LLMProvider):
             # Skip gemini and other roles - they shouldn't be sent to ChatGPT
         return chatgpt_history
 
-    def call_api(self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None):
+    async def call_api(
+        self, history, system_prompt=None, tools: Optional[List[Dict[str, Any]]] = None
+    ):
         """Call ChatGPT API and yield unified dictionary objects.
 
         Args:

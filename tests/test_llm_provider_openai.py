@@ -6,15 +6,26 @@ Extracted from test_llm_provider.py as part of Issue #101 refactoring.
 import json
 from unittest.mock import MagicMock, patch
 
-from multi_llm_chat.llm_provider import ChatGPTProvider
+import pytest
+
+from multi_llm_chat.providers.openai import ChatGPTProvider
+
+
+async def collect_async_generator(async_gen):
+    """Helper to collect async generator results into a list"""
+    results = []
+    async for item in async_gen:
+        results.append(item)
+    return results
 
 
 class TestChatGPTProvider:
     """Test ChatGPTProvider implementation"""
 
     @patch("openai.OpenAI")
-    def test_call_api_basic(self, mock_openai_class):
-        """ChatGPTProvider.call_api should return a generator"""
+    @pytest.mark.asyncio
+    async def test_call_api_basic(self, mock_openai_class):
+        """ChatGPTProvider.call_api should return an async generator"""
         # Setup mock
         mock_client = MagicMock()
         mock_stream = MagicMock()
@@ -27,13 +38,14 @@ class TestChatGPTProvider:
         history = [{"role": "user", "content": "Hello"}]
         result = provider.call_api(history)
 
-        # Verify it's a generator
-        assert hasattr(result, "__iter__")
-        list(result)  # Consume generator
+        # Verify it's an async generator
+        assert hasattr(result, "__aiter__")
+        await collect_async_generator(result)  # Consume async generator
         mock_client.chat.completions.create.assert_called_once()
 
     @patch("openai.OpenAI")
-    def test_call_api_yields_text_chunks(self, mock_openai_class):
+    @pytest.mark.asyncio
+    async def test_call_api_yields_text_chunks(self, mock_openai_class):
         """ChatGPTProvider.call_api should yield unified text chunks."""
         mock_chunk1 = MagicMock()
         mock_chunk1.choices = [MagicMock()]
@@ -48,7 +60,7 @@ class TestChatGPTProvider:
 
         provider = ChatGPTProvider()
         history = [{"role": "user", "content": "Hello"}]
-        result = list(provider.call_api(history))
+        result = await collect_async_generator(provider.call_api(history))
 
         assert result == [
             {"type": "text", "content": "Hello"},
@@ -56,7 +68,8 @@ class TestChatGPTProvider:
         ]
 
     @patch("openai.OpenAI")
-    def test_call_api_with_tools(self, mock_openai_class):
+    @pytest.mark.asyncio
+    async def test_call_api_with_tools(self, mock_openai_class):
         """ChatGPTProvider.call_api should accept tools parameter (Issue #80)."""
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
@@ -70,7 +83,7 @@ class TestChatGPTProvider:
         tools = [{"name": "test_tool", "description": "Test", "inputSchema": {}}]
 
         # Should not raise - tools are now supported
-        list(provider.call_api(history, tools=tools))
+        await collect_async_generator(provider.call_api(history, tools=tools))
 
         # Verify API was called with tools
         call_args = mock_client.chat.completions.create.call_args

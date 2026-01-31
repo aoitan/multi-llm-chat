@@ -298,6 +298,7 @@ class GeminiProvider(LLMProvider):
     """Google Gemini LLM provider with thread-safe LRU caching for models"""
 
     def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
+        self.name = "gemini"  # Provider identifier for history tracking
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self.model_name = model_name or os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
         self._default_model = None
@@ -403,12 +404,20 @@ class GeminiProvider(LLMProvider):
                     if item.get("type") == "text":
                         parts.append({"text": item.get("content", "")})
                     elif item.get("type") == "tool_call":
-                        tool_call = item.get("content", {})
+                        # Support both nested ({content: {...}}) and flattened formats
+                        tool_call_content = item.get("content")
+                        if isinstance(tool_call_content, dict) and tool_call_content:
+                            name = tool_call_content.get("name")
+                            args = tool_call_content.get("arguments", {})
+                        else:
+                            # Flattened: {type: "tool_call", name, arguments, ...}
+                            name = item.get("name")
+                            args = item.get("arguments", {})
                         parts.append(
                             {
                                 "function_call": {
-                                    "name": tool_call.get("name"),
-                                    "args": tool_call.get("arguments", {}),
+                                    "name": name,
+                                    "args": args,
                                 }
                             }
                         )
@@ -452,7 +461,7 @@ class GeminiProvider(LLMProvider):
 
         return gemini_history
 
-    def call_api(
+    async def call_api(
         self,
         history: List[Dict[str, Any]],
         system_prompt: Optional[str] = None,
@@ -528,7 +537,8 @@ class GeminiProvider(LLMProvider):
         finally:
             # Only emit pending tool calls if stream completed successfully
             if stream_completed_successfully:
-                yield from assembler.finalize_pending_calls()
+                for result in assembler.finalize_pending_calls():
+                    yield result
 
     def extract_text_from_chunk(self, chunk: Any):
         """Extract text from a unified response chunk."""
