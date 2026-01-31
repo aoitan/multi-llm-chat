@@ -238,12 +238,12 @@ python chat_logic.py
 
 ```
 src/multi_llm_chat/
-├── core.py          # 共通インターフェース（ファサード）
+├── core.py          # 共通インターフェース（ファサード、LLM呼び出しオーケストレーション）
 ├── token_utils.py   # トークン計算ユーティリティ
 ├── history_utils.py # 履歴整形ユーティリティ
 ├── compression.py   # 履歴圧縮ロジック
 ├── validation.py    # 検証ロジック
-├── llm_provider.py  # LLMプロバイダー抽象化（ルーティング層）
+├── llm_provider.py  # LLMプロバイダー抽象化（ルーティング層、ユーティリティ）
 ├── providers/       # LLMプロバイダー実装
 │   ├── base.py      # 共通インターフェース（LLMProvider抽象基底クラス）
 │   ├── openai.py    # OpenAI/ChatGPT実装
