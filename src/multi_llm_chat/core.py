@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -99,8 +98,14 @@ class AgenticLoopResult:
 
 
 def load_api_key(env_var_name):
-    """Load API key from environment"""
-    return os.getenv(env_var_name)
+    """Load API key from environment
+
+    DEPRECATED: This is a backward compatibility wrapper.
+    New code should import from llm_provider directly.
+    """
+    from .llm_provider import load_api_key as _load_api_key
+
+    return _load_api_key(env_var_name)
 
 
 def format_history_for_gemini(history):

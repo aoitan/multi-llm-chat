@@ -128,3 +128,20 @@ def get_provider(provider_name):
             _PROVIDER_INSTANCES[provider_name] = provider_class()
 
     return _PROVIDER_INSTANCES[provider_name]
+
+
+# ========================================
+# Utility functions
+# ========================================
+
+
+def load_api_key(env_var_name: str) -> str:
+    """Load API key from environment
+
+    Args:
+        env_var_name: Name of the environment variable (e.g., 'GOOGLE_API_KEY')
+
+    Returns:
+        str: API key value or None if not found
+    """
+    return os.getenv(env_var_name)
