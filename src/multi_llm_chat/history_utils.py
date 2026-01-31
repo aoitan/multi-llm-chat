@@ -262,3 +262,11 @@ def prepare_request(
             return [{"role": "system", "content": system_prompt}] + history
         else:
             return history
+
+
+# ========================================
+# Text extraction and chunk processing
+# (Added for Issue #103 refactoring)
+# ========================================
+# Functions for extracting text from streaming chunks
+# will be added here during Phase 2 migration
