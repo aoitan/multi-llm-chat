@@ -7,3 +7,9 @@ async def collect_async_generator(async_gen):
     async for item in async_gen:
         results.append(item)
     return results
+
+
+# ========================================
+# Shared test fixtures
+# ========================================
+# (none currently; add here when needed)

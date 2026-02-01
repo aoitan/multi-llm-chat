@@ -152,3 +152,17 @@ class TestParseToolResponsePayload:
         assert _parse_tool_response_payload(123) == {"result": 123}
         assert _parse_tool_response_payload(True) == {"result": True}
         assert _parse_tool_response_payload([1, 2, 3]) == {"result": [1, 2, 3]}
+
+
+class TestUtilityFunctions(unittest.TestCase):
+    """Test utility functions in llm_provider module"""
+
+    def test_load_api_key_reads_from_env(self):
+        """load_api_key should read API key from environment"""
+        from unittest.mock import patch
+
+        from multi_llm_chat.llm_provider import load_api_key
+
+        with patch("os.getenv", return_value="test_key_12345"):
+            key = load_api_key("GOOGLE_API_KEY")
+            assert key == "test_key_12345"
