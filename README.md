@@ -238,7 +238,13 @@ python chat_logic.py
 
 ```
 src/multi_llm_chat/
-├── core.py          # 共通インターフェース（ファサード、LLM呼び出しオーケストレーション）
+├── core.py          # ファサード（再エクスポートのみ、後方互換性維持）
+├── core_modules/    # core.py内部実装（分離済み）
+│   ├── agentic_loop.py       # Agentic Loop実装（RAG/MCPツール連携）
+│   ├── legacy_api.py         # DEPRECATED API wrappers（将来削除予定）
+│   ├── token_and_context.py  # トークン計算とContext管理
+│   ├── providers_facade.py   # Providerアクセスユーティリティ
+│   └── __init__.py           # パッケージ公開API
 ├── token_utils.py   # トークン計算ユーティリティ
 ├── history_utils.py # 履歴整形ユーティリティ
 ├── compression.py   # 履歴圧縮ロジック
