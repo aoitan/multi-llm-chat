@@ -35,7 +35,10 @@ def format_tool_response(response_type, content):
 
 
 def logic_history_to_display(logic_history):
-    """Converts logic history to display history format."""
+    """Converts logic history to display history format.
+
+    Now preserves tool execution logs (tool_call and tool_result) for audit trails.
+    """
     display_history = []
     for turn in logic_history:
         if turn["role"] == "user":
@@ -43,14 +46,46 @@ def logic_history_to_display(logic_history):
                 [content_to_text(turn.get("content", ""), include_tool_data=False), ""]
             )
         elif turn["role"] in ASSISTANT_ROLES and display_history:
+            # Extract text content and tool execution logs separately
+            content = turn.get("content", "")
+            text_only = content_to_text(content, include_tool_data=False)
+
+            # Detect and format tool_call/tool_result from structured content
+            tool_logs = []
+            if isinstance(content, list):
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    part_type = part.get("type")
+                    if part_type == "tool_call":
+                        tool_logs.append(format_tool_response("tool_call", part.get("content", {})))
+                    elif part_type == "tool_result":
+                        tool_logs.append(format_tool_response("tool_result", part))
+
             prefix = ASSISTANT_LABELS.get(turn["role"], "")
-            assistant_text = content_to_text(turn.get("content", ""), include_tool_data=False)
-            formatted_content = f"{prefix}{assistant_text}" if prefix else assistant_text
+            formatted_content = f"{prefix}{text_only}" if prefix else text_only
+
+            # Append tool logs after text content
+            if tool_logs:
+                formatted_content += "".join(tool_logs)
+
             current_response = display_history[-1][1]
             if current_response:
                 display_history[-1][1] = current_response + "\n\n" + formatted_content
             else:
                 display_history[-1][1] = formatted_content
+        elif turn["role"] == "tool" and display_history:
+            # Handle tool role (contains tool_result)
+            content = turn.get("content", [])
+            if isinstance(content, list):
+                tool_logs = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "tool_result":
+                        tool_logs.append(format_tool_response("tool_result", part))
+
+                if tool_logs:
+                    current_response = display_history[-1][1]
+                    display_history[-1][1] = current_response + "".join(tool_logs)
     return display_history
 
 
@@ -102,27 +137,8 @@ def load_history_action(user_id, history_name):
         system_prompt = data.get("system_prompt", "")
         logic_history = data.get("turns", [])
 
-        # Convert logic history to display history
-        display_history = []
-        for turn in logic_history:
-            if turn["role"] == "user":
-                # Start a new turn
-                display_history.append(
-                    [content_to_text(turn.get("content", ""), include_tool_data=False), ""]
-                )
-            elif turn["role"] in ASSISTANT_ROLES and display_history:
-                # Add assistant/LLM response to the last turn
-                # For @all mentions, multiple assistant responses exist - append them
-                prefix = ASSISTANT_LABELS.get(turn["role"], "")
-                assistant_text = content_to_text(turn.get("content", ""), include_tool_data=False)
-                formatted_content = f"{prefix}{assistant_text}" if prefix else assistant_text
-                current_response = display_history[-1][1]
-                if current_response:
-                    # Already has a response, append the new one
-                    display_history[-1][1] = current_response + "\n\n" + formatted_content
-                else:
-                    # First response for this user message
-                    display_history[-1][1] = formatted_content
+        # Convert logic history to display history using shared conversion logic
+        display_history = logic_history_to_display(logic_history)
 
         return (
             display_history,

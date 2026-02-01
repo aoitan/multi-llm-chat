@@ -116,4 +116,51 @@ class TestWebUIApp:
 
         display_history = logic_history_to_display(logic_history)
 
-        assert display_history == [["hi", "**Gemini:**\nG-1 G-2"]]
+        # Now includes tool call in formatted output
+        assert display_history == [["hi", "**Gemini:**\nG-1 G-2\n\n🔧 **Tool Call**: tool\n"]]
+
+    def test_logic_history_to_display_preserves_tool_execution_logs(self):
+        """Test that tool role entries and tool_result are preserved in display history."""
+        logic_history = [
+            {"role": "user", "content": "search for python"},
+            {
+                "role": "chatgpt",
+                "content": [
+                    {"type": "text", "content": "Let me search."},
+                    {
+                        "type": "tool_call",
+                        "content": {
+                            "name": "web_search",
+                            "arguments": {"query": "python"},
+                            "tool_call_id": "call_123",
+                        },
+                    },
+                ],
+            },
+            {
+                "role": "tool",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_call_id": "call_123",
+                        "name": "web_search",
+                        "content": "Python is a programming language...",
+                    }
+                ],
+            },
+            {
+                "role": "chatgpt",
+                "content": [{"type": "text", "content": "Found results!"}],
+            },
+        ]
+
+        display_history = logic_history_to_display(logic_history)
+
+        # Tool call and tool result should be visible
+        assert len(display_history) == 1
+        user_msg, assistant_msg = display_history[0]
+        assert user_msg == "search for python"
+        assert "Let me search." in assistant_msg
+        assert "🔧 **Tool Call**: web_search" in assistant_msg
+        assert "✅ **Result** (web_search):" in assistant_msg
+        assert "Found results!" in assistant_msg

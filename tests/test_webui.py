@@ -196,6 +196,57 @@ class TestWebUIHandlers:
             assert sys_prompt == "Test"
             assert "読み込みました" in status
 
+    def test_load_history_action_preserves_tool_logs(self):
+        """handlers.load_history_action: should preserve tool execution logs in display"""
+        with patch("multi_llm_chat.webui.handlers.HistoryStore") as MockStore:
+            mock_store_instance = MockStore.return_value
+            # Simulate saved history with tool interactions
+            mock_store_instance.load_history.return_value = {
+                "system_prompt": "Test",
+                "turns": [
+                    {"role": "user", "content": [{"type": "text", "content": "Use a tool"}]},
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_call",
+                                "content": {"name": "search", "arguments": {"query": "test"}},
+                            },
+                        ],
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "name": "search",
+                                "content": "Found 5 results",
+                            },
+                        ],
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "text", "content": "Here are the results"}],
+                    },
+                ],
+            }
+
+            display, logic, sys_prompt, status = load_history_action("user", "test")
+
+            # Verify tool logs are in display history
+            assert display is not None
+            # Should have one turn with tool logs embedded in assistant response
+            assert len(display) == 1
+            user_msg, assistant_msg = display[0]
+            assert "Use a tool" in user_msg
+            # Tool logs should be formatted with emojis
+            assert "🔧" in assistant_msg  # Tool call indicator
+            assert "search" in assistant_msg
+            assert "✅" in assistant_msg  # Tool result indicator
+            assert "Found 5 results" in assistant_msg
+            assert "Here are the results" in assistant_msg
+            assert "読み込みました" in status
+
     def test_load_history_action_handles_file_not_found(self):
         """handlers.load_history_action: should handle FileNotFoundError"""
         with patch("multi_llm_chat.webui.handlers.HistoryStore") as MockStore:
