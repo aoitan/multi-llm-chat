@@ -70,6 +70,39 @@ graph TB
 
 **責務**: 共通インターフェース（ファサード）。各機能別ユーティリティを統合し、後方互換性を提供。
 
+**構成**: 129行の純粋ファサード（実装ロジックは core_modules/ に分離）
+
+**再エクスポート**:
+- `core_modules.legacy_api`: DEPRECATED API wrappers（11関数）
+- `core_modules.token_and_context`: トークン計算・検証（7関数）
+- `core_modules.agentic_loop`: Agentic Loop実装（4エンティティ）
+- `core_modules.providers_facade`: プロバイダユーティリティ（1関数）
+- `llm_provider`: Provider classes（2クラス + 7設定）
+- `history_utils`: 履歴管理（1定数）
+
+#### 1.1.1 `src/multi_llm_chat/core_modules/` パッケージ
+
+**責務**: core.pyから分離された実装ロジック（Issue #103対応）
+
+**モジュール構成**:
+- **`legacy_api.py` (290行)**: DEPRECATED backward compatibility wrappers
+  - `call_gemini_api()`, `call_chatgpt_api()`, `stream_text_events()` など
+  - llm_provider と history_utils への委譲
+- **`token_and_context.py` (201行)**: Token calculation & validation wrappers
+  - `calculate_tokens()`, `get_token_info()`, `prune_history_sliding_window()` など
+  - token_utils, compression, validation への委譲
+- **`agentic_loop.py` (423行)**: Agentic Loop implementation
+  - `AgenticLoopResult` dataclass
+  - `execute_with_tools_stream()`, `execute_with_tools()`, `execute_with_tools_sync()`
+  - MCP tool execution, timeout handling
+- **`providers_facade.py` (45行)**: Provider access utilities
+  - `list_gemini_models()` デバッグ用関数
+
+**設計原則**:
+- 各モジュールは sibling modules に依存せず、parent package (`..llm_provider`, `..history_utils` など) のみに依存
+- core.py は純粋ファサードとして、全ての public API を re-export
+- Backward compatibility 完全維持（既存コードは無修正で動作）
+
 #### 1.2 `src/multi_llm_chat/token_utils.py`
 
 **責務**: トークン計算ロジック、コンテキスト長情報の管理。
