@@ -38,6 +38,17 @@ from .providers.openai import (
 logger = logging.getLogger(__name__)
 
 
+# Mapping of deprecated constants to their config attribute names
+# Format: constant_name -> (config_attr, replacement_code)
+DEPRECATED_CONSTANTS = {
+    "OPENAI_API_KEY": ("openai_api_key", "config.get_config().openai_api_key"),
+    "GOOGLE_API_KEY": ("google_api_key", "config.get_config().google_api_key"),
+    "GEMINI_MODEL": ("gemini_model", "config.get_config().gemini_model"),
+    "CHATGPT_MODEL": ("chatgpt_model", "config.get_config().chatgpt_model"),
+    "MCP_ENABLED": ("mcp_enabled", "config.get_config().mcp_enabled"),
+}
+
+
 def __getattr__(name):
     """Lazy evaluation of deprecated environment variables for backward compatibility.
 
@@ -49,41 +60,14 @@ def __getattr__(name):
     - GEMINI_MODEL, CHATGPT_MODEL: Use get_config().gemini_model/chatgpt_model
     - MCP_ENABLED: Use get_config().mcp_enabled
     """
-    if name == "OPENAI_API_KEY":
+    if name in DEPRECATED_CONSTANTS:
+        attr_name, replacement = DEPRECATED_CONSTANTS[name]
         warnings.warn(
-            "OPENAI_API_KEY constant is deprecated. Use config.get_config().openai_api_key",
+            f"{name} constant is deprecated. Use {replacement}",
             DeprecationWarning,
             stacklevel=2,
         )
-        return get_config().openai_api_key
-    if name == "GOOGLE_API_KEY":
-        warnings.warn(
-            "GOOGLE_API_KEY constant is deprecated. Use config.get_config().google_api_key",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return get_config().google_api_key
-    if name == "GEMINI_MODEL":
-        warnings.warn(
-            "GEMINI_MODEL constant is deprecated. Use config.get_config().gemini_model",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return get_config().gemini_model
-    if name == "CHATGPT_MODEL":
-        warnings.warn(
-            "CHATGPT_MODEL constant is deprecated. Use config.get_config().chatgpt_model",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return get_config().chatgpt_model
-    if name == "MCP_ENABLED":
-        warnings.warn(
-            "MCP_ENABLED constant is deprecated. Use config.get_config().mcp_enabled",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return get_config().mcp_enabled
+        return getattr(get_config(), attr_name)
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 

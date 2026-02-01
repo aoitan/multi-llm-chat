@@ -29,7 +29,7 @@ class AppConfig:
 
     # Model settings
     gemini_model: str = "models/gemini-pro-latest"
-    chatgpt_model: str = "gpt-4.1"
+    chatgpt_model: str = "gpt-3.5-turbo"
 
     # Token settings
     token_buffer_factor: float = 1.2
@@ -80,6 +80,29 @@ def load_config_from_env() -> AppConfig:
     Returns:
         AppConfig: Configuration instance populated from environment variables.
     """
+
+    def _get_env_float(key: str, default: float) -> float:
+        """Safely parse float from environment variable with fallback."""
+        val_str = os.getenv(key)
+        if val_str is None:
+            return default
+        try:
+            return float(val_str)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid value for {key}: '{val_str}'. Using default value: {default}.")
+            return default
+
+    def _get_env_int(key: str, default: int) -> int:
+        """Safely parse int from environment variable with fallback."""
+        val_str = os.getenv(key)
+        if val_str is None:
+            return default
+        try:
+            return int(val_str)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid value for {key}: '{val_str}'. Using default value: {default}.")
+            return default
+
     mcp_enabled_str = os.getenv("MULTI_LLM_CHAT_MCP_ENABLED", "false").lower()
     mcp_enabled = mcp_enabled_str in ("true", "1", "yes")
 
@@ -87,11 +110,11 @@ def load_config_from_env() -> AppConfig:
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         gemini_model=os.getenv("GEMINI_MODEL", "models/gemini-pro-latest"),
-        chatgpt_model=os.getenv("CHATGPT_MODEL", "gpt-4.1"),
-        token_buffer_factor=float(os.getenv("TOKEN_BUFFER_FACTOR", "1.2")),
-        token_buffer_factor_with_tools=float(os.getenv("TOKEN_BUFFER_FACTOR_WITH_TOOLS", "1.5")),
+        chatgpt_model=os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo"),
+        token_buffer_factor=_get_env_float("TOKEN_BUFFER_FACTOR", 1.2),
+        token_buffer_factor_with_tools=_get_env_float("TOKEN_BUFFER_FACTOR_WITH_TOOLS", 1.5),
         mcp_enabled=mcp_enabled,
-        mcp_timeout_seconds=int(os.getenv("MCP_TIMEOUT_SECONDS", "120")),
+        mcp_timeout_seconds=_get_env_int("MCP_TIMEOUT_SECONDS", 120),
     )
 
     # Log validation issues

@@ -32,9 +32,10 @@ class TestAppConfig:
         assert config.google_api_key is None
         assert config.openai_api_key is None
         assert config.gemini_model == "models/gemini-pro-latest"
-        assert config.chatgpt_model == "gpt-4.1"
+        assert config.chatgpt_model == "gpt-3.5-turbo"
         assert config.token_buffer_factor == 1.2
         assert config.token_buffer_factor_with_tools == 1.5
+        assert config.mcp_enabled is False
         assert config.mcp_timeout_seconds == 120
 
     def test_appconfig_validation_no_api_keys(self):
@@ -126,7 +127,7 @@ class TestLoadConfigFromEnv:
             assert config.google_api_key is None
             assert config.openai_api_key is None
             assert config.gemini_model == "models/gemini-pro-latest"
-            assert config.chatgpt_model == "gpt-4.1"
+            assert config.chatgpt_model == "gpt-3.5-turbo"
             assert config.token_buffer_factor == 1.2
             assert config.token_buffer_factor_with_tools == 1.5
             assert config.mcp_enabled is False
@@ -193,3 +194,30 @@ class TestLoadConfigFromEnv:
             with patch.dict(os.environ, {"MULTI_LLM_CHAT_MCP_ENABLED": value}, clear=True):
                 config = load_config_from_env()
                 assert config.mcp_enabled is False, f"Failed for value: {value}"
+
+    def test_load_config_from_env_invalid_float_value(self):
+        """Test that invalid float values fall back to defaults with warning."""
+        with patch.dict(os.environ, {"TOKEN_BUFFER_FACTOR": "invalid"}, clear=True):
+            config = load_config_from_env()
+            # Should fall back to default
+            assert config.token_buffer_factor == 1.2
+
+    def test_load_config_from_env_invalid_int_value(self):
+        """Test that invalid int values fall back to defaults with warning."""
+        with patch.dict(os.environ, {"MCP_TIMEOUT_SECONDS": "not_a_number"}, clear=True):
+            config = load_config_from_env()
+            # Should fall back to default
+            assert config.mcp_timeout_seconds == 120
+
+    def test_load_config_from_env_empty_string_values(self):
+        """Test that empty string values fall back to defaults."""
+        env = {
+            "TOKEN_BUFFER_FACTOR": "",
+            "TOKEN_BUFFER_FACTOR_WITH_TOOLS": "",
+            "MCP_TIMEOUT_SECONDS": "",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = load_config_from_env()
+            assert config.token_buffer_factor == 1.2
+            assert config.token_buffer_factor_with_tools == 1.5
+            assert config.mcp_timeout_seconds == 120
