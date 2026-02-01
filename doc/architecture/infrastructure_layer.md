@@ -14,29 +14,20 @@ Strategyパターンを採用し、異なるLLM APIを統一的なインター�
 classDiagram
     class LLMProvider {
         <<Abstract>>
-        +call_api(history, prompt, tools)
-        +mcp_tools_to_native_format(tools)
+        +call_api(history, system_prompt, tools)
     }
 
     class GeminiProvider {
         +call_api()
-        +mcp_tools_to_native_format()
-        -convert_to_gemini_messages()
     }
 
     class ChatGPTProvider {
         +call_api()
-        +mcp_tools_to_native_format()
-        -convert_to_openai_messages()
     }
     
-    class LLMProviderFactory {
-        +create_provider(model_name)
-    }
-
+    %% create_provider is a module-level factory function
     LLMProvider <|-- GeminiProvider
     LLMProvider <|-- ChatGPTProvider
-    LLMProviderFactory ..> LLMProvider : creates
 ```
 
 ### 実装詳細

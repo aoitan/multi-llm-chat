@@ -15,8 +15,6 @@ classDiagram
         +system_prompt: str
         +process_message(user_msg) AsyncGenerator
         +parse_mention(msg)
-        -_process_gemini()
-        -_process_chatgpt()
     }
 
     class LLMProvider {

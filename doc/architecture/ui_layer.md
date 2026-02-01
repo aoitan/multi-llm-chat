@@ -51,7 +51,6 @@ classDiagram
 ### モジュール構成
 
 | モジュール | 役割 |
-|Data | Description|
 |---|---|
 | `app.py` | UIコンポーネントの配置（Layout）とイベントの配線（Wiring）を担当するエントリーポイント。 |
 | `state.py` | 画面の状態（ボタンの有効/無効、表示テキストなど）を一元管理する `WebUIState` クラスを定義。 |
@@ -84,7 +83,7 @@ class WebUIState:
 
 Gradioのジェネレータ機能を利用して、LLMからの応答をリアルタイムに表示します。
 
-1.  **送信開始**: ユーザー入力と現在の履歴を `handle_chat_submission` に渡す。
+1.  **送信開始**: ユーザー入力と現在の履歴を `validate_and_respond` に渡す。
 2.  **UIロック**: `WebUIState` を使用して送信ボタン等を無効化。
 3.  **処理委譲**: `ChatService.process_message` (非同期ジェネレータ) を呼び出す。
 4.  **逐次更新**: ジェネレータから `(display_history, logic_history)` が返されるたびに `chatbot_ui` コンポーネントを更新。
