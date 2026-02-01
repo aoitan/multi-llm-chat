@@ -7,19 +7,15 @@ This module provides backward compatibility by re-exporting functions from:
 - core_modules.providers_facade: Provider access utilities
 - llm_provider: Provider classes and configuration
 - history_utils: History management utilities
+
+Note: Environment variables should be loaded by calling init_runtime()
+at application startup (see app.py, chat_logic.py).
 """
 
 import logging
 
-from dotenv import load_dotenv
-
-# Load environment variables BEFORE importing modules that depend on them
-load_dotenv()
-
 # Setup logger
 logger = logging.getLogger(__name__)
-
-# Import after load_dotenv() to ensure env vars are available  # noqa: E402
 
 # Import legacy API wrappers from core_modules (DEPRECATED functions)
 # Import Agentic Loop implementation from core_modules

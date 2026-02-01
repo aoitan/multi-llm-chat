@@ -7,16 +7,14 @@ REFACTORING NOTE (Issue #101):
 This module is being split into providers/ package. OpenAI-specific code has been moved to
 providers/openai.py and Gemini-specific code to providers/gemini.py.
 The classes are re-exported here for backward compatibility.
+
+Note: Environment variables should be loaded by calling init_runtime()
+at application startup (see app.py, chat_logic.py).
 """
 
 import logging
 import os
 import threading
-
-from dotenv import load_dotenv
-
-# Load environment variables BEFORE importing providers to avoid race conditions
-load_dotenv()
 
 from .providers.base import LLMProvider
 from .providers.gemini import (
@@ -37,8 +35,7 @@ from .providers.openai import (
 logger = logging.getLogger(__name__)
 
 # Environment variables (Re-exported for backward compatibility)
-# Note: providers.openai does NOT export OPENAI_API_KEY to avoid early evaluation.
-# We define it here after load_dotenv().
+# Note: These are read from os.getenv() which should be populated by init_runtime()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
