@@ -1,3 +1,14 @@
+"""Core module - Facade for multi-LLM chat functionality.
+
+This module provides backward compatibility by re-exporting functions from:
+- core_modules.legacy_api: DEPRECATED API wrappers
+- core_modules.token_and_context: Token calculation and validation
+- core_modules.agentic_loop: Agentic Loop implementation
+- core_modules.providers_facade: Provider access utilities
+- llm_provider: Provider classes and configuration
+- history_utils: History management utilities
+"""
+
 import logging
 
 from dotenv import load_dotenv
@@ -73,3 +84,46 @@ from .llm_provider import (
 from .llm_provider import (
     get_provider as get_provider,
 )
+
+# Define public API
+__all__ = [
+    # Legacy API (DEPRECATED)
+    "call_chatgpt_api",
+    "call_chatgpt_api_async",
+    "call_gemini_api",
+    "call_gemini_api_async",
+    "extract_text_from_chunk",
+    "format_history_for_chatgpt",
+    "format_history_for_gemini",
+    "load_api_key",
+    "prepare_request",
+    "stream_text_events",
+    "stream_text_events_async",
+    # Token and context management
+    "calculate_tokens",
+    "get_max_context_length",
+    "get_pruning_info",
+    "get_token_info",
+    "prune_history_sliding_window",
+    "validate_context_length",
+    "validate_system_prompt_length",
+    # Agentic Loop
+    "AgenticLoopResult",
+    "execute_with_tools",
+    "execute_with_tools_stream",
+    "execute_with_tools_sync",
+    # Provider facade
+    "list_gemini_models",
+    # History utils
+    "LLM_ROLES",
+    # Provider classes and configuration
+    "CHATGPT_MODEL",
+    "GEMINI_MODEL",
+    "GOOGLE_API_KEY",
+    "MCP_ENABLED",
+    "OPENAI_API_KEY",
+    "ChatGPTProvider",
+    "GeminiProvider",
+    "create_provider",
+    "get_provider",
+]
