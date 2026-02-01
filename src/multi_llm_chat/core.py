@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import google.generativeai as genai
-import openai
 from dotenv import load_dotenv
 
 # Load environment variables BEFORE importing modules that depend on them
@@ -20,14 +19,13 @@ from .compression import (
 from .compression import (
     prune_history_sliding_window as _prune_history_sliding_window,
 )
+
+# Import legacy API wrappers from core_modules (DEPRECATED functions)
 from .history_utils import (
     LLM_ROLES as LLM_ROLES,
 )
 from .history_utils import (
     get_provider_name_from_model as _get_provider_name_from_model,
-)
-from .history_utils import (
-    prepare_request as _prepare_request,
 )
 from .history_utils import (
     validate_history_entry as _validate_history_entry,
@@ -97,35 +95,7 @@ class AgenticLoopResult:
     error: Optional[str] = None
 
 
-def load_api_key(env_var_name):
-    """Load API key from environment
-
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should import from llm_provider directly.
-    """
-    from .llm_provider import load_api_key as _load_api_key
-
-    return _load_api_key(env_var_name)
-
-
-def format_history_for_gemini(history):
-    """Convert history to Gemini API format
-
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use GeminiProvider.format_history() directly.
-    """
-    return GeminiProvider.format_history(history)
-
-
-def format_history_for_chatgpt(history):
-    """Convert history to ChatGPT API format
-
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use ChatGPTProvider.format_history() directly.
-    """
-    return ChatGPTProvider.format_history(history)
-
-
+# list_gemini_models remains here temporarily (will move to providers_facade later)
 def list_gemini_models(verbose: bool = True):
     """List available Gemini models (debug utility)
 
@@ -153,140 +123,6 @@ def list_gemini_models(verbose: bool = True):
 
     logger.info("Found %d Gemini models", len(models))
     return models
-
-
-async def call_gemini_api_async(history, system_prompt=None):
-    """Call Gemini API asynchronously."""
-    try:
-        provider = create_provider("gemini")
-        async for chunk in provider.call_api(history, system_prompt):
-            yield chunk
-    except ValueError as e:
-        yield f"Gemini API Error: {e}"
-    except Exception as e:
-        error_msg = f"Gemini API Error: An unexpected error occurred: {e}"
-        print(error_msg)
-        try:
-            list_gemini_models()
-        except Exception:
-            pass
-        yield error_msg
-
-
-def call_gemini_api(history, system_prompt=None):
-    """Call Gemini API (synchronous wrapper for backward compatibility)"""
-    import asyncio
-    import warnings
-
-    warnings.warn(
-        "call_gemini_api() is deprecated and will be removed. "
-        "Use ChatService or create_provider() instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    async_gen = call_gemini_api_async(history, system_prompt)
-    while True:
-        try:
-            yield loop.run_until_complete(async_gen.__anext__())
-        except StopAsyncIteration:
-            break
-
-
-async def call_chatgpt_api_async(history, system_prompt=None):
-    """Call ChatGPT API asynchronously."""
-    try:
-        provider = create_provider("chatgpt")
-        async for chunk in provider.call_api(history, system_prompt):
-            yield chunk
-    except ValueError as e:
-        yield f"ChatGPT API Error: {e}"
-    except openai.APIError as e:
-        yield f"ChatGPT API Error: OpenAI APIからエラーが返されました: {e}"
-    except openai.APITimeoutError as e:
-        yield f"ChatGPT API Error: リクエストがタイムアウトしました: {e}"
-    except openai.APIConnectionError as e:
-        yield f"ChatGPT API Error: APIへの接続に失敗しました: {e}"
-    except Exception as e:
-        yield f"ChatGPT API Error: 予期せぬエラーが発生しました: {e}"
-
-
-def call_chatgpt_api(history, system_prompt=None):
-    """Call ChatGPT API (synchronous wrapper for backward compatibility)"""
-    import asyncio
-    import warnings
-
-    warnings.warn(
-        "call_chatgpt_api() is deprecated and will be removed. "
-        "Use ChatService or create_provider() instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    async_gen = call_chatgpt_api_async(history, system_prompt)
-    while True:
-        try:
-            yield loop.run_until_complete(async_gen.__anext__())
-        except StopAsyncIteration:
-            break
-
-
-async def stream_text_events_async(history, provider_name, system_prompt=None):
-    """Stream normalized text events from a provider asynchronously."""
-    provider = create_provider(provider_name)
-    async for chunk in provider.stream_text_events(history, system_prompt):
-        yield chunk
-
-
-def stream_text_events(history, provider_name, system_prompt=None):
-    """Stream normalized text events (synchronous wrapper for backward compatibility)"""
-    import asyncio
-
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    async_gen = stream_text_events_async(history, provider_name, system_prompt)
-    while True:
-        try:
-            yield loop.run_until_complete(async_gen.__anext__())
-        except StopAsyncIteration:
-            break
-
-
-def extract_text_from_chunk(chunk, model_name):
-    """Extract text content from API response chunk
-
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use provider.extract_text_from_chunk() directly.
-    """
-    try:
-        provider_name = _get_provider_name_from_model(model_name)
-        provider = create_provider(provider_name)
-        return provider.extract_text_from_chunk(chunk)
-    except Exception:
-        if isinstance(chunk, str):
-            return chunk
-        return ""
-
-
-def prepare_request(history, system_prompt, model_name):
-    """Prepare API request with system prompt and history"""
-    return _prepare_request(history, system_prompt, model_name)
 
 
 def _estimate_tokens(text):
