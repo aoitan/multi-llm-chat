@@ -13,19 +13,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Import after load_dotenv() to ensure env vars are available  # noqa: E402
-from .compression import (
-    get_pruning_info as _get_pruning_info,
-)
-from .compression import (
-    prune_history_sliding_window as _prune_history_sliding_window,
-)
 
 # Import legacy API wrappers from core_modules (DEPRECATED functions)
 from .history_utils import (
     LLM_ROLES as LLM_ROLES,
-)
-from .history_utils import (
-    get_provider_name_from_model as _get_provider_name_from_model,
 )
 from .history_utils import (
     validate_history_entry as _validate_history_entry,
@@ -57,18 +48,8 @@ from .llm_provider import (
 from .llm_provider import (
     get_provider as get_provider,
 )
-from .token_utils import (
-    estimate_tokens as _estimate_tokens_impl,
-)
-from .token_utils import (
-    get_max_context_length as _get_max_context_length,
-)
-from .validation import (
-    validate_context_length as _validate_context_length,
-)
-from .validation import (
-    validate_system_prompt_length as _validate_system_prompt_length,
-)
+
+# Import token and context management wrappers from core_modules
 
 
 @dataclass(frozen=True)
@@ -123,84 +104,6 @@ def list_gemini_models(verbose: bool = True):
 
     logger.info("Found %d Gemini models", len(models))
     return models
-
-
-def _estimate_tokens(text):
-    return _estimate_tokens_impl(text)
-
-
-def get_max_context_length(model_name):
-    return _get_max_context_length(model_name)
-
-
-def calculate_tokens(text: str, model_name: str) -> int:
-    """Calculate token count for text using model-appropriate method"""
-    provider_name = _get_provider_name_from_model(model_name)
-    provider = get_provider(provider_name)
-
-    result = provider.get_token_info(text, history=None, model_name=model_name)
-
-    return result["input_tokens"]
-
-
-def get_token_info(
-    text: str, model_name: str, history: Optional[List[Dict[str, Any]]] = None
-) -> Dict[str, Any]:
-    """Get token information for the given text and model
-
-    DEPRECATED: This is a backward compatibility wrapper.
-    New code should use provider.get_token_info() directly.
-    """
-    from .llm_provider import TIKTOKEN_AVAILABLE
-
-    # Determine provider from model name
-    provider_name = _get_provider_name_from_model(model_name)
-
-    # Get provider and delegate token calculation with actual model name
-    provider = get_provider(provider_name)
-
-    result = provider.get_token_info(text, history, model_name=model_name)
-
-    # Add is_estimated flag for backward compatibility
-    is_estimated = provider_name == "gemini" or not TIKTOKEN_AVAILABLE
-
-    return {
-        "token_count": result["input_tokens"],
-        "max_context_length": result["max_tokens"],
-        "is_estimated": is_estimated,
-    }
-
-
-def prune_history_sliding_window(history, max_tokens, model_name, system_prompt=None):
-    """Prune conversation history using sliding window approach"""
-
-    return _prune_history_sliding_window(
-        history, max_tokens, model_name, system_prompt, token_calculator=calculate_tokens
-    )
-
-
-def get_pruning_info(history, max_tokens, model_name, system_prompt=None):
-    """Get information about how history would be pruned"""
-
-    return _get_pruning_info(
-        history, max_tokens, model_name, system_prompt, token_calculator=calculate_tokens
-    )
-
-
-def validate_system_prompt_length(system_prompt, model_name):
-    """Validate that system prompt doesn't exceed model's max context"""
-
-    return _validate_system_prompt_length(
-        system_prompt, model_name, token_calculator=calculate_tokens
-    )
-
-
-def validate_context_length(history, system_prompt, model_name):
-    """Validate that system prompt + latest turn doesn't exceed max context"""
-
-    return _validate_context_length(
-        history, system_prompt, model_name, token_calculator=calculate_tokens
-    )
 
 
 # Agentic Loop implementation
