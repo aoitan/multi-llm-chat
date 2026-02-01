@@ -129,7 +129,26 @@ graph TB
 
 - `base.py`: `LLMProvider`抽象基底クラス（共通インターフェース定義）
 - `gemini.py`: Google Gemini実装（`GeminiProvider`, `GeminiToolCallAssembler`クラス）
+  - `mcp_tools_to_gemini_format()`: MCPツール定義をGemini API形式に変換
+  - `call_api(tools=...)`: ツール定義を含むAPI呼び出し
 - `openai.py`: OpenAI/ChatGPT実装（`ChatGPTProvider`, `OpenAIToolCallAssembler`クラス）
+  - `mcp_tools_to_openai_format()`: MCPツール定義をOpenAI API形式に変換
+  - `call_api(tools=...)`: ツール定義を含むAPI呼び出し
+
+#### 1.8 `src/multi_llm_chat/mcp/`
+
+**責務**: MCP (Model Context Protocol) サーバーとの通信管理。
+
+- `client.py`: `MCPClient`クラス
+  - `list_tools()`: 利用可能なツール一覧を取得
+  - `call_tool(name, arguments)`: ツールを実行して結果を取得
+  - stdioベースのサーバープロセス管理（`asyncio.create_subprocess_exec`）
+
+**Agentic Loop統合**:
+- `agentic_loop.py`の`execute_with_tools_stream()`がMCPClientを受け取る
+- LLMがツール呼び出しを要求した場合、`mcp_client.call_tool()`を実行
+- 結果を`role: "tool"`として履歴に追加し、LLMに再送信
+- 最大イテレーション数とタイムアウトで無限ループを防止
 
 ### 2. ビジネスロジック層 (Epic 017追加)
 

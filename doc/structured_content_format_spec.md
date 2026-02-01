@@ -137,9 +137,10 @@ Gemini APIのストリーミングレスポンスを統一形式に変換（`Gem
 |-------------------|--------------|
 | `role: "user"` | `role: "user"` |
 | `role: "chatgpt"` | `role: "assistant"` |
+| `role: "tool"` | `role: "tool"` |
 | `type: "text"` | `content: str` |
-
-**注意:** 現在、ChatGPTProviderはツール呼び出しをサポートしていません。`tools`引数が渡された場合は警告ログを出力して無視します。
+| `type: "tool_call"` | `tool_calls: [{"id": str, "type": "function", "function": {...}}]` |
+| `type: "tool_result"` | `content: str, tool_call_id: str` |
 
 #### 出力（OpenAI API→アプリケーション）
 
@@ -148,6 +149,9 @@ OpenAI APIのストリーミングレスポンスを統一形式に変換（`Cha
 | OpenAI API形式 | 統一辞書形式 |
 |---------------|-------------|
 | `chunk.choices[0].delta.content` | `{"type": "text", "content": str}` |
+| `chunk.choices[0].delta.tool_calls[i].function` | `{"type": "tool_call", "content": {"name": str, "arguments": dict, "tool_call_id": str}}` |
+
+**Note:** ツール結果の返送時は、統一形式の`role: "tool"`をOpenAI API形式の`role: "tool", tool_call_id: str`に変換します（`ChatGPTProvider.format_history`内で処理）。
 
 ## 後方互換性
 
