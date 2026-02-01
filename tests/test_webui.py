@@ -200,7 +200,7 @@ class TestWebUIHandlers:
         """handlers.load_history_action: should preserve tool execution logs in display"""
         with patch("multi_llm_chat.webui.handlers.HistoryStore") as MockStore:
             mock_store_instance = MockStore.return_value
-            # Simulate saved history with tool interactions
+            # Simulate saved history with tool interactions (matching agentic_loop format)
             mock_store_instance.load_history.return_value = {
                 "system_prompt": "Test",
                 "turns": [
@@ -210,17 +210,22 @@ class TestWebUIHandlers:
                         "content": [
                             {
                                 "type": "tool_call",
-                                "content": {"name": "search", "arguments": {"query": "test"}},
+                                "content": {
+                                    "name": "search",
+                                    "arguments": {"query": "test"},
+                                    "tool_call_id": "call_abc123",
+                                },
                             },
                         ],
                     },
                     {
-                        "role": "assistant",
+                        "role": "tool",
                         "content": [
                             {
                                 "type": "tool_result",
                                 "name": "search",
                                 "content": "Found 5 results",
+                                "tool_call_id": "call_abc123",
                             },
                         ],
                     },
