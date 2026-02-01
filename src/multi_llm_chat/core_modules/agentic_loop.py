@@ -18,6 +18,7 @@ or execute_with_tools for batch processing.
 """
 
 import asyncio
+import copy
 import logging
 import time
 from dataclasses import dataclass
@@ -90,10 +91,6 @@ async def execute_with_tools_stream(
         TimeoutError: If execution exceeds timeout
         ValueError: If tool call is requested but mcp_client is None
     """
-    import copy
-    import logging
-
-    logger = logging.getLogger(__name__)
     start_time = time.time()
 
     # Create working copy of history (do not mutate original)
@@ -297,9 +294,11 @@ async def execute_with_tools_stream(
 
     except TimeoutError:
         timed_out = True
+        logger.warning("Agentic loop timed out (timed_out=%s)", timed_out)
         raise
     except Exception as e:
         error = str(e)
+        logger.exception("Unhandled error during agentic loop execution: %s", e)
         raise
 
     # Calculate history_delta (only new entries)

@@ -13,3 +13,7 @@ local.prompt.md
 
 # Chat Histories
 chat_histories/
+
+# Development tools (local only)
+.serena/
+.copilot/skill/

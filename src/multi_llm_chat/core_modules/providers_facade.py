@@ -37,9 +37,9 @@ def list_gemini_models(verbose: bool = True) -> list:
             logger.debug("Available Gemini model: %s", m.name)
 
     if verbose:
-        print("利用可能なGeminiモデル:")
+        logger.info("利用可能なGeminiモデル:")
         for name in models:
-            print(f"  - {name}")
+            logger.info("  - %s", name)
 
     logger.info("Found %d Gemini models", len(models))
     return models
