@@ -9,6 +9,7 @@
 - `ci_lint_spec.md` — CI/Lint 方針。
 
 ## 現行仕様 (`specs/`)
+- 統合サマリ: `history_features.md`, `system_prompt_and_models.md`, `webui_design.md`
 - 履歴関連: `history_feature_requirements.md`, `chat_history_reset_spec.md`, `chat_history_export_feature_spec.md`, `webui_history_management_spec.md`
 - システムプロンプト/モデル: `system_prompt_feature_requirements.md`, `provider_specific_system_prompt_spec.md`, `llm_switching_feature_spec.md`
 - 構造化コンテンツ: `structured_content_format_spec.md`, `migration_plan.md`
