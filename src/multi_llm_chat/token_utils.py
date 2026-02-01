@@ -1,9 +1,11 @@
+"""Token utility functions for LLM API usage.
+
+Note: Environment variables should be loaded by calling init_runtime()
+at application startup (see app.py, chat_logic.py).
+"""
+
 import logging
 import os
-
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 def get_buffer_factor(has_tools: bool = False) -> float:
