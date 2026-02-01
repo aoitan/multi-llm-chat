@@ -32,7 +32,7 @@ class TestAppConfig:
         assert config.google_api_key is None
         assert config.openai_api_key is None
         assert config.gemini_model == "models/gemini-pro-latest"
-        assert config.chatgpt_model == "gpt-3.5-turbo"
+        assert config.chatgpt_model == "gpt-4o"
         assert config.token_buffer_factor == 1.2
         assert config.token_buffer_factor_with_tools == 1.5
         assert config.mcp_enabled is False
@@ -127,7 +127,7 @@ class TestLoadConfigFromEnv:
             assert config.google_api_key is None
             assert config.openai_api_key is None
             assert config.gemini_model == "models/gemini-pro-latest"
-            assert config.chatgpt_model == "gpt-3.5-turbo"
+            assert config.chatgpt_model == "gpt-4o"
             assert config.token_buffer_factor == 1.2
             assert config.token_buffer_factor_with_tools == 1.5
             assert config.mcp_enabled is False

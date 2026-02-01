@@ -29,7 +29,7 @@ class AppConfig:
 
     # Model settings
     gemini_model: str = "models/gemini-pro-latest"
-    chatgpt_model: str = "gpt-3.5-turbo"
+    chatgpt_model: str = "gpt-4o"
 
     # Token settings
     token_buffer_factor: float = 1.2
@@ -110,7 +110,7 @@ def load_config_from_env() -> AppConfig:
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         gemini_model=os.getenv("GEMINI_MODEL", "models/gemini-pro-latest"),
-        chatgpt_model=os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo"),
+        chatgpt_model=os.getenv("CHATGPT_MODEL", "gpt-4o"),
         token_buffer_factor=_get_env_float("TOKEN_BUFFER_FACTOR", 1.2),
         token_buffer_factor_with_tools=_get_env_float("TOKEN_BUFFER_FACTOR_WITH_TOOLS", 1.5),
         mcp_enabled=mcp_enabled,
