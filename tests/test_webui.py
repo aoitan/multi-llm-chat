@@ -27,17 +27,18 @@ async def consume_async_gen(gen):
 # --- Tests for components.py ---
 def test_token_count_display_updates():
     """components.update_token_display: should update when system prompt changes"""
-    with patch("multi_llm_chat.webui.components.core.get_token_info") as mock_token_info:
-        mock_token_info.return_value = {
-            "token_count": 50,
-            "max_context_length": 1048576,
-            "is_estimated": True,
-        }
-        result = update_token_display("Test system prompt")
-        assert "50" in result
-        assert "1048576" in result
-        assert "estimated" in result.lower()
-        mock_token_info.assert_called_once_with("Test system prompt", "gpt-3.5-turbo", None)
+    with patch("multi_llm_chat.webui.components.core.CHATGPT_MODEL", "gpt-4.1"):
+        with patch("multi_llm_chat.webui.components.core.get_token_info") as mock_token_info:
+            mock_token_info.return_value = {
+                "token_count": 50,
+                "max_context_length": 1048576,
+                "is_estimated": True,
+            }
+            result = update_token_display("Test system prompt")
+            assert "50" in result
+            assert "1048576" in result
+            assert "estimated" in result.lower()
+            mock_token_info.assert_called_once_with("Test system prompt", "gpt-4.1", None)
 
 
 def test_token_limit_warning_display():
