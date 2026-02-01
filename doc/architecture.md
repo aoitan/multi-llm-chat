@@ -2,419 +2,128 @@
 
 ## 概要
 
-Multi-LLM Chatは、複数のLLM（Gemini、ChatGPT）との対話を統一的に管理するPythonアプリケーションです。Epic 009のリファクタリングにより、責務分離された3層アーキテクチャを採用しました。
+Multi-LLM Chatは、複数のLLM（Gemini、ChatGPT）との対話を統一的に管理するPythonアプリケーションです。
+3層アーキテクチャ（UI層、ビジネスロジック層、コアロジック層）を採用し、UIの実装詳細からビジネスロジックを分離することで、CLIとWeb UIの両方で一貫した動作を実現しています。また、Model Context Protocol (MCP) をサポートし、外部ツールとの連携機能も備えています。
+
+## 詳細ドキュメント (New!)
+
+各レイヤーの詳細設計については、以下のドキュメントを参照してください。
+
+*   **[UI層 (Presentation)](architecture/ui_layer.md)**: CLIとWebUI (Gradio) の実装構造、State管理パターン。
+*   **[ビジネスロジック層 (Service)](architecture/service_layer.md)**: `ChatService` によるフロー制御、メンション解析、デュアル履歴管理。
+*   **[コアロジック層 (Core)](architecture/core_layer.md)**: Agentic Loop (ReAct)、トークン管理、コンテキスト圧縮。
+*   **[インフラストラクチャ層 (Infrastructure)](architecture/infrastructure_layer.md)**: LLMプロバイダ実装、MCPクライアント、データ永続化。
 
 ## アーキテクチャ全体図
 
 ```mermaid
 graph TB
-    subgraph UI["ユーザーインターフェース層"]
-        WebUI["webui.py<br/>Gradio UI<br/>- Chat UI<br/>- System Prompt<br/>- Token Display<br/>- History Panel"]
-        CLI["cli.py<br/>REPL Loop<br/>- /system<br/>- @mentions<br/>- Commands"]
+    subgraph UI ["UI Layer (Presentation)"]
+        CLI["cli.py<br/>(Command Line Interface)"]
+        WebUI["webui/ package<br/>(Gradio Web Interface)"]
+        AppPy["app.py<br/>(Entry Point)"]
     end
-    
-    subgraph Service["ビジネスロジック層 (Epic 017)"]
-        ChatService["ChatService (chat_logic.py)<br/>- parse_mention()<br/>- process_message()<br/>- LLMルーティング<br/>- 履歴管理"]
+
+    subgraph Service ["Business Logic Layer"]
+        ChatService["chat_logic.py<br/>ChatService Class"]
+        Runtime["runtime.py<br/>Runtime Initialization"]
     end
-    
-    subgraph Core["コアロジック層 (低レベルAPI)"]
-        CorePy["core.py (Facade)"]
-        TokenUtils["token_utils.py<br/>- トークン計算<br/>- get_token_info()"]
-        HistoryUtils["history_utils.py<br/>- 履歴整形<br/>- 定数定義"]
-        Compression["compression.py<br/>- 履歴圧縮<br/>- スライディングウィンドウ"]
-        Validation["validation.py<br/>- バリデーション"]
-        LLMProvider["llm_provider.py<br/>- 戦略パターン<br/>- API呼び出し"]
+
+    subgraph Core ["Core Logic Layer (Facade & Modules)"]
+        CorePy["core.py<br/>(Facade)"]
+        
+        subgraph CoreModules ["core_modules/"]
+            AgenticLoop["agentic_loop.py<br/>(Tool Execution Loop)"]
+            LegacyAPI["legacy_api.py<br/>(Deprecated Wrappers)"]
+            TokenContext["token_and_context.py<br/>(Wrappers)"]
+        end
+
+        subgraph CoreUtils ["Utilities"]
+            Validation["validation.py"]
+            Compression["compression.py"]
+            TokenUtils["token_utils.py"]
+            HistoryUtils["history_utils.py"]
+        end
     end
-    
-    subgraph Persistence["永続化層 (Epic 017)"]
-        HistoryStore["HistoryStore (history.py)<br/>- save_history()<br/>- load_history()<br/>- list_histories()"]
+
+    subgraph Infrastructure ["Infrastructure Layer"]
+        subgraph Providers ["providers/"]
+            LLMProvider["llm_provider.py<br/>(Factory)"]
+            BaseProvider["base.py<br/>(Interface)"]
+            Gemini["gemini.py"]
+            OpenAI["openai.py"]
+        end
+
+        subgraph MCP ["mcp/"]
+            MCPClient["client.py<br/>(MCP Client)"]
+        end
+
+        subgraph Persistence ["Persistence"]
+            HistoryStore["history.py<br/>(File System Storage)"]
+        end
     end
-    
-    subgraph External["外部サービス層"]
-        Gemini["Google Gemini API"]
-        ChatGPT["OpenAI ChatGPT API"]
-        FileSystem["File System<br/>(chat_histories/)"]
-    end
-    
-    subgraph Compat["後方互換性レイヤー（オプション）"]
-        AppPy["app.py → webui へ再エクスポート"]
-        ChatLogic["chat_logic.py → 再エクスポート:<br/>- ChatService (新)<br/>- core.* (旧)<br/>- main() (旧CLI)"]
-    end
-    
+
+    AppPy --> WebUI
     WebUI --> ChatService
+    WebUI --> Runtime
     CLI --> ChatService
-    WebUI --> HistoryStore
+    CLI --> MCPClient
+    CLI --> Runtime
+
     ChatService --> CorePy
-    CorePy --> TokenUtils
-    CorePy --> HistoryUtils
-    CorePy --> Compression
-    CorePy --> Validation
-    CorePy --> LLMProvider
-    LLMProvider --> TokenUtils
-    Compression --> TokenUtils
-    Validation --> TokenUtils
+    ChatService --> LLMProvider
+    ChatService --> HistoryStore
+
+    CorePy --> AgenticLoop
+    CorePy --> LegacyAPI
+    CorePy --> TokenContext
+    CorePy --> CoreUtils
+
+    AgenticLoop --> MCPClient
+    AgenticLoop --> BaseProvider
+
+    LegacyAPI --> LLMProvider
+    
     LLMProvider --> Gemini
-    LLMProvider --> ChatGPT
-    HistoryStore --> FileSystem
-    AppPy -.-> WebUI
-    ChatLogic -.-> ChatService
-    ChatLogic -.-> CorePy
-    ChatLogic -.-> CLI
-```
-
-## モジュール設計
-
-### 1. コアロジック層
-
-#### 1.1 `src/multi_llm_chat/core.py`
-
-**責務**: 共通インターフェース（ファサード）。各機能別ユーティリティを統合し、後方互換性を提供。
-
-**構成**: 129行の純粋ファサード（実装ロジックは core_modules/ に分離）
-
-**再エクスポート**:
-- `core_modules.legacy_api`: DEPRECATED API wrappers（11関数）
-- `core_modules.token_and_context`: トークン計算・検証（7関数）
-- `core_modules.agentic_loop`: Agentic Loop実装（4エンティティ）
-- `core_modules.providers_facade`: プロバイダユーティリティ（1関数）
-- `llm_provider`: Provider classes（2クラス + 7設定）
-- `history_utils`: 履歴管理（1定数）
-
-#### 1.1.1 `src/multi_llm_chat/core_modules/` パッケージ
-
-**責務**: core.pyから分離された実装ロジック（Issue #103対応）
-
-**モジュール構成**:
-- **`legacy_api.py` (290行)**: DEPRECATED backward compatibility wrappers
-  - `call_gemini_api()`, `call_chatgpt_api()`, `stream_text_events()` など
-  - llm_provider と history_utils への委譲
-- **`token_and_context.py` (201行)**: Token calculation & validation wrappers
-  - `calculate_tokens()`, `get_token_info()`, `prune_history_sliding_window()` など
-  - token_utils, compression, validation への委譲
-- **`agentic_loop.py` (423行)**: Agentic Loop implementation
-  - `AgenticLoopResult` dataclass
-  - `execute_with_tools_stream()`, `execute_with_tools()`, `execute_with_tools_sync()`
-  - MCP tool execution, timeout handling
-- **`providers_facade.py` (45行)**: Provider access utilities
-  - `list_gemini_models()` デバッグ用関数
-
-**設計原則**:
-- 各モジュールは sibling modules に依存せず、parent package (`..llm_provider`, `..history_utils` など) のみに依存
-- core.py は純粋ファサードとして、全ての public API を re-export
-- Backward compatibility 完全維持（既存コードは無修正で動作）
-
-#### 1.2 `src/multi_llm_chat/token_utils.py`
-
-**責務**: トークン計算ロジック、コンテキスト長情報の管理。
-
-#### 1.3 `src/multi_llm_chat/history_utils.py`
-
-**責務**: 履歴データの整形、プロバイダー判定、共通定数（`LLM_ROLES`など）の定義。
-
-#### 1.4 `src/multi_llm_chat/compression.py`
-
-**責務**: 履歴データのスライディングウィンドウによる圧縮・枝刈り。
-
-#### 1.5 `src/multi_llm_chat/validation.py`
-
-**責務**: システムプロンプトやコンテキスト長の検証。
-
-#### 1.6 `src/multi_llm_chat/llm_provider.py`
-
-**責務**: 各LLMプロバイダーへのルーティング層。後方互換性を維持しつつ、`providers/`パッケージへ委譲。
-
-#### 1.7 `src/multi_llm_chat/providers/`
-
-**責務**: LLMプロバイダー実装の独立化（戦略パターン）。
-
-- `base.py`: `LLMProvider`抽象基底クラス（共通インターフェース定義）
-- `gemini.py`: Google Gemini実装（`GeminiProvider`, `GeminiToolCallAssembler`クラス）
-  - `mcp_tools_to_gemini_format()`: MCPツール定義をGemini API形式に変換
-  - `call_api(tools=...)`: ツール定義を含むAPI呼び出し
-- `openai.py`: OpenAI/ChatGPT実装（`ChatGPTProvider`, `OpenAIToolCallAssembler`クラス）
-  - `mcp_tools_to_openai_format()`: MCPツール定義をOpenAI API形式に変換
-  - `call_api(tools=...)`: ツール定義を含むAPI呼び出し
-
-#### 1.8 `src/multi_llm_chat/mcp/`
-
-**責務**: MCP (Model Context Protocol) サーバーとの通信管理。
-
-- `client.py`: `MCPClient`クラス
-  - `list_tools()`: 利用可能なツール一覧を取得
-  - `call_tool(name, arguments)`: ツールを実行して結果を取得
-  - stdioベースのサーバープロセス管理（`asyncio.create_subprocess_exec`）
-
-**Agentic Loop統合**:
-- `agentic_loop.py`の`execute_with_tools_stream()`がMCPClientを受け取る
-- LLMがツール呼び出しを要求した場合、`mcp_client.call_tool()`を実行
-- 結果を`role: "tool"`として履歴に追加し、LLMに再送信
-- 最大イテレーション数とタイムアウトで無限ループを防止
-
-### 2. ビジネスロジック層 (Epic 017追加)
-
-**責務**: ビジネスロジック層 - メンション解析、LLMルーティング、履歴管理
-
-##### `ChatService`クラス
-
-チャットセッションを管理し、UI層（CLI/WebUI）からビジネスロジックを分離するサービスクラス。
-
-| 機能カテゴリ | メソッド | 説明 |
-|------------|---------|------|
-| **初期化** | `__init__(display_history, logic_history, system_prompt)` | セッション状態を保持（display: UI用、logic: API用） |
-| **メンション解析** | `parse_mention(message)` | `@gemini`, `@chatgpt`, `@all`を検出（モジュール関数） |
-| **メッセージ処理** | `process_message(user_message)` | メンション解析→LLM呼び出し→履歴更新（ジェネレータ） |
-| **LLM呼び出し** | `_process_gemini(message)`, `_process_chatgpt(message)` | 各LLMへのAPI呼び出しとストリーミング処理 |
-
-##### 設計の特徴
-
-- **UI形式の分離**: 
-  - `display_history`: UI表示用（Gradio Chatbot形式: `[[user, assistant], ...]`）
-  - `logic_history`: API呼び出し用（`[{"role": "user", "content": "..."}, ...]`）
-- **`@all`処理**: 
-  - 履歴スナップショットを作成し、GeminiとChatGPTに同一の文脈を提供
-  - 両者の応答を順次（Gemini→ChatGPT）追加
-- **ストリーミング対応**: `yield`で中間状態を返し、リアルタイム表示を実現
-- **エラーハンドリング**: メンション欠落時は早期リターン（CLIではメモとして処理）
-
-##### 後方互換性レイヤー
-
-`chat_logic.py`は以下の再エクスポートも提供:
-- `main()`: 旧CLI実装（`cli.py`への移行推奨）
-- `core.*`: `core.py`の全関数（既存コードとの互換性維持）
-
-### 2. ユーザーインターフェース層
-
-#### 2.1 Web UI: `src/multi_llm_chat/webui.py`
-
-**責務**: Gradio UIの実装
-
-##### 主要機能
-
-| コンポーネント | 関数/変数 | 説明 |
-|-------------|----------|------|
-| **UI関数** | `update_token_display(system_prompt, logic_history, model_name)` | トークン数表示を更新 |
-| | `check_send_button_with_user_id(user_id, system_prompt, logic_history, model_name)` | 送信ボタンの有効/無効を判定（user_idとトークン制限を両方チェック） |
-| | `check_history_buttons_enabled(user_id)` | 履歴管理ボタンの有効/無効を判定（戻り値: dict of `gr.update()`） |
-| | `respond(user_message, display_history, logic_history, system_prompt, user_id)` | チャット応答の中心関数（user_id必須） |
-| **起動関数** | `launch(server_name=None, debug=True)` | Gradioアプリを起動 |
-| **UI要素** | `demo` | Gradio Blocksインスタンス |
-| | `user_id_input` | ユーザーID入力欄（履歴管理用） |
-| | `system_prompt_input` | システムプロンプト入力欄 |
-| | `token_display` | トークンカウント表示 |
-| | `chatbot_ui` | チャット表示エリア |
-| | `save_history_btn`, `load_history_btn`, `new_chat_btn` | 履歴管理ボタン |
-
-##### 特殊処理
-- **Gradioバグ回避**: JSON Schema内のbool型処理のためのモンキーパッチ適用
-- **user_id検証**: `respond()`関数内でuser_idの空チェックを実施し、未入力時はエラーメッセージを返す
-
-#### 2.2 CLI: `src/multi_llm_chat/cli.py`
-
-**責務**: コマンドラインインターフェースの実装
-
-##### 主要機能
-
-| 機能 | 関数/変数 | 説明 |
-|------|----------|------|
-| **メインループ** | `main()` | REPLループ、`(history, system_prompt)`を返す |
-| **コマンド処理** | `_handle_system_command(args, system_prompt, current_model)` | `/system`コマンドの処理 |
-| **応答処理** | `_process_response_stream(stream, model_name)` | ストリーミング応答の表示 |
-| **ユーティリティ** | `_clone_history(history)` | 履歴の浅いコピーを作成 |
-
-##### サポートするコマンド
-
-| コマンド | 説明 |
-|---------|------|
-| `/system <prompt>` | システムプロンプトを設定 |
-| `/system` | 現在のシステムプロンプトを表示 |
-| `/system clear` | システムプロンプトをクリア |
-| `exit` / `quit` | CLIを終了 |
-
-##### メンション機能
-
-| メンション | 動作 |
-|-----------|------|
-| `@gemini <message>` | Geminiに送信 |
-| `@chatgpt <message>` | ChatGPTに送信 |
-| `@all <message>` | 両方に送信（履歴は分岐前のスナップショット） |
-| メンションなし | 思考メモとして履歴に追加のみ |
-
-### 3. 互換性レイヤー（オプション）
-
-#### 3.1 `src/multi_llm_chat/app.py`
-
-旧インターフェースを維持するため、`webui`モジュールの`demo`, `launch`, `respond`を再エクスポート。
-
-```python
-from .webui import demo, launch, respond
-__all__ = ["demo", "launch", "respond"]
-```
-
-#### 3.2 `src/multi_llm_chat/chat_logic.py`
-
-旧インターフェースを維持するため、`core`と`cli`モジュールの関数を再エクスポート。
-
-```python
-from .cli import main
-from .core import (
-    CHATGPT_MODEL, GEMINI_MODEL, GOOGLE_API_KEY, OPENAI_API_KEY,
-    call_chatgpt_api, call_gemini_api,
-    format_history_for_chatgpt, format_history_for_gemini,
-    list_gemini_models,
-)
-```
-
-### 4. エントリーポイント
-
-#### ルートレベルのラッパー
-
-| ファイル | インポート元 | 用途 |
-|---------|------------|------|
-| `app.py` | `multi_llm_chat.webui` | Web UI起動 (`python app.py`) |
-| `chat_logic.py` | `multi_llm_chat.cli` | CLI起動 (`python chat_logic.py`) |
-
-## データフロー
-
-### システムプロンプト適用フロー
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant UI as UI Layer<br/>(webui/cli)
-    participant Prep as core.py<br/>prepare_request()
-    participant API as core.py<br/>call_*_api()
-    participant Ext as External API
+    LLMProvider --> OpenAI
     
-    User->>UI: システムプロンプト入力
-    UI->>Prep: system_prompt引数として渡す
-    alt OpenAI
-        Prep->>API: [{"role":"system", "content":...}, ...history]
-    else Gemini
-        Prep->>API: (system_prompt, history) tuple
-    end
-    API->>Ext: API呼び出し
-    Ext-->>API: レスポンス
-    API-->>User: ストリーミング表示
+    TokenContext --> Validation
+    TokenContext --> Compression
+    TokenContext --> TokenUtils
 ```
 
-### トークンカウントフロー
+## モジュールリストと役割
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant UI as UI Layer
-    participant Token as core.py<br/>get_token_info()
-    
-    User->>UI: システムプロンプト変更
-    UI->>Token: get_token_info(text, model_name)
-    Token-->>UI: {token_count, max_context_length, is_estimated}
-    UI->>UI: 表示更新
-    UI->>UI: 送信ボタン有効/無効判定
-    UI-->>User: 結果表示
-```
+### アプリケーション層 (UI & Entry Points)
+*   **`src/multi_llm_chat/app.py`**: Web UIアプリケーションのエントリーポイント（後方互換性維持）。
+*   **`src/multi_llm_chat/cli.py`**: コマンドラインインターフェースの実装およびMCP統合のエントリーポイント。
+*   **`src/multi_llm_chat/webui/`**: GradioベースのWeb UI実装パッケージ。
+    *   `app.py`: UI構築のメインロジック。
+    *   `state.py`: UIの状態管理（WebUIState）。
+    *   `handlers.py`: イベントハンドラロジック。
+    *   `components.py`: 再利用可能なUIコンポーネント。
 
-## テスト構造
+### ビジネスロジック層 (Service)
+*   **`src/multi_llm_chat/chat_logic.py`**: アプリケーションのビジネスロジック（状態管理、ルーティング、ストリーミング制御）を提供するサービス層。
+*   **`src/multi_llm_chat/runtime.py`**: アプリケーションのランタイム初期化（環境変数読み込み、ログ設定）を行うモジュール。
 
-### テストファイルとモジュールの対応
+### コアロジック層 (Core Domain)
+*   **`src/multi_llm_chat/core.py`**: コア機能への統一的なアクセスを提供するファサードモジュール。
+*   **`src/multi_llm_chat/core_modules/`**: コア機能の実装詳細を格納するパッケージ。
+    *   `agentic_loop.py`: ツール使用を含む自律的なエージェントループの実装。
+    *   `legacy_api.py`: 後方互換性のための旧API実装。
+    *   `token_and_context.py`: トークン計算とコンテキスト管理のラッパー。
+*   **`src/multi_llm_chat/validation.py`**: システムプロンプトやコンテキスト長の妥当性を検証するモジュール。
+*   **`src/multi_llm_chat/compression.py`**: スライディングウィンドウ方式によるコンテキスト圧縮ロジックを提供するモジュール。
+*   **`src/multi_llm_chat/token_utils.py`**: トークン数の見積もりとバッファ計算を行うユーティリティ。
+*   **`src/multi_llm_chat/history_utils.py`**: 履歴データのフォーマット変換や定数を管理するユーティリティ。
 
-| テストファイル | 対象モジュール | テスト数 |
-|-------------|-------------|---------|
-| `tests/test_core.py` | `src/multi_llm_chat/core.py` | 10 |
-| `tests/test_cli.py` | `src/multi_llm_chat/cli.py` | 8 |
-| `tests/test_webui.py` | `src/multi_llm_chat/webui.py` | 20 |
-| `tests/test_chat_logic.py` | 互換性レイヤー | 3 |
-
-### テスト方針
-
-- **ユニットテスト**: `unittest.mock.patch`でAPI呼び出しをモック
-- **統合テスト**: 実際のAPI呼び出しは行わない（hermetic tests）
-- **カバレッジ**: 全ての公開関数をテスト
-- **TDD**: Red-Green-Refactorサイクルを厳守
-
-## 設定とシークレット管理
-
-### 環境変数
-
-| 変数名 | 必須 | デフォルト | 説明 |
-|-------|-----|----------|------|
-| `GOOGLE_API_KEY` | ✅ | なし | Gemini API Key |
-| `OPENAI_API_KEY` | ❌ | なし | OpenAI API Key |
-| `GEMINI_MODEL` | ❌ | `models/gemini-pro-latest` | 使用するGeminiモデル |
-| `CHATGPT_MODEL` | ❌ | `gpt-3.5-turbo` | 使用するChatGPTモデル |
-| `MLC_SERVER_NAME` | ❌ | `127.0.0.1` | Web UIのホスト名 |
-
-### `.env`ファイル例
-
-```bash
-GOOGLE_API_KEY="your-gemini-key-here"
-OPENAI_API_KEY="your-openai-key-here"
-GEMINI_MODEL="models/gemini-2.0-flash-exp"
-CHATGPT_MODEL="gpt-4o"
-```
-
-## パフォーマンス考慮事項
-
-### キャッシング戦略
-
-- **APIクライアント**: モジュールレベルでシングルトンとしてキャッシュ
-- **Geminiモデル**: `_gemini_model`グローバル変数
-- **OpenAIクライアント**: `_openai_client`グローバル変数
-
-### ストリーミング処理
-
-- 両APIとも`stream=True`でストリーミング応答
-- ジェネレーターパターンで逐次出力
-- UIレスポンスの向上
-
-## 拡張性
-
-### 新しいLLMの追加方法
-
-1. **core.py**: 
-   - `call_<model>_api()`関数を追加
-   - `format_history_for_<model>()`関数を追加
-   - `prepare_request()`に分岐を追加
-
-2. **cli.py**: 
-   - メンションパターンに`@<model>`を追加
-   - 応答処理に分岐を追加
-
-3. **webui.py**: 
-   - 必要に応じてUI要素を追加
-
-4. **テスト**: 
-   - 各モジュールに対応するテストを追加
-
-### 将来の機能追加
-
-以下の機能は既存アーキテクチャで実装可能:
-
-- ✅ **システムプロンプト**: 実装済み
-- 🔲 **コンテキスト圧縮**: `core.py`に追加予定
-- 🔲 **履歴永続化**: `core.py`に追加予定
-- 🔲 **複数モデル同時利用**: 現在の`@all`を拡張
-
-## コードメトリクス
-
-### モジュールサイズ
-
-| モジュール | 行数 | 主要機能数 |
-|-----------|-----|----------|
-| `core.py` | 165 | 11 |
-| `cli.py` | 122 | 4 |
-| `webui.py` | 185 | 5 |
-| `app.py` (互換) | 4 | - |
-| `chat_logic.py` (互換) | 26 | - |
-
-### リファクタリング効果
-
-- **削減行数**: 336行（旧実装から）
-- **正味削減**: 306行
-- **コード重複**: ほぼゼロ（共通処理はcoreに集約）
-
-## 参考ドキュメント
-
-- [システムプロンプト機能要件](./doc/system_prompt_feature_requirements.md)
-- [Epic 009タスク票](./issues/009-task-sequential-core-system-prompt.md)
-- [コンテキスト圧縮要件](./doc/context_compression_requirements.md)
-- [履歴管理要件](./doc/history_feature_requirements.md)
+### インフラストラクチャ層 (Providers, Persistence, MCP)
+*   **`src/multi_llm_chat/llm_provider.py`**: 各LLMプロバイダのインスタンス生成と設定を管理するファクトリ。
+*   **`src/multi_llm_chat/providers/`**: 各LLMプロバイダの具象クラスを提供するパッケージ。
+    *   `base.py`: プロバイダの基底クラス（インターフェース定義）。
+    *   `gemini.py`: Google Gemini APIの実装。
+    *   `openai.py`: OpenAI ChatGPT APIの実装。
+*   **`src/multi_llm_chat/mcp/`**: Model Context Protocol (MCP) クライアント実装を提供するパッケージ。
+    *   `client.py`: MCPサーバーとの接続とツール実行を行うクライアント。
+*   **`src/multi_llm_chat/history.py`**: 会話履歴のファイルシステムへの永続化と読み込みを担当するモジュール。
