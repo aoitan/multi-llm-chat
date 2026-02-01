@@ -1,6 +1,14 @@
 pytest_plugins = ["tests.conftest_llm"]
 
 
+def pytest_configure(config):
+    """Initialize runtime before test collection (pytest plugin hook)."""
+    from multi_llm_chat.runtime import init_runtime, is_initialized
+
+    if not is_initialized():
+        init_runtime()
+
+
 async def collect_async_generator(async_gen):
     """Helper to collect async generator results into a list"""
     results = []

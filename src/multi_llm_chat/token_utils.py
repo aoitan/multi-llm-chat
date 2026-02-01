@@ -1,21 +1,24 @@
 """Token utility functions for LLM API usage.
 
-Note: Environment variables should be loaded by calling init_runtime()
+Note: Configuration should be initialized by calling init_runtime()
 at application startup (see app.py, chat_logic.py).
 """
 
 import logging
 import os
 
+from .config import get_config
+
 
 def get_buffer_factor(has_tools: bool = False) -> float:
-    """Get token estimation buffer factor from environment variable
+    """Get token estimation buffer factor from configuration.
 
     Default buffer factors:
         - Without tools: 1.2 (20% buffer for standard conversation)
         - With tools: 1.5 (50% buffer to account for FunctionDeclaration overhead)
 
-    Can be overridden via TOKEN_ESTIMATION_BUFFER_FACTOR environment variable.
+    Can be overridden via TOKEN_BUFFER_FACTOR and TOKEN_BUFFER_FACTOR_WITH_TOOLS
+    environment variables.
 
     Note:
         For tool-heavy conversations, the 1.5 factor compensates for
@@ -25,20 +28,12 @@ def get_buffer_factor(has_tools: bool = False) -> float:
         has_tools: Whether the conversation includes tool calls/results
 
     Returns:
-        float: Buffer factor (auto-detected or from environment)
+        float: Buffer factor from configuration
     """
-    # Environment variable overrides everything
-    env_value = os.getenv("TOKEN_ESTIMATION_BUFFER_FACTOR")
-    if env_value:
-        try:
-            return float(env_value)
-        except ValueError as e:
-            logging.warning(
-                f"Invalid TOKEN_ESTIMATION_BUFFER_FACTOR: {env_value}. Using default. Error: {e}"
-            )
-
-    # Auto-detect based on tool usage
-    return 1.5 if has_tools else 1.2
+    config = get_config()
+    if has_tools:
+        return config.token_buffer_factor_with_tools
+    return config.token_buffer_factor
 
 
 def estimate_tokens(text: str) -> int:
