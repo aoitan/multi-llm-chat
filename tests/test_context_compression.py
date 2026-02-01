@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 import multi_llm_chat.core as core
+from multi_llm_chat.core_modules.token_and_context import _estimate_tokens
 
 
 def test_max_context_length_from_env():
@@ -52,7 +53,7 @@ def test_token_calculation_with_buffer_factor():
         result = core.calculate_tokens(text, "gemini-1.5-pro")
 
         # Should apply 1.2x buffer to estimation
-        base_estimate = core._estimate_tokens(text)
+        base_estimate = _estimate_tokens(text)
         expected = int(base_estimate * 1.2)
         assert result == expected
 
@@ -66,7 +67,7 @@ def test_openai_uses_tiktoken():
 
     # Result should be from tiktoken, not estimation
     # We can verify by checking it's different from buffered estimation
-    base_estimate = core._estimate_tokens(text)
+    base_estimate = _estimate_tokens(text)
     buffered_estimate = int(base_estimate * 1.2)
 
     # tiktoken result should be different (more accurate)
@@ -291,7 +292,7 @@ def test_get_token_info_applies_buffer_for_gemini():
         result = core.get_token_info(text, "gemini-1.5-pro")
 
         # Should apply buffer factor to estimation
-        base_estimate = core._estimate_tokens(text)
+        base_estimate = _estimate_tokens(text)
         expected = int(base_estimate * 1.3)
         assert result["token_count"] == expected
 
