@@ -8,14 +8,18 @@ This module is being split into providers/ package. OpenAI-specific code has bee
 providers/openai.py and Gemini-specific code to providers/gemini.py.
 The classes are re-exported here for backward compatibility.
 
-Note: Environment variables should be loaded by calling init_runtime()
-at application startup (see app.py, chat_logic.py).
+DEPRECATION WARNING:
+Direct access to environment variables via module-level constants
+(OPENAI_API_KEY, GOOGLE_API_KEY, GEMINI_MODEL, CHATGPT_MODEL)
+is deprecated. Use config.get_config() instead.
 """
 
 import logging
 import os
 import threading
+import warnings
 
+from .config import get_config
 from .providers.base import LLMProvider
 from .providers.gemini import (
     GeminiProvider,
@@ -24,7 +28,6 @@ from .providers.gemini import (
     mcp_tools_to_gemini_format,
 )
 from .providers.openai import (
-    CHATGPT_MODEL,
     TIKTOKEN_AVAILABLE,
     ChatGPTProvider,
     OpenAIToolCallAssembler,
@@ -34,18 +37,39 @@ from .providers.openai import (
 
 logger = logging.getLogger(__name__)
 
-# Environment variables (Re-exported for backward compatibility)
-# Note: These are read from os.getenv() which should be populated by init_runtime()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
 
-# Feature flags
-MCP_ENABLED = os.getenv("MULTI_LLM_CHAT_MCP_ENABLED", "false").lower() in (
-    "true",
-    "1",
-    "yes",
-)
+# Mapping of deprecated constants to their config attribute names
+# Format: constant_name -> (config_attr, replacement_code)
+DEPRECATED_CONSTANTS = {
+    "OPENAI_API_KEY": ("openai_api_key", "config.get_config().openai_api_key"),
+    "GOOGLE_API_KEY": ("google_api_key", "config.get_config().google_api_key"),
+    "GEMINI_MODEL": ("gemini_model", "config.get_config().gemini_model"),
+    "CHATGPT_MODEL": ("chatgpt_model", "config.get_config().chatgpt_model"),
+    "MCP_ENABLED": ("mcp_enabled", "config.get_config().mcp_enabled"),
+}
+
+
+def __getattr__(name):
+    """Lazy evaluation of deprecated environment variables for backward compatibility.
+
+    This allows old code to access OPENAI_API_KEY, GOOGLE_API_KEY, etc.
+    while internally using the new ConfigRepository pattern.
+
+    Deprecated constants:
+    - OPENAI_API_KEY, GOOGLE_API_KEY: Use get_config().openai_api_key/google_api_key
+    - GEMINI_MODEL, CHATGPT_MODEL: Use get_config().gemini_model/chatgpt_model
+    - MCP_ENABLED: Use get_config().mcp_enabled
+    """
+    if name in DEPRECATED_CONSTANTS:
+        attr_name, replacement = DEPRECATED_CONSTANTS[name]
+        warnings.warn(
+            f"{name} constant is deprecated. Use {replacement}",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return getattr(get_config(), attr_name)
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
 
 # Re-export for backward compatibility
 __all__ = [
@@ -58,11 +82,7 @@ __all__ = [
     "mcp_tools_to_gemini_format",
     "_parse_tool_response_payload",
     "parse_openai_tool_call",
-    "CHATGPT_MODEL",
-    "OPENAI_API_KEY",
     "TIKTOKEN_AVAILABLE",
-    "GEMINI_MODEL",
-    "GOOGLE_API_KEY",
     "create_provider",
     "get_provider",
 ]

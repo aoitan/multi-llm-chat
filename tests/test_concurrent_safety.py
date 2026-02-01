@@ -75,7 +75,7 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
 
         mock_model_class.side_effect = track_model_creation
 
-        provider = GeminiProvider()
+        provider = GeminiProvider(api_key="test-key")  # Provide test API key
 
         # Define different system prompts
         prompts = [
@@ -186,7 +186,7 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
 
         mock_model_class.side_effect = create_slow_model
 
-        provider = GeminiProvider()
+        provider = GeminiProvider(api_key="test-key")  # Provide test API key
 
         # Use the same prompt from multiple threads to stress test cache
         shared_prompt = "You are a helpful assistant"

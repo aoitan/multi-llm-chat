@@ -6,7 +6,6 @@ Extracted from llm_provider.py as part of Issue #101 refactoring.
 import hashlib
 import json
 import logging
-import os
 import threading
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional
@@ -14,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import google.generativeai as genai
 from google.generativeai.types import FunctionDeclaration, Tool
 
+from ..config import get_config
 from ..history_utils import content_to_text
 from ..token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
 from .base import LLMProvider
@@ -299,8 +299,10 @@ class GeminiProvider(LLMProvider):
 
     def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
         self.name = "gemini"  # Provider identifier for history tracking
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        self.model_name = model_name or os.getenv("GEMINI_MODEL", "models/gemini-pro-latest")
+        # Use provided values or fall back to configuration
+        config = get_config()
+        self.api_key = api_key or config.google_api_key
+        self.model_name = model_name or config.gemini_model
         self._default_model = None
         self._models_cache = OrderedDict()  # LRU cache: hash -> (prompt, model)
         self._cache_max_size = 10  # Limit cache size to prevent memory leak

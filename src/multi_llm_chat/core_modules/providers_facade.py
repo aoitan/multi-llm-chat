@@ -11,7 +11,7 @@ import logging
 
 import google.generativeai as genai
 
-from ..llm_provider import GOOGLE_API_KEY
+from ..config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +25,12 @@ def list_gemini_models(verbose: bool = True) -> list:
     Returns:
         List of model names that support generateContent.
     """
-    if not GOOGLE_API_KEY:
-        logger.error("GOOGLE_API_KEY not found in environment variables or .env file.")
+    config = get_config()
+    if not config.google_api_key:
+        logger.error("GOOGLE_API_KEY not configured. Call init_runtime() first.")
         return []
 
-    genai.configure(api_key=GOOGLE_API_KEY)
+    genai.configure(api_key=config.google_api_key)
     models = []
     for m in genai.list_models():
         if "generateContent" in m.supported_generation_methods:

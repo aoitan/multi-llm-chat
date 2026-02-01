@@ -1,3 +1,4 @@
+from multi_llm_chat.config import AppConfig, reset_config, set_config
 from multi_llm_chat.token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
 
 
@@ -82,26 +83,50 @@ def test_get_max_context_length(monkeypatch):
     assert get_max_context_length("unknown-model") == 4096
 
 
-def test_get_buffer_factor(monkeypatch):
-    # Clear any existing environment variable first
-    monkeypatch.delenv("TOKEN_ESTIMATION_BUFFER_FACTOR", raising=False)
+def test_get_buffer_factor():
+    """Test get_buffer_factor() uses ConfigRepository values."""
+    # Reset config first since fixture may have initialized it
+    reset_config()
 
-    # Default without tools (1.2 for standard conversation)
-    assert get_buffer_factor(has_tools=False) == 1.2
+    try:
+        # Test default without tools (1.2 for standard conversation)
+        config = AppConfig(token_buffer_factor=1.2, token_buffer_factor_with_tools=1.5)
+        set_config(config)
+        assert get_buffer_factor(has_tools=False) == 1.2
 
-    # Default with tools (1.5 to account for FunctionDeclaration overhead)
-    assert get_buffer_factor(has_tools=True) == 1.5
+        # Test default with tools (1.5 to account for FunctionDeclaration overhead)
+        assert get_buffer_factor(has_tools=True) == 1.5
 
-    # Environment variable overrides everything
-    monkeypatch.setenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "2.0")
-    assert get_buffer_factor(has_tools=False) == 2.0
-    assert get_buffer_factor(has_tools=True) == 2.0
+        # Test custom values
+        reset_config()
+        custom_config = AppConfig(token_buffer_factor=2.0, token_buffer_factor_with_tools=3.0)
+        set_config(custom_config)
+        assert get_buffer_factor(has_tools=False) == 2.0
+        assert get_buffer_factor(has_tools=True) == 3.0
+    finally:
+        reset_config()
 
 
-def test_get_buffer_factor_invalid_env_value(monkeypatch):
-    """Invalid environment variable should fall back to auto-detected default"""
-    monkeypatch.setenv("TOKEN_ESTIMATION_BUFFER_FACTOR", "invalid")
+def test_get_buffer_factor_invalid_env_value():
+    """Test that get_buffer_factor() handles invalid configuration values.
 
-    # Should fall back to auto-detected values
-    assert get_buffer_factor(has_tools=False) == 1.2
-    assert get_buffer_factor(has_tools=True) == 1.5
+    Note: This test verifies that invalid configuration values are caught
+    during config validation, not at runtime.
+    """
+    # Reset config first since fixture may have initialized it
+    reset_config()
+
+    try:
+        # Invalid values should be caught during config creation/validation
+        config = AppConfig(token_buffer_factor=-1.0)
+        set_config(config)
+
+        # Validation should flag this as an issue
+        issues = config.validate()
+        assert any("TOKEN_BUFFER_FACTOR" in issue for issue in issues)
+
+        # get_buffer_factor() should still work with the invalid value
+        # (validation doesn't prevent usage, just warns)
+        assert get_buffer_factor(has_tools=False) == -1.0
+    finally:
+        reset_config()

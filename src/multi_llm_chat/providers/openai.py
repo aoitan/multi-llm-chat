@@ -5,7 +5,6 @@ Extracted from llm_provider.py as part of Issue #101 refactoring.
 
 import json
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 import openai
@@ -17,14 +16,12 @@ try:
 except ImportError:
     TIKTOKEN_AVAILABLE = False
 
+from ..config import get_config
 from ..history_utils import content_to_text
 from ..token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
 from .base import LLMProvider
 
 logger = logging.getLogger(__name__)
-
-# Environment variables
-CHATGPT_MODEL = os.getenv("CHATGPT_MODEL", "gpt-3.5-turbo")
 
 
 # MCP Tool conversion functions
@@ -244,7 +241,9 @@ class ChatGPTProvider(LLMProvider):
 
     def __init__(self, api_key: Optional[str] = None):
         self.name = "chatgpt"  # Provider identifier for history tracking
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        # Use provided value or fall back to configuration
+        config = get_config()
+        self.api_key = api_key or config.openai_api_key
         self._client = None
         if self.api_key:
             self._client = openai.OpenAI(api_key=self.api_key)
@@ -430,8 +429,12 @@ class ChatGPTProvider(LLMProvider):
         chatgpt_history = self.format_history(history)
         messages.extend(chatgpt_history)
 
+        # Get model name from configuration
+        config = get_config()
+        model = config.chatgpt_model
+
         # Prepare API call parameters
-        api_params = {"model": CHATGPT_MODEL, "messages": messages, "stream": True}
+        api_params = {"model": model, "messages": messages, "stream": True}
 
         # Add tools if provided
         if tools:
@@ -508,11 +511,14 @@ class ChatGPTProvider(LLMProvider):
         Args:
             text: Text content to count tokens for
             history: Optional conversation history
-            model_name: Optional model name (uses CHATGPT_MODEL if not provided)
+            model_name: Optional model name (uses config.chatgpt_model if not provided)
             has_tools: Whether tools are being used (applies buffer factor)
         """
-        # Use provided model name or fall back to default
-        effective_model = model_name if model_name else CHATGPT_MODEL
+        # Use provided model name or fall back to configuration
+        if not model_name:
+            config = get_config()
+            model_name = config.chatgpt_model
+        effective_model = model_name
         token_count = 0
         use_estimation = not TIKTOKEN_AVAILABLE
 

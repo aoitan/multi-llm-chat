@@ -54,21 +54,6 @@ from .core_modules.token_and_context import (  # noqa: F401
 )
 from .history_utils import LLM_ROLES  # noqa: F401
 from .llm_provider import (
-    CHATGPT_MODEL as CHATGPT_MODEL,
-)
-from .llm_provider import (
-    GEMINI_MODEL as GEMINI_MODEL,
-)
-from .llm_provider import (
-    GOOGLE_API_KEY as GOOGLE_API_KEY,
-)
-from .llm_provider import (
-    MCP_ENABLED as MCP_ENABLED,
-)
-from .llm_provider import (
-    OPENAI_API_KEY as OPENAI_API_KEY,
-)
-from .llm_provider import (
     ChatGPTProvider as ChatGPTProvider,
 )
 from .llm_provider import (
@@ -113,13 +98,21 @@ __all__ = [
     # History utils
     "LLM_ROLES",
     # Provider classes and configuration
-    "CHATGPT_MODEL",
-    "GEMINI_MODEL",
-    "GOOGLE_API_KEY",
-    "MCP_ENABLED",
-    "OPENAI_API_KEY",
     "ChatGPTProvider",
     "GeminiProvider",
     "create_provider",
     "get_provider",
 ]
+
+
+def __getattr__(name):
+    """Lazy evaluation of deprecated constants for backward compatibility."""
+    # Delegate to llm_provider's __getattr__ for deprecated constants
+    from . import llm_provider
+
+    if hasattr(llm_provider, "__getattr__"):
+        try:
+            return llm_provider.__getattr__(name)
+        except AttributeError:
+            pass
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
