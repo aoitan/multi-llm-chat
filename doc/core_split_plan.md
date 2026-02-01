@@ -308,27 +308,30 @@ __all__ = [
 | ファイル | 行数 | 役割 |
 |---------|------|------|
 | `core.py` | 740行 | すべて混在 |
-| `test_core.py` | 421行 | すべて混在 |
+| `test_core.py` | 427行, 28テスト | すべて混在（単一ファイル） |
 
 ### After (分割後)
 
 | ファイル | 行数 | 役割 |
 |---------|------|------|
-| `core.py` | ~150行 | ファサード（re-export） |
-| `core/legacy_api.py` | ~140行 | DEPRECATED wrapper |
-| `core/token_and_context.py` | ~110行 | トークン・検証 wrapper |
-| `core/agentic_loop.py` | ~450行 | Agentic Loop実装 |
-| `core/providers_facade.py` | ~80行 | Provider入口 |
-| **合計** | **~930行** | （import増加分含む） |
+| `core.py` | 129行 | ファサード（re-export） ✅ |
+| `core_modules/legacy_api.py` | 290行 | DEPRECATED wrapper ✅ |
+| `core_modules/token_and_context.py` | 201行 | トークン・検証 wrapper ✅ |
+| `core_modules/agentic_loop.py` | 423行 | Agentic Loop実装 ✅ |
+| `core_modules/providers_facade.py` | 45行 | Provider入口 ✅ |
+| **合計** | **1,101行** | （import増加分含む） |
 
 | テストファイル | 行数 | 役割 |
 |---------------|------|------|
-| `test_core.py` | ~50行 | ファサード統合テスト |
-| `test_core_legacy_api.py` | ~150行 | DEPRECATED API |
-| `test_token_and_context.py` | ~120行 | トークン・検証 |
-| `test_agentic_loop.py` | ~410行 | Agentic Loop（統合） |
-| `test_provider_access.py` | ~50行 | Provider管理 |
-| **合計** | **~780行** | （重複削減効果） |
+| `tests/test_core_token_context.py` | 90行, 6テスト | トークン・Context管理 ✅ |
+| `tests/test_core_legacy_api.py` | 280行, 20テスト | DEPRECATED API ✅ |
+| `tests/test_core_facade.py` | 50行, 2テスト | ファサード検証 ✅ |
+| **合計** | **420行, 28テスト** | （機能別に分割、テスト総数維持） |
+
+**実装結果**: 
+- ✅ core.py は129行まで削減（82%減）
+- ✅ テストは機能別に3ファイルへ分割（28テスト維持）
+- ✅ 全285テストが通過（破壊的変更なし）
 
 ---
 
@@ -349,13 +352,19 @@ __all__ = [
 
 ---
 
-## 🎯 次のステップ
+## 🎯 完了ステータス
 
-この分割計画を実施する場合:
+**Issue #103 完了条件**:
+1. ✅ **core.pyの行数・責務が縮小** → 740行 → 129行（82%削減）
+2. ✅ **テストが機能別ファイルに分割** → `test_core.py`（427行）を3ファイル（420行）に分割
+3. ✅ **pytestが通る** → 全285テスト通過
 
-1. **承認を得る**: この計画で良いか確認
-2. **Phase 1 から開始**: 準備コミット（低リスク）
-3. **段階的実施**: 各Phase完了後にテスト実行
-4. **柔軟に調整**: 実装中の発見に基づいて計画修正
+**完了日時**: 2026-02-01  
+**実装フェーズ**:
+- Phase 1: 準備（2コミット）
+- Phase 2: モジュール分割（4コミット）
+- Phase 3: テスト修正（3コミット）
+- Phase 4: テスト分割（2コミット）
+- Phase 5: 検証と文書化（1コミット）
 
-実施しますか？それとも計画の修正が必要ですか？
+**成果**: Issue #103の全要件を満たし、保守性と可読性が向上しました。
