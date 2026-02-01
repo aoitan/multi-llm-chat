@@ -148,7 +148,7 @@ def test_call_gemini_api_with_system_prompt():
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core_modules.legacy_api.create_provider") as mock_create_provider:
         mock_provider = Mock()
 
         async def mock_call_api(*args, **kwargs):
@@ -167,7 +167,7 @@ def test_call_gemini_api_without_system_prompt():
     """call_gemini_api should delegate to GeminiProvider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core_modules.legacy_api.create_provider") as mock_create_provider:
         mock_provider = Mock()
 
         async def mock_call_api(*args, **kwargs):
@@ -187,7 +187,7 @@ def test_call_chatgpt_api_with_system_prompt():
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core_modules.legacy_api.create_provider") as mock_create_provider:
         mock_provider = Mock()
 
         async def mock_call_api(*args, **kwargs):
@@ -206,7 +206,7 @@ def test_call_chatgpt_api_without_system_prompt():
     """call_chatgpt_api should delegate to ChatGPTProvider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core_modules.legacy_api.create_provider") as mock_create_provider:
         mock_provider = Mock()
 
         async def mock_call_api(*args, **kwargs):
@@ -226,7 +226,7 @@ def test_stream_text_events_with_system_prompt():
     history = [{"role": "user", "content": "Hello"}]
     system_prompt = "You are a helpful assistant."
 
-    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core_modules.legacy_api.create_provider") as mock_create_provider:
         mock_provider = Mock()
 
         async def mock_stream_text_events(*args, **kwargs):
@@ -246,7 +246,7 @@ def test_stream_text_events_without_system_prompt():
     """stream_text_events should delegate to provider without system prompt"""
     history = [{"role": "user", "content": "Hello"}]
 
-    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core_modules.legacy_api.create_provider") as mock_create_provider:
         mock_provider = Mock()
 
         async def mock_stream_text_events(*args, **kwargs):
@@ -279,27 +279,33 @@ def test_format_history_for_chatgpt_preserves_system_role():
 
 def test_estimate_tokens_english():
     """Token estimation should handle English text"""
+    from multi_llm_chat.core_modules.token_and_context import _estimate_tokens
+
     # "Hello world" = 11 chars / 4 ≈ 2.75 → 2 tokens
-    result = core._estimate_tokens("Hello world")
+    result = _estimate_tokens("Hello world")
     assert result == 2
 
 
 def test_estimate_tokens_japanese():
     """Token estimation should handle Japanese text more accurately"""
+    from multi_llm_chat.core_modules.token_and_context import _estimate_tokens
+
     # "こんにちは" = 5 chars / 1.5 ≈ 3.33 → 3 tokens
-    result = core._estimate_tokens("こんにちは")
+    result = _estimate_tokens("こんにちは")
     assert result >= 3
 
     # "日本語テスト" = 6 chars / 1.5 ≈ 4 → 4 tokens
-    result = core._estimate_tokens("日本語テスト")
+    result = _estimate_tokens("日本語テスト")
     assert result >= 4
 
 
 def test_estimate_tokens_mixed():
     """Token estimation should handle mixed English/Japanese text"""
+    from multi_llm_chat.core_modules.token_and_context import _estimate_tokens
+
     # "Hello こんにちは" = 5 ASCII + 5 Japanese
     # = (5/4) + (5/1.5) ≈ 1.25 + 3.33 ≈ 4.58 → 4 tokens
-    result = core._estimate_tokens("Hello こんにちは")
+    result = _estimate_tokens("Hello こんにちは")
     assert result >= 4
 
 
@@ -344,7 +350,7 @@ def test_extract_text_from_chunk_chatgpt_list():
 def test_extract_text_from_chunk_fallback():
     """extract_text_from_chunk should delegate to provider and fall back to string"""
     # Test with plain string (fallback case - provider fails, falls back to string)
-    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core_modules.legacy_api.create_provider") as mock_create_provider:
         mock_provider = Mock()
         # Provider fails to extract, triggering fallback
         mock_provider.extract_text_from_chunk.side_effect = Exception("extraction failed")
@@ -355,7 +361,7 @@ def test_extract_text_from_chunk_fallback():
         assert result == "Plain string chunk"
 
     # Test with invalid chunk (should return empty string)
-    with patch("multi_llm_chat.core.create_provider") as mock_create_provider:
+    with patch("multi_llm_chat.core_modules.legacy_api.create_provider") as mock_create_provider:
         mock_provider = Mock()
         mock_provider.extract_text_from_chunk.side_effect = Exception("extraction failed")
         mock_create_provider.return_value = mock_provider
