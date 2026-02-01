@@ -12,6 +12,9 @@ Web UI版とCLI版の2つのインターフェースを提供します。
   - **Web UI**: ユーザーID別に履歴を保存・読み込み・管理できます。
   - **CLI**: `/history` コマンドで履歴操作が可能です。
 - **メンション機能**: `@gemini`, `@chatgpt`, `@all` のメンションにより、特定のLLMまたは両方のLLMに応答をルーティングします。メンションなしの入力は思考メモとして履歴にのみ追加されます。
+- **MCP (Model Context Protocol) ツール連携**: LLMが外部ツールを呼び出して情報を取得し、その結果を回答に反映できます。
+  - 天気情報の取得、データベース検索、APIリクエストなどの外部リソースへのアクセスが可能
+  - LLMが自動的にツールを選択・実行し、結果を統合した回答を生成
 - **API連携**: Google Gemini APIおよびOpenAI ChatGPT APIとの連携をサポートします。
 - **環境変数からのAPIキー読み込み**: APIキーは環境変数または`.env`ファイルから安全に読み込まれます。
 
@@ -132,6 +135,37 @@ TOKEN_ESTIMATION_BUFFER_FACTOR=1.2
 ```
 
 詳細は `.env.example` を参照してください。
+
+#### MCPツール連携設定（オプション）
+
+LLMに外部ツールへのアクセスを許可する場合、MCPサーバーを設定できます。
+
+**CLI版での設定**:
+`src/multi_llm_chat/cli.py` の `main()` 関数内で `MCPClient` を初期化します。
+```python
+from .mcp.client import MCPClient
+
+# 例: 天気情報サーバーを使用
+mcp_client = MCPClient("uvx", ["mcp-server-weather"])
+async with mcp_client:
+    service.mcp_client = mcp_client
+    # ... CLIループ
+```
+
+**動作例**:
+```
+You: @gemini 東京の天気を教えて
+
+[Tool Call: get_weather]
+  Args: {'location': 'Tokyo'}
+[Tool Result: get_weather]
+  25°C, Sunny
+
+Gemini: 東京の天気は25°Cで晴れです。
+```
+
+**Web UI版での設定**:
+現在開発中です。セッションごとのMCPクライアント管理機能が実装予定です。
 
 ### 2. Web UI版の実行 (推奨)
 
