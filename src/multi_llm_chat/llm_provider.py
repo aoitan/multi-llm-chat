@@ -47,6 +47,7 @@ def __getattr__(name):
     Deprecated constants:
     - OPENAI_API_KEY, GOOGLE_API_KEY: Use get_config().openai_api_key/google_api_key
     - GEMINI_MODEL, CHATGPT_MODEL: Use get_config().gemini_model/chatgpt_model
+    - MCP_ENABLED: Use get_config().mcp_enabled
     """
     if name == "OPENAI_API_KEY":
         warnings.warn(
@@ -76,6 +77,13 @@ def __getattr__(name):
             stacklevel=2,
         )
         return get_config().chatgpt_model
+    if name == "MCP_ENABLED":
+        warnings.warn(
+            "MCP_ENABLED constant is deprecated. Use config.get_config().mcp_enabled",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return get_config().mcp_enabled
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 

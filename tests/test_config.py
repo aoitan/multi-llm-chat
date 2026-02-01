@@ -129,6 +129,7 @@ class TestLoadConfigFromEnv:
             assert config.chatgpt_model == "gpt-4.1"
             assert config.token_buffer_factor == 1.2
             assert config.token_buffer_factor_with_tools == 1.5
+            assert config.mcp_enabled is False
             assert config.mcp_timeout_seconds == 120
 
     def test_load_config_from_env_with_keys(self):
@@ -178,3 +179,17 @@ class TestLoadConfigFromEnv:
                 load_config_from_env()
                 assert any("GOOGLE_API_KEY" in record.message for record in caplog.records)
                 assert any("OPENAI_API_KEY" in record.message for record in caplog.records)
+
+    def test_load_config_from_env_mcp_enabled_true(self):
+        """Test loading configuration with MCP enabled."""
+        for value in ["true", "True", "1", "yes", "YES"]:
+            with patch.dict(os.environ, {"MULTI_LLM_CHAT_MCP_ENABLED": value}, clear=True):
+                config = load_config_from_env()
+                assert config.mcp_enabled is True, f"Failed for value: {value}"
+
+    def test_load_config_from_env_mcp_enabled_false(self):
+        """Test loading configuration with MCP disabled."""
+        for value in ["false", "False", "0", "no", "NO", ""]:
+            with patch.dict(os.environ, {"MULTI_LLM_CHAT_MCP_ENABLED": value}, clear=True):
+                config = load_config_from_env()
+                assert config.mcp_enabled is False, f"Failed for value: {value}"

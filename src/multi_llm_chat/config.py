@@ -36,6 +36,7 @@ class AppConfig:
     token_buffer_factor_with_tools: float = 1.5
 
     # MCP settings
+    mcp_enabled: bool = False
     mcp_timeout_seconds: int = 120
 
     def validate(self) -> list[str]:
@@ -79,6 +80,9 @@ def load_config_from_env() -> AppConfig:
     Returns:
         AppConfig: Configuration instance populated from environment variables.
     """
+    mcp_enabled_str = os.getenv("MULTI_LLM_CHAT_MCP_ENABLED", "false").lower()
+    mcp_enabled = mcp_enabled_str in ("true", "1", "yes")
+
     config = AppConfig(
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
@@ -86,6 +90,7 @@ def load_config_from_env() -> AppConfig:
         chatgpt_model=os.getenv("CHATGPT_MODEL", "gpt-4.1"),
         token_buffer_factor=float(os.getenv("TOKEN_BUFFER_FACTOR", "1.2")),
         token_buffer_factor_with_tools=float(os.getenv("TOKEN_BUFFER_FACTOR_WITH_TOOLS", "1.5")),
+        mcp_enabled=mcp_enabled,
         mcp_timeout_seconds=int(os.getenv("MCP_TIMEOUT_SECONDS", "120")),
     )
 
