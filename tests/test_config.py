@@ -233,6 +233,7 @@ class TestLoadConfigFromEnv:
     def test_load_filesystem_root_defaults_to_cwd(self):
         """Test filesystem root defaults to current working directory."""
         with patch.dict(os.environ, {}, clear=True):
-            with patch("os.getcwd", return_value="/mock/cwd"):
-                config = load_config_from_env()
-                assert config.mcp_filesystem_root == "/mock/cwd"
+            config = load_config_from_env()
+            # Should be current working directory (os.getcwd())
+            expected_root = os.getcwd()
+            assert config.mcp_filesystem_root == expected_root

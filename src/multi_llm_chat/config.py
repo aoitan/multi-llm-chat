@@ -111,7 +111,9 @@ def load_config_from_env() -> AppConfig:
     # The value is only used when mcp_enabled=True
     mcp_filesystem_root = os.getenv("MCP_FILESYSTEM_ROOT")
     if mcp_filesystem_root is None:
+        # Default to current working directory (as per Issue #118 specification)
         mcp_filesystem_root = os.getcwd()
+        logger.debug(f"MCP_FILESYSTEM_ROOT not set, using current directory: {mcp_filesystem_root}")
 
     config = AppConfig(
         google_api_key=os.getenv("GOOGLE_API_KEY"),

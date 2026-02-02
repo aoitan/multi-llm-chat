@@ -181,3 +181,33 @@ class MCPServerManager:
         self._all_tools.clear()
         self._started = False
         logger.info("All MCP servers stopped")
+
+    def force_stop_all(self) -> None:
+        """Forcefully stop all running servers (synchronous).
+
+        This method is intended for emergency cleanup (e.g., atexit handlers)
+        when graceful async shutdown is not possible. It directly terminates
+        subprocesses without async cleanup.
+        """
+        logger.info("Force stopping all MCP servers...")
+
+        for name, client in list(self._clients.items()):
+            try:
+                if client.proc and client.proc.returncode is None:
+                    logger.info(f"Force terminating server: {name}")
+                    client.proc.terminate()
+                    # Give process a moment to terminate
+                    import time
+
+                    time.sleep(0.1)
+                    if client.proc.poll() is None:
+                        logger.warning(f"Server '{name}' did not terminate, killing...")
+                        client.proc.kill()
+            except Exception as e:
+                logger.error(f"Error force stopping server '{name}': {e}")
+
+        self._clients.clear()
+        self._tool_to_server.clear()
+        self._all_tools.clear()
+        self._started = False
+        logger.info("All MCP servers force stopped")
