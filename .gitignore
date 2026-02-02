@@ -17,3 +17,7 @@ chat_histories/
 # Development tools (local only)
 .serena/
 .copilot/skill/
+
+# GitHub Copilot CLI skills (session-specific, not for repository)
+.github/skills/
+
