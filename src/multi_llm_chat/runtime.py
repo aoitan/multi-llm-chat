@@ -85,12 +85,9 @@ def init_runtime(log_level: Optional[str] = None) -> None:
                 from .mcp import get_mcp_manager
 
                 # Skip if already initialized (idempotency)
-                # Use _init_lock to prevent race condition
+                # Already inside _init_lock, no need for additional locking
                 if get_mcp_manager() is None:
-                    with _init_lock:
-                        # Double-check after acquiring lock
-                        if get_mcp_manager() is None:
-                            _init_mcp(config)
+                    _init_mcp(config)
                 else:
                     logger.debug("MCP manager already initialized, skipping")
 
