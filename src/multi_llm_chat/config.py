@@ -38,6 +38,7 @@ class AppConfig:
     # MCP settings
     mcp_enabled: bool = False
     mcp_timeout_seconds: int = 120
+    mcp_filesystem_root: Optional[str] = None
 
     def validate(self) -> list[str]:
         """Validate configuration and return list of warnings.
@@ -106,6 +107,10 @@ def load_config_from_env() -> AppConfig:
     mcp_enabled_str = os.getenv("MULTI_LLM_CHAT_MCP_ENABLED", "false").lower()
     mcp_enabled = mcp_enabled_str in ("true", "1", "yes")
 
+    mcp_filesystem_root = os.getenv("MCP_FILESYSTEM_ROOT")
+    if mcp_filesystem_root is None:
+        mcp_filesystem_root = os.getcwd()
+
     config = AppConfig(
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
@@ -115,6 +120,7 @@ def load_config_from_env() -> AppConfig:
         token_buffer_factor_with_tools=_get_env_float("TOKEN_BUFFER_FACTOR_WITH_TOOLS", 1.5),
         mcp_enabled=mcp_enabled,
         mcp_timeout_seconds=_get_env_int("MCP_TIMEOUT_SECONDS", 120),
+        mcp_filesystem_root=mcp_filesystem_root,
     )
 
     # Log validation issues

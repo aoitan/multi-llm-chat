@@ -5,6 +5,8 @@ Call init_runtime() once at application startup before importing other
 multi_llm_chat modules that depend on environment variables or configuration.
 """
 
+import asyncio
+import atexit
 import logging
 import threading
 from typing import Optional
@@ -72,6 +74,10 @@ def init_runtime(log_level: Optional[str] = None) -> None:
             config = load_config_from_env()
             set_config(config)
 
+            # Initialize MCP if enabled
+            if config.mcp_enabled:
+                _init_mcp(config)
+
             # Setup logging if specified
             if log_level:
                 numeric_level = getattr(logging, log_level.upper(), None)
@@ -106,3 +112,37 @@ def reset_runtime() -> None:
     """
     global _initialized
     _initialized = False
+
+
+def _init_mcp(config) -> None:
+    """Initialize MCP server infrastructure.
+
+    Args:
+        config: AppConfig instance with MCP settings
+    """
+    from .mcp import MCPServerManager, set_mcp_manager
+    from .mcp.filesystem_server import create_filesystem_server_config
+
+    logger.info("Initializing MCP servers...")
+
+    # Create manager
+    manager = MCPServerManager()
+
+    # Add filesystem server
+    fs_config = create_filesystem_server_config(config.mcp_filesystem_root)
+    manager.add_server(fs_config)
+
+    # Start all servers
+    asyncio.run(manager.start_all())
+
+    # Set global manager
+    set_mcp_manager(manager)
+
+    # Register cleanup handler
+    def cleanup():
+        logger.info("Stopping MCP servers...")
+        asyncio.run(manager.stop_all())
+
+    atexit.register(cleanup)
+
+    logger.info("MCP servers initialized successfully")

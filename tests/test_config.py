@@ -37,6 +37,7 @@ class TestAppConfig:
         assert config.token_buffer_factor_with_tools == 1.5
         assert config.mcp_enabled is False
         assert config.mcp_timeout_seconds == 120
+        assert config.mcp_filesystem_root is None
 
     def test_appconfig_validation_no_api_keys(self):
         """Test validation warns about missing API keys."""
@@ -221,3 +222,17 @@ class TestLoadConfigFromEnv:
             assert config.token_buffer_factor == 1.2
             assert config.token_buffer_factor_with_tools == 1.5
             assert config.mcp_timeout_seconds == 120
+
+    def test_load_filesystem_root_from_env(self):
+        """Test loading filesystem root from MCP_FILESYSTEM_ROOT."""
+        env = {"MCP_FILESYSTEM_ROOT": "/custom/path"}
+        with patch.dict(os.environ, env, clear=True):
+            config = load_config_from_env()
+            assert config.mcp_filesystem_root == "/custom/path"
+
+    def test_load_filesystem_root_defaults_to_cwd(self):
+        """Test filesystem root defaults to current working directory."""
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("os.getcwd", return_value="/mock/cwd"):
+                config = load_config_from_env()
+                assert config.mcp_filesystem_root == "/mock/cwd"
