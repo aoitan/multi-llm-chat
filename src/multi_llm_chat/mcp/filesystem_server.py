@@ -17,7 +17,7 @@ def is_dangerous_path(path: str) -> bool:
     """Check if a path is considered dangerous to expose.
 
     Dangerous paths include:
-    - Root directory (/)
+    - Root directory (/ on Unix, C:\\ on Windows, etc.)
     - User home directory
 
     Args:
@@ -27,24 +27,28 @@ def is_dangerous_path(path: str) -> bool:
         bool: True if path is dangerous, False otherwise
     """
     normalized = os.path.normpath(os.path.abspath(path))
+    normalized_path = Path(normalized)
 
-    # Check for root directory
-    if normalized == "/":
+    # Check for root directory (cross-platform: POSIX /, Windows drive roots, UNC share roots)
+    if normalized_path.parent == normalized_path:
         return True
 
     # Check for home directory
-    home = str(Path.home())
+    home = os.path.normpath(os.path.abspath(str(Path.home())))
     if normalized == home:
         return True
 
     return False
 
 
-def create_filesystem_server_config(root_dir: str | None = None) -> MCPServerConfig:
+def create_filesystem_server_config(
+    root_dir: str | None = None, timeout: int = 120
+) -> MCPServerConfig:
     """Create configuration for filesystem MCP server.
 
     Args:
         root_dir: Root directory to expose. Defaults to current working directory.
+        timeout: Connection timeout in seconds. Defaults to 120.
 
     Returns:
         MCPServerConfig: Configuration for filesystem server
@@ -67,5 +71,5 @@ def create_filesystem_server_config(root_dir: str | None = None) -> MCPServerCon
         name="filesystem",
         server_command="uvx",
         server_args=["mcp-server-filesystem", root_dir],
-        timeout=120,
+        timeout=timeout,
     )

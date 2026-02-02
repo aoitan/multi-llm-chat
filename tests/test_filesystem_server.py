@@ -32,6 +32,20 @@ class TestIsDangerousPath:
         home_subdir = str(Path.home() / "projects" / "myapp")
         assert is_dangerous_path(home_subdir) is False
 
+    def test_is_dangerous_path_windows_root(self):
+        """Test that Windows drive roots are detected as dangerous."""
+        # Test common Windows drive roots
+        with patch("pathlib.Path.home", return_value=Path("/home/user")):
+            # Simulate Windows-style paths
+            with (
+                patch("os.path.normpath") as mock_normpath,
+                patch("os.path.abspath") as mock_abspath,
+            ):
+                # Test C:\ root
+                mock_normpath.return_value = "C:\\\\"
+                mock_abspath.return_value = "C:\\\\"
+                assert is_dangerous_path("C:\\\\") is True
+
 
 class TestCreateFilesystemServerConfig:
     """Tests for filesystem server configuration factory."""
@@ -64,3 +78,8 @@ class TestCreateFilesystemServerConfig:
         """Test that config uses default MCP timeout."""
         config = create_filesystem_server_config("/test/path")
         assert config.timeout == 120
+
+    def test_create_config_custom_timeout(self):
+        """Test that config accepts custom timeout."""
+        config = create_filesystem_server_config("/test/path", timeout=300)
+        assert config.timeout == 300

@@ -9,11 +9,14 @@ import asyncio
 import atexit
 import logging
 import threading
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from dotenv import load_dotenv
 
 from .config import load_config_from_env, set_config
+
+if TYPE_CHECKING:
+    from .config import AppConfig
 
 logger = logging.getLogger(__name__)
 _initialized = False
@@ -114,35 +117,73 @@ def reset_runtime() -> None:
     _initialized = False
 
 
-def _init_mcp(config) -> None:
+def _init_mcp(config: "AppConfig") -> None:
     """Initialize MCP server infrastructure.
 
     Args:
         config: AppConfig instance with MCP settings
+
+    Raises:
+        RuntimeError: If called from an async context with a running event loop.
     """
-    from .mcp import MCPServerManager, set_mcp_manager
+    from .mcp import MCPServerManager, reset_mcp_manager, set_mcp_manager
     from .mcp.filesystem_server import create_filesystem_server_config
+
+    # Check if we're in an async context
+    try:
+        asyncio.get_running_loop()
+        # If we reach here, there's a running loop (async context)
+        raise RuntimeError(
+            "_init_mcp() cannot be called from an async context. "
+            "init_runtime() must be called before starting any event loop."
+        )
+    except RuntimeError as e:
+        # Check if this is the expected "no running event loop" error
+        error_msg = str(e).lower()
+        if "no running event loop" not in error_msg and "no running loop" not in error_msg:
+            # Unexpected RuntimeError - re-raise
+            raise
+        # No running loop - safe to proceed with asyncio.run()
 
     logger.info("Initializing MCP servers...")
 
-    # Create manager
-    manager = MCPServerManager()
+    manager_set = False
 
-    # Add filesystem server
-    fs_config = create_filesystem_server_config(config.mcp_filesystem_root)
-    manager.add_server(fs_config)
+    try:
+        # Create manager
+        manager = MCPServerManager()
 
-    # Start all servers
-    asyncio.run(manager.start_all())
+        # Add filesystem server
+        fs_config = create_filesystem_server_config(
+            config.mcp_filesystem_root, timeout=config.mcp_timeout_seconds
+        )
+        manager.add_server(fs_config)
 
-    # Set global manager
-    set_mcp_manager(manager)
+        # Start all servers
+        asyncio.run(manager.start_all())
 
-    # Register cleanup handler
-    def cleanup():
-        logger.info("Stopping MCP servers...")
-        asyncio.run(manager.stop_all())
+        # Set global manager
+        set_mcp_manager(manager)
+        manager_set = True
 
-    atexit.register(cleanup)
+        # Register cleanup handler
+        def cleanup():
+            logger.info("Stopping MCP servers...")
+            # Note: cleanup at process exit may have unpredictable event loop context
+            try:
+                asyncio.run(manager.stop_all())
+            except RuntimeError as e:
+                # If we're in an async context at exit, just log the error
+                logger.warning(f"Could not cleanly stop MCP servers: {e}")
 
-    logger.info("MCP servers initialized successfully")
+        atexit.register(cleanup)
+
+        logger.info("MCP servers initialized successfully")
+    except Exception:
+        if manager_set:
+            try:
+                reset_mcp_manager()
+            except Exception:
+                # Swallow cleanup errors to avoid masking the original exception
+                logger.exception("Failed to reset MCP manager after initialization error")
+        raise

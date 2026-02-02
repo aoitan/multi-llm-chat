@@ -107,6 +107,8 @@ def load_config_from_env() -> AppConfig:
     mcp_enabled_str = os.getenv("MULTI_LLM_CHAT_MCP_ENABLED", "false").lower()
     mcp_enabled = mcp_enabled_str in ("true", "1", "yes")
 
+    # MCP filesystem root (loaded regardless of mcp_enabled for config completeness)
+    # The value is only used when mcp_enabled=True
     mcp_filesystem_root = os.getenv("MCP_FILESYSTEM_ROOT")
     if mcp_filesystem_root is None:
         mcp_filesystem_root = os.getcwd()
