@@ -239,8 +239,9 @@ def _init_mcp(config: "AppConfig") -> None:
                     except Exception as e:
                         logger.warning(f"Original SIGINT handler raised: {e}")
                 else:
-                    # Default behavior: exit
-                    sys.exit(0)
+                    # Default behavior: exit with proper signal exit code
+                    # Convention: 128 + signal number (130 for SIGINT, 143 for SIGTERM)
+                    sys.exit(128 + signum)
 
             # Register signal handlers (SIGTERM, SIGINT)
             signal.signal(signal.SIGTERM, signal_handler)

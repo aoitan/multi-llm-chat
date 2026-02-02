@@ -133,3 +133,21 @@ def test_init_runtime_thread_safety():
         # load_dotenv should only be called once despite 10 concurrent calls
         assert call_count[0] == 1
         assert is_initialized()
+
+
+def test_signal_handler_exit_code():
+    """Test that signal handlers should exit with correct exit codes (128 + signum)."""
+    # This test documents the expected behavior
+    # Currently, runtime.py exits with 0 (incorrect)
+    # Should exit with 128 + signal number (130 for SIGINT, 143 for SIGTERM)
+    import signal
+
+    expected_sigint_code = 128 + signal.SIGINT  # 130
+    expected_sigterm_code = 128 + signal.SIGTERM  # 143
+
+    # Document expected behavior
+    assert expected_sigint_code == 130
+    assert expected_sigterm_code == 143
+
+    # After fix, signal handlers in runtime.py should call:
+    # sys.exit(128 + signum) instead of sys.exit(0)

@@ -20,7 +20,10 @@ def is_dangerous_path(path: str) -> bool:
     - Root directory (/ on Unix, C:\\ on Windows, etc.)
     - User home directory
     - Paths that resolve to above via symlinks or relative paths
-    - System directories themselves (/etc, /var, /tmp, etc. on POSIX - but not subdirectories)
+    - System directories themselves:
+      - On POSIX: /etc, /var, /tmp, /bin, /sbin, /usr/bin, /usr/sbin, /boot, /dev, /proc, /sys
+      - On Windows: C:\\Windows, C:\\System32, C:\\Program Files, C:\\ProgramData, etc.
+      - Note: Subdirectories are considered safe (e.g., /var/www/myproject, C:\\Windows\\MyApp)
 
     Note: Per spec and .env.example, subdirectories like /var/www/myproject are considered safe.
 
@@ -72,6 +75,27 @@ def is_dangerous_path(path: str) -> bool:
                 sys_path = Path(sys_dir).resolve()
                 # Only block the system directory itself, not subdirectories
                 # This allows /var/www/myproject, /tmp/build, etc.
+                if resolved_path == sys_path:
+                    return True
+            except (ValueError, OSError):
+                continue
+
+    # Check for system directories on Windows
+    # Only block the directories themselves, not subdirectories
+    if os.name == "nt":
+        # Common Windows system directories
+        windows_system_dirs = [
+            "C:\\Windows",
+            "C:\\Windows\\System32",
+            "C:\\Windows\\SysWOW64",
+            "C:\\Program Files",
+            "C:\\Program Files (x86)",
+            "C:\\ProgramData",
+        ]
+        for sys_dir in windows_system_dirs:
+            try:
+                sys_path = Path(sys_dir).resolve()
+                # Only block the system directory itself, not subdirectories
                 if resolved_path == sys_path:
                     return True
             except (ValueError, OSError):

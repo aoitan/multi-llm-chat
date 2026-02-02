@@ -118,6 +118,15 @@ class TestIsDangerousPath:
         # Explicitly check it's treated as dangerous
         assert result is True
 
+    def test_is_dangerous_path_windows_system_directories(self):
+        """Test that Windows system directories are detected as dangerous."""
+        # This test documents expected behavior on Windows
+        # Currently returns False (not implemented), should return True after fix
+        with patch("multi_llm_chat.mcp.filesystem_server.os.name", "nt"):
+            # Windows system directories should be blocked
+            assert is_dangerous_path("C:\\Windows") is True
+            assert is_dangerous_path("C:\\Program Files") is True
+
     def test_is_dangerous_path_tilde_expansion(self):
         """Test that ~ (tilde) is properly expanded to home directory."""
         # Single tilde should expand to home
