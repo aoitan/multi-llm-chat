@@ -25,6 +25,7 @@ class MCPServerManager:
         self._servers: dict[str, MCPServerConfig] = {}
         self._clients: dict[str, MCPClient] = {}
         self._tool_to_server: dict[str, str] = {}
+        self._all_tools: list[dict] = []
         self._started: bool = False
 
     def add_server(self, config: MCPServerConfig) -> None:
@@ -75,41 +76,56 @@ class MCPServerManager:
                 await self.stop_all()
                 raise
 
-        # Build tool-to-server mapping
-        await self._build_tool_mapping()
-
-        self._started = True
-        logger.info("All MCP servers started successfully")
+        # Build tool-to-server mapping and cache all tools
+        try:
+            await self._build_tool_mapping()
+            self._started = True
+            logger.info("All MCP servers started successfully")
+        except Exception:
+            # Clean up any started servers if tool mapping fails
+            await self.stop_all()
+            raise
 
     async def _build_tool_mapping(self) -> None:
-        """Build mapping from tool names to server names.
+        """Build mapping from tool names to server names and cache all tools.
 
         Handles tool name conflicts by adding server name prefix.
+        Fetches tools from all servers once and builds both the mapping and cached tool list.
         """
         self._tool_to_server.clear()
+        self._all_tools.clear()
         tool_counts: dict[str, int] = {}
+        server_tools: dict[str, list[dict]] = {}
 
-        # First pass: count occurrences of each tool name
-        for _server_name, client in self._clients.items():
+        # Single pass: fetch tools from all servers
+        for server_name, client in self._clients.items():
             tools = await client.list_tools()
+            server_tools[server_name] = tools
             for tool in tools:
                 tool_name = tool["name"]
                 tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
 
-        # Second pass: build mapping with prefixes for conflicts
-        for server_name, client in self._clients.items():
-            tools = await client.list_tools()
+        # Build mapping and tool list with prefixes for conflicts
+        for server_name, tools in server_tools.items():
             for tool in tools:
                 original_name = tool["name"]
                 # If tool name conflicts, add server prefix
                 if tool_counts[original_name] > 1:
                     prefixed_name = f"{server_name}:{original_name}"
                     self._tool_to_server[prefixed_name] = server_name
+                    # Add prefixed tool to cached list
+                    prefixed_tool = tool.copy()
+                    prefixed_tool["name"] = prefixed_name
+                    self._all_tools.append(prefixed_tool)
                 else:
                     self._tool_to_server[original_name] = server_name
+                    # Add original tool to cached list
+                    self._all_tools.append(tool)
 
     async def get_all_tools(self) -> list[dict]:
         """Get aggregated tool list from all servers.
+
+        Returns cached tool list built during start_all().
 
         Returns:
             list[dict]: List of tool definitions with name, description, inputSchema
@@ -120,34 +136,7 @@ class MCPServerManager:
         if not self._started:
             raise RuntimeError("Servers are not started. Call start_all() first.")
 
-        all_tools = []
-        tool_counts: dict[str, int] = {}
-
-        # First pass: count tool name occurrences
-        temp_tools: dict[str, list[tuple[str, dict]]] = {}
-        for server_name, client in self._clients.items():
-            tools = await client.list_tools()
-            for tool in tools:
-                tool_name = tool["name"]
-                if tool_name not in temp_tools:
-                    temp_tools[tool_name] = []
-                temp_tools[tool_name].append((server_name, tool))
-                tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
-
-        # Second pass: add tools with prefixes for conflicts
-        for tool_name, server_tools in temp_tools.items():
-            if tool_counts[tool_name] > 1:
-                # Conflict: add server prefix
-                for server_name, tool in server_tools:
-                    prefixed_tool = tool.copy()
-                    prefixed_tool["name"] = f"{server_name}:{tool_name}"
-                    all_tools.append(prefixed_tool)
-            else:
-                # No conflict: use original name
-                _, tool = server_tools[0]
-                all_tools.append(tool)
-
-        return all_tools
+        return self._all_tools.copy()
 
     async def call_tool(self, tool_name: str, arguments: dict) -> dict:
         """Execute a tool on the appropriate server.
@@ -172,7 +161,7 @@ class MCPServerManager:
 
         client = self._clients[server_name]
         # Extract original tool name if prefixed
-        original_tool_name = tool_name.split(":", 1)[-1] if ":" in tool_name else tool_name
+        original_tool_name = tool_name.split(":", 1)[-1]
 
         return await client.call_tool(original_tool_name, arguments)
 
@@ -189,5 +178,6 @@ class MCPServerManager:
 
         self._clients.clear()
         self._tool_to_server.clear()
+        self._all_tools.clear()
         self._started = False
         logger.info("All MCP servers stopped")
