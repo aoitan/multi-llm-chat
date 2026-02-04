@@ -12,9 +12,12 @@ Web UI版とCLI版の2つのインターフェースを提供します。
   - **Web UI**: ユーザーID別に履歴を保存・読み込み・管理できます。
   - **CLI**: `/history` コマンドで履歴操作が可能です。
 - **メンション機能**: `@gemini`, `@chatgpt`, `@all` のメンションにより、特定のLLMまたは両方のLLMに応答をルーティングします。メンションなしの入力は思考メモとして履歴にのみ追加されます。
-- **MCP (Model Context Protocol) ツール連携**: LLMが外部ツールを呼び出して情報を取得し、その結果を回答に反映できます。
-  - 天気情報の取得、データベース検索、APIリクエストなどの外部リソースへのアクセスが可能
-  - LLMが自動的にツールを選択・実行し、結果を統合した回答を生成
+- **MCP (Model Context Protocol) 統合**: LLMがファイルシステムにアクセスして情報を取得できます。
+  - **Read-Only**: ローカルファイルの読み取り、ディレクトリ一覧取得、ファイル検索が可能
+  - **セキュリティ保護**: 危険なパス（システムルート、ホームディレクトリ等）へのアクセスをブロック
+  - **自動統合**: CLI・Web UIの両方で追加設定なしに利用可能
+  - 使用例: 「README.mdを読んで要約して」「src/配下のファイル一覧を教えて」
+- **Agentic Tool Execution**: LLMが必要に応じて外部ツールを自動実行し、結果を統合した回答を生成します。
 - **API連携**: Google Gemini APIおよびOpenAI ChatGPT APIとの連携をサポートします。
 - **環境変数からのAPIキー読み込み**: APIキーは環境変数または`.env`ファイルから安全に読み込まれます。
 
@@ -138,34 +141,36 @@ TOKEN_ESTIMATION_BUFFER_FACTOR=1.2
 
 #### MCPツール連携設定（オプション）
 
-LLMに外部ツールへのアクセスを許可する場合、MCPサーバーを設定できます。
+LLMがローカルファイルシステムにアクセスして情報を取得できる機能を提供します。
 
-**CLI版での設定**:
-`src/multi_llm_chat/cli.py` の `main()` 関数内で `MCPClient` を初期化します。
-```python
-from .mcp.client import MCPClient
-
-# 例: 天気情報サーバーを使用
-mcp_client = MCPClient("uvx", ["mcp-server-weather"])
-async with mcp_client:
-    service.mcp_client = mcp_client
-    # ... CLIループ
+```bash
+# .envファイルに追加
+MULTI_LLM_CHAT_MCP_ENABLED=true
+MCP_FILESYSTEM_ROOT=/path/to/your/project  # 省略時はカレントディレクトリ
 ```
 
-**動作例**:
+**使用例**:
 ```
-You: @gemini 東京の天気を教えて
+You: @gemini README.mdを読んで要約して
 
-[Tool Call: get_weather]
-  Args: {'location': 'Tokyo'}
-[Tool Result: get_weather]
-  25°C, Sunny
+[Tool Call: read_file]
+  Args: {'path': 'README.md'}
+[Tool Result: read_file]
+  # Multi-LLM Chat
+  このツールは、GeminiとChatGPTの2つの...
 
-Gemini: 東京の天気は25°Cで晴れです。
+Gemini: README.mdの内容を確認しました。このプロジェクトは...
 ```
 
-**Web UI版での設定**:
-現在開発中です。セッションごとのMCPクライアント管理機能が実装予定です。
+**利用可能なツール**:
+- `read_file`: ファイルの読み取り
+- `list_directory`: ディレクトリ一覧の取得
+- `search_files`: ファイル名の検索
+- `get_file_info`: ファイル情報の取得
+
+詳細は [doc/mcp_filesystem_guide.md](doc/mcp_filesystem_guide.md) を参照してください。
+
+**セキュリティ**: システムルート(`/`)やホームディレクトリなど、危険なパスへのアクセスはデフォルトでブロックされます。
 
 ### 2. Web UI版の実行 (推奨)
 
