@@ -62,12 +62,13 @@ graph TD
 ```python
 async def execute_with_tools_stream(
     provider: BaseProvider,
-    history: List[Dict],
+    history: List[Dict[str, Any]],
+    system_prompt: Optional[str] = None,
     mcp_client: Optional[MCPClient] = None,
     max_iterations: int = 10,
     timeout: float = 120.0,
-    ...
-) -> AsyncIterator[Dict | AgenticLoopResult]
+    tools: Optional[List[Dict[str, Any]]] = None,
+) -> AsyncIterator[Dict[str, Any] | AgenticLoopResult]:
 ```
 
 **出力（Yield）**:

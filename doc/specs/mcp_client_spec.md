@@ -22,7 +22,7 @@ sequenceDiagram
     participant Server as MCP Server (Subprocess)
 
     App->>Client: async with MCPClient(...)
-    Client->>Server: 起動 (subprocess.exec)
+    Client->>Server: 起動 (asyncio.create_subprocess_exec)
     Client->>Server: Initialize Session (JSON-RPC)
     Server-->>Client: Capabilities / Tools List
     

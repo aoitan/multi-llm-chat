@@ -37,6 +37,7 @@ LLM（Large Language Models）には入力可能なトークン数（コンテ�
 *   **システムプロンプト**: 常に保持。
 *   **User Message**: ターンの開始点。
 *   **Assistant Message(s)**: User Messageに続く応答。`@all` メンション時はGeminiとChatGPTの両方の応答が含まれるため、これらをまとめて1ターンとします。
+*   **`tool` ロールなどその他のロール**: `src/multi_llm_chat/compression.py` の実装では、`user` / `assistant` / `system` 以外のロール（`tool` を含む）はターン構築およびプルーニング対象からスキップされます。これらは会話履歴には残りますが、スライディングウィンドウ方式で保持・削除を判断する際の「ターン」には含まれません。
 
 ## 3. API仕様
 
@@ -44,12 +45,12 @@ LLM（Large Language Models）には入力可能なトークン数（コンテ�
 
 ```python
 def prune_history_sliding_window(
-    history: List[Dict],
+    history: List[Dict[str, Any]],
     max_tokens: int,
     model_name: str,
     system_prompt: Optional[str] = None,
-    token_calculator: Callable = None,
-) -> List[Dict]
+    token_calculator: Callable[[str, str], int] = None,
+) -> List[Dict[str, Any]]:
 ```
 
 *   **引数**:
