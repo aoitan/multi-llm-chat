@@ -25,8 +25,10 @@ class TestMCPClient(unittest.TestCase):
         """MCPサーバーへの接続が成功する"""
         # Setup mocks
         mock_proc = AsyncMock()
-        mock_proc.stdin = AsyncMock()
-        mock_proc.stdout = AsyncMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.close = MagicMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_proc.wait = AsyncMock()
@@ -54,6 +56,10 @@ class TestMCPClient(unittest.TestCase):
         """接続したサーバーからツール一覧を取得できる"""
         # Setup mocks
         mock_proc = AsyncMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.close = MagicMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_proc.wait = AsyncMock()
@@ -100,6 +106,10 @@ class TestMCPClient(unittest.TestCase):
         """タイムアウトが適切にハンドリングされる"""
         # Setup mocks
         mock_proc = AsyncMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.close = MagicMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_proc.wait = AsyncMock()
@@ -128,6 +138,10 @@ class TestMCPClient(unittest.TestCase):
         """予期せぬエラー発生時にクリーンアップが実行される"""
         # Setup mocks
         mock_proc = AsyncMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.close = MagicMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_proc.wait = AsyncMock()
@@ -157,6 +171,10 @@ class TestMCPClient(unittest.TestCase):
         """ツール実行が成功する"""
         # Setup mocks
         mock_proc = AsyncMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.close = MagicMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_proc.wait = AsyncMock()
@@ -201,6 +219,10 @@ class TestMCPClient(unittest.TestCase):
         """ツール実行がエラーを返す"""
         # Setup mocks
         mock_proc = AsyncMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.close = MagicMock()
         mock_proc.returncode = None
         mock_proc.terminate = MagicMock()
         mock_proc.wait = AsyncMock()

@@ -64,10 +64,16 @@ class MCPClient:
 
             # Safeguard: Explicitly close streams if they are still open,
             # which can happen if initialization fails before session takes ownership.
-            if self.proc.stdin and not self.proc.stdin.is_closing():
-                self.proc.stdin.close()
-            if self.proc.stdout and not self.proc.stdout.is_closing():
-                self.proc.stdout.close()
+            if self.proc.stdin:
+                try:
+                    self.proc.stdin.close()
+                except Exception:
+                    pass  # Already closed
+            if self.proc.stdout:
+                try:
+                    self.proc.stdout.close()
+                except Exception:
+                    pass  # Already closed
 
             self.proc = None
 
