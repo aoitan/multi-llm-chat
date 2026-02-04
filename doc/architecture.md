@@ -12,7 +12,10 @@ Multi-LLM Chatは、複数のLLM（Gemini、ChatGPT）との対話を統一的�
 *   **[UI層 (Presentation)](architecture/ui_layer.md)**: CLIとWebUI (Gradio) の実装構造、State管理パターン。
 *   **[ビジネスロジック層 (Service)](architecture/service_layer.md)**: `ChatService` によるフロー制御、メンション解析、デュアル履歴管理。
 *   **[コアロジック層 (Core)](architecture/core_layer.md)**: Agentic Loop (ReAct)、トークン管理、コンテキスト圧縮。
+    *   **[Agentic Loop 仕様](specs/agentic_loop_spec.md)**
+    *   **[コンテキスト圧縮 仕様](specs/context_compression_spec.md)**
 *   **[インフラストラクチャ層 (Infrastructure)](architecture/infrastructure_layer.md)**: LLMプロバイダ実装、MCPクライアント、データ永続化。
+    *   **[MCPクライアント 仕様](specs/mcp_client_spec.md)**
 
 ## アーキテクチャ全体図
 

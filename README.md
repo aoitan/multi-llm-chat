@@ -329,10 +329,15 @@ src/multi_llm_chat/
   - システムプロンプト設定機能（UI/CLI）
   - トークンカウント表示と上限チェック
   - 後方互換性レイヤーの実装
-- [ ] Epic 004: コンテキスト圧縮とトークンガードレール（`issues/004-epic-context-compression.md`）
+- [x] **Epic 004: コンテキスト圧縮とトークンガードレール** ✅ 完了
   - [x] Task A: コアロジック実装（トークン計算、スライディングウィンドウ枝刈り）
-  - [ ] Task B: UI/CLI統合
-- [ ] Epic 005: 会話履歴の永続化と管理（`issues/005-epic-history-management.md`）
+  - [x] Task B: UI/CLI統合
+- [x] **Epic 005: 会話履歴の永続化と管理** ✅ 完了
+  - [x] CLI履歴管理コマンド
+  - [x] WebUI履歴管理パネル
+- [x] **Agentic Loop & MCP対応** ✅ 完了
+  - [x] ReActループ実装（Core Logic）
+  - [x] MCPクライアント実装（Infrastructure）
 - [ ] 設定ファイルの外部化
 
 これらのEpicを担当者単位に細分化する場合は、フェーズ1（完了済み）は`issues/done/009-task-sequential-core-system-prompt.md`を、フェーズ2（並行可能）は`issues/010-task-parallel-context-history.md`の補助タスク票を参照してください。
