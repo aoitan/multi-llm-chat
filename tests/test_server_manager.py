@@ -124,7 +124,7 @@ class TestMCPServerManager(unittest.IsolatedAsyncioTestCase):
         mock_client_class.side_effect = [mock_client1, mock_client2]
 
         await manager.start_all()
-        tools = await manager.get_all_tools()
+        tools = manager.get_all_tools()
 
         self.assertEqual(len(tools), 2)
         tool_names = [t["name"] for t in tools]
@@ -230,7 +230,7 @@ class TestMCPServerManager(unittest.IsolatedAsyncioTestCase):
         mock_client_class.side_effect = [mock_client1, mock_client2]
 
         await manager.start_all()
-        tools = await manager.get_all_tools()
+        tools = manager.get_all_tools()
 
         self.assertEqual(len(tools), 2)
         tool_names = [t["name"] for t in tools]

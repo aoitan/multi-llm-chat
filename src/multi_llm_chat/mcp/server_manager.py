@@ -122,7 +122,7 @@ class MCPServerManager:
                     # Add original tool to cached list
                     self._all_tools.append(tool)
 
-    async def get_all_tools(self) -> list[dict]:
+    def get_all_tools(self) -> list[dict]:
         """Get aggregated tool list from all servers.
 
         Returns cached tool list built during start_all().
@@ -200,25 +200,15 @@ class MCPServerManager:
         """Forcefully stop all running servers (synchronous).
 
         This method is intended for emergency cleanup (e.g., atexit handlers)
-        when graceful async shutdown is not possible. It directly terminates
-        subprocesses without async cleanup.
+        when graceful async shutdown is not possible.
+
+        Note: Since MCP client manages subprocess lifecycle internally via stdio_client,
+        this method only clears internal state. Rely on __aexit__ for proper cleanup.
         """
-        logger.info("Force stopping all MCP servers...")
-
-        for name, client in list(self._clients.items()):
-            try:
-                if client.proc and client.proc.returncode is None:
-                    logger.info(f"Force terminating server: {name}")
-                    client.proc.terminate()
-                    # Give process a moment to terminate
-                    import time
-
-                    time.sleep(0.1)
-                    if client.proc.poll() is None:
-                        logger.warning(f"Server '{name}' did not terminate, killing...")
-                        client.proc.kill()
-            except Exception as e:
-                logger.error(f"Error force stopping server '{name}': {e}")
+        logger.warning(
+            "force_stop_all() called - clearing state. "
+            "Note: Subprocesses should be cleaned up via __aexit__"
+        )
 
         self._clients.clear()
         self._tool_to_server.clear()

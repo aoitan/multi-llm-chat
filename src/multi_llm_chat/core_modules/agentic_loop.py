@@ -227,6 +227,12 @@ async def execute_with_tools_stream(
                     ]
                     result_text = "\n".join(text_parts) if text_parts else "(no text output)"
 
+                    # Check for error flag in MCP response
+                    is_error = result.get("isError", False)
+                    if is_error:
+                        result_text = f"[ERROR] {result_text}"
+                        logger.warning(f"Tool '{name}' returned error: {result_text}")
+
                     tool_result = {
                         "name": name,
                         "content": result_text,
