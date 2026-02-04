@@ -133,6 +133,136 @@ class TestMCPToolExecution(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Tool failed", str(ctx.exception))
 
 
+class TestAgenticLoopErrorHandling(unittest.IsolatedAsyncioTestCase):
+    """Test error handling in agentic loop for MCP integration."""
+
+    async def test_list_tools_failure_is_handled_gracefully(self):
+        """Test that list_tools() failure doesn't crash the app."""
+        from multi_llm_chat.core_modules.agentic_loop import execute_with_tools_stream
+
+        # Create mock provider
+        mock_provider = MagicMock()
+        mock_provider.name = "Gemini"
+
+        async def mock_call_api(history, system_prompt, tools):
+            yield {"type": "text", "content": "Response"}
+
+        mock_provider.call_api = mock_call_api
+
+        # Create mock mcp_client that raises on list_tools
+        mock_mcp_client = MagicMock()
+        mock_mcp_client.list_tools = AsyncMock(side_effect=ConnectionError("MCP server down"))
+
+        # Execute should not crash, but return error
+        result = None
+        chunks = []
+        async for chunk in execute_with_tools_stream(
+            provider=mock_provider,
+            history=[],
+            system_prompt=None,
+            max_iterations=5,
+            timeout=30,
+            mcp_client=mock_mcp_client,
+            tools=None,  # Force list_tools() call
+        ):
+            chunks.append(chunk)
+            # Last yielded item is AgenticLoopResult
+            if isinstance(chunk, dict):
+                pass  # Regular chunk
+            else:
+                # AgenticLoopResult
+                result = chunk
+
+        # Should not crash
+        self.assertIsNotNone(result)
+        # Should have error field set
+        self.assertIsNotNone(result.error)
+        # Should contain user-friendly Japanese error message
+        self.assertIn("MCP", result.error)
+
+    async def test_tool_result_with_resource_type(self):
+        """Test that resource-type tool results are handled correctly."""
+        from multi_llm_chat.core_modules.agentic_loop import execute_with_tools_stream
+
+        # Create mock provider that calls a tool
+        mock_provider = MagicMock()
+        mock_provider.name = "Gemini"
+
+        call_count = {"count": 0}
+
+        async def mock_call_api(history, system_prompt, tools):
+            if call_count["count"] == 0:
+                # First call: return tool call
+                yield {
+                    "type": "tool_call",
+                    "content": {
+                        "name": "read_file",
+                        "arguments": {"path": "/README.md"},
+                        "tool_call_id": "call_123",
+                    },
+                }
+                call_count["count"] += 1
+            else:
+                # Second call: return final response
+                yield {"type": "text", "content": "Summary: "}
+                last_msg = history[-1]
+                # Should have received file content
+                self.assertIn("content", last_msg)
+                content = last_msg["content"]
+                if isinstance(content, list):
+                    result_text = content[0]["content"]
+                else:
+                    result_text = content
+                # Should NOT be "(no text output)"
+                self.assertNotEqual(result_text, "(no text output)")
+
+        mock_provider.call_api = mock_call_api
+
+        # Create mock mcp_client that returns resource type
+        mock_mcp_client = MagicMock()
+        mock_mcp_client.list_tools = AsyncMock(
+            return_value=[
+                {
+                    "name": "read_file",
+                    "description": "Read file",
+                    "inputSchema": {"type": "object", "properties": {}},
+                }
+            ]
+        )
+        mock_mcp_client.call_tool = AsyncMock(
+            return_value={
+                "content": [
+                    {
+                        "type": "resource",
+                        "resource": {"uri": "file:///README.md", "text": "# README\nContent here"},
+                    }
+                ]
+            }
+        )
+
+        # Execute
+        result = None
+        async for chunk in execute_with_tools_stream(
+            provider=mock_provider,
+            history=[],
+            system_prompt=None,
+            max_iterations=5,
+            timeout=30,
+            mcp_client=mock_mcp_client,
+            tools=None,
+        ):
+            # Last yielded item is AgenticLoopResult
+            if isinstance(chunk, dict):
+                pass  # Regular chunk
+            else:
+                # AgenticLoopResult
+                result = chunk
+
+        # Should complete successfully
+        self.assertIsNotNone(result)
+        self.assertIsNone(result.error)
+
+
 class TestCLIMCPIntegration(unittest.TestCase):
     """Test CLI integration with MCPServerManager."""
 

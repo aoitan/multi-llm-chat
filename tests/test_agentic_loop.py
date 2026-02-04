@@ -329,3 +329,72 @@ async def test_execute_with_tools_stream_tool_execution():
     assert result is not None
     assert "12:00" in result.final_text
     assert len(result.history_delta) > 0
+
+
+@pytest.mark.asyncio
+async def test_execute_with_tools_merges_explicit_tools_with_mcp():
+    """Test that explicit tools argument is merged with MCP tools (Issue #84 PR#3).
+
+    When both explicit tools and mcp_client are provided, the agentic loop should
+    merge them so LLM has access to all tools.
+
+    This test verifies:
+    1. MCP tools are fetched via mcp_client.list_tools()
+    2. Explicit tools passed as argument are preserved
+    3. Both tool sets are available to the LLM (passed to provider.call_api)
+    """
+    from multi_llm_chat.core import execute_with_tools
+
+    # Mock provider
+    mock_provider = MagicMock()
+    mock_provider.name = "gemini"
+
+    # Track tools passed to call_api
+    tools_passed_to_api = []
+
+    async def mock_call_api(*args, **kwargs):
+        # Capture tools argument
+        if "tools" in kwargs:
+            tools_passed_to_api.append(kwargs["tools"])
+        # Return simple text response (no tool calls)
+        yield {"type": "text", "content": "Done"}
+
+    mock_provider.call_api = mock_call_api
+
+    # Mock MCP client with MCP-specific tools
+    mock_mcp = AsyncMock()
+    mock_mcp.list_tools = AsyncMock(
+        return_value=[
+            {"name": "read_file", "description": "Read a file", "inputSchema": {}},
+            {"name": "list_directory", "description": "List directory", "inputSchema": {}},
+        ]
+    )
+
+    # Explicit tools (e.g., built-in tools)
+    explicit_tools = [
+        {"name": "search_web", "description": "Search the web", "inputSchema": {}},
+    ]
+
+    history = [{"role": "user", "content": "Test"}]
+
+    # Execute with both explicit tools and MCP client
+    await execute_with_tools(
+        mock_provider,
+        history,
+        mcp_client=mock_mcp,
+        tools=explicit_tools,
+        max_iterations=1,
+    )
+
+    # Verify MCP tools were fetched
+    mock_mcp.list_tools.assert_called_once()
+
+    # Verify tools passed to LLM include both explicit and MCP tools
+    assert len(tools_passed_to_api) == 1
+    merged_tools = tools_passed_to_api[0]
+
+    tool_names = {t["name"] for t in merged_tools}
+    assert "search_web" in tool_names, "Explicit tool should be present"
+    assert "read_file" in tool_names, "MCP tool should be present"
+    assert "list_directory" in tool_names, "MCP tool should be present"
+    assert len(merged_tools) == 3, "Should have 3 tools total (1 explicit + 2 MCP)"

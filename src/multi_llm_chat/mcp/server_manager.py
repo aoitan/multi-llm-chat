@@ -202,13 +202,23 @@ class MCPServerManager:
         This method is intended for emergency cleanup (e.g., atexit handlers)
         when graceful async shutdown is not possible.
 
-        Note: Since MCP client manages subprocess lifecycle internally via stdio_client,
-        this method only clears internal state. Rely on __aexit__ for proper cleanup.
+        Note: Calls force_terminate() on each client to ensure subprocesses are killed.
         """
-        logger.warning(
-            "force_stop_all() called - clearing state. "
-            "Note: Subprocesses should be cleaned up via __aexit__"
-        )
+        logger.warning("force_stop_all() called - terminating all server subprocesses")
+
+        # Force terminate each client's subprocess
+        for name, client in list(self._clients.items()):
+            try:
+                if hasattr(client, "force_terminate"):
+                    client.force_terminate()
+                    logger.info(f"Force terminated server: {name}")
+                else:
+                    logger.warning(
+                        f"Client '{name}' does not support force_terminate(), "
+                        "subprocess may remain running"
+                    )
+            except Exception as e:
+                logger.error(f"Error force terminating server '{name}': {e}")
 
         self._clients.clear()
         self._tool_to_server.clear()

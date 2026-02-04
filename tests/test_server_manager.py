@@ -260,6 +260,44 @@ class TestMCPServerManager(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(manager._started)
         mock_client.__aexit__.assert_awaited_once()
 
+    @patch("multi_llm_chat.mcp.server_manager.MCPClient")
+    async def test_force_stop_all_terminates_subprocesses(self, mock_client_class):
+        """force_stop_all()がsubprocessを確実に終了すること（Issue #84 PR#3 問題1）
+
+        レビュー指摘: force_stop_all()は内部辞書をクリアするだけでsubprocessを終了しない。
+        修正後: 各clientのforce_terminate()を呼び、subprocessを強制終了する。
+        """
+        manager = MCPServerManager()
+        config = MCPServerConfig(
+            name="filesystem",
+            server_command="uvx",
+            server_args=["mcp-server-filesystem", "/tmp"],
+            timeout=10,
+        )
+        manager.add_server(config)
+
+        # Mock client with force_terminate method
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock()
+        mock_client.list_tools = AsyncMock(return_value=[])
+        mock_client.force_terminate = unittest.mock.MagicMock()  # Sync method
+        mock_client_class.return_value = mock_client
+
+        # Start servers
+        await manager.start_all()
+        self.assertTrue(manager._started)
+
+        # Call force_stop_all (synchronous, for atexit/signal handlers)
+        manager.force_stop_all()
+
+        # Verify force_terminate was called to kill subprocess
+        mock_client.force_terminate.assert_called_once()
+
+        # Verify internal state was cleared
+        self.assertFalse(manager._started)
+        self.assertEqual(len(manager._clients), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

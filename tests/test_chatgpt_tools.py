@@ -456,7 +456,11 @@ class TestChatGPTFormatHistory(unittest.TestCase):
         self.assertEqual(tool_call["function"]["arguments"], '{"location": "Tokyo"}')
 
     def test_format_history_with_tool_result(self):
-        """ツール実行結果を含む履歴が正しくOpenAI形式に変換されること"""
+        """ツール実行結果を含む履歴が正しくOpenAI形式に変換されること
+
+        OpenAI API仕様: tool roleのcontentは文字列またはcontent arrayを期待する。
+        二重JSONエンコードは不要。MCP call_tool()の結果にはcontentフィールドがある。
+        """
         history = [
             {"role": "user", "content": "What's the weather?"},
             {
@@ -476,7 +480,7 @@ class TestChatGPTFormatHistory(unittest.TestCase):
                     {
                         "type": "tool_result",
                         "tool_call_id": "call_123",
-                        "result": {"temperature": 20, "condition": "sunny"},
+                        "content": "Temperature: 20°C, Condition: sunny",  # MCPの実際の形式
                     }
                 ],
             },
@@ -488,11 +492,11 @@ class TestChatGPTFormatHistory(unittest.TestCase):
         # Should have 3 messages: user + assistant + tool
         self.assertEqual(len(formatted), 3)
 
-        # Check tool message
+        # Check tool message - content should be passed as-is (no double JSON encoding)
         tool_msg = formatted[2]
         self.assertEqual(tool_msg["role"], "tool")
         self.assertEqual(tool_msg["tool_call_id"], "call_123")
-        self.assertEqual(tool_msg["content"], '{"temperature": 20, "condition": "sunny"}')
+        self.assertEqual(tool_msg["content"], "Temperature: 20°C, Condition: sunny")
 
     def test_format_history_mixed_content(self):
         """テキストとツール呼び出しが混在する履歴を正しく処理すること"""
