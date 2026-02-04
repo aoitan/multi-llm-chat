@@ -54,13 +54,17 @@ class TestIsDangerousPath:
         mock_path = MagicMock(spec=Path)
         mock_path.parent = mock_path  # Root characteristic
 
+        # Create a mock for home directory
+        mock_home = MagicMock(spec=Path)
+        mock_home.parent = MagicMock()  # Not root
+
         with patch("pathlib.Path") as mock_path_class:
             # When Path("C:\\").resolve() is called, return our mock
             mock_path_class.return_value.resolve.return_value = mock_path
             mock_path_class.return_value.resolve.return_value.parent = mock_path
 
-            # Patch home() to avoid errors
-            mock_path_class.home.return_value.resolve.return_value = Path("/home/user")
+            # Patch home() to return mock home
+            mock_path_class.home.return_value.resolve.return_value = mock_home
 
             # Patch os.name to simulate Windows
             with patch("os.name", "nt"):
