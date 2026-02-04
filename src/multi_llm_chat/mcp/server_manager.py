@@ -138,6 +138,20 @@ class MCPServerManager:
 
         return self._all_tools.copy()
 
+    async def list_tools(self) -> list[dict]:
+        """Alias for get_all_tools() to match MCPClient interface.
+
+        This method exists for compatibility with the agentic loop which
+        expects mcp_client.list_tools(). Internally delegates to get_all_tools().
+
+        Returns:
+            list[dict]: List of tool definitions with name, description, inputSchema
+
+        Raises:
+            RuntimeError: If servers are not started
+        """
+        return self.get_all_tools()
+
     async def call_tool(self, tool_name: str, arguments: dict) -> dict:
         """Execute a tool on the appropriate server.
 
