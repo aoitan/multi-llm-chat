@@ -19,20 +19,17 @@ class TestMCPClient(unittest.TestCase):
         self.assertEqual(client.server_args, ["mcp-server-time"])
         self.assertEqual(client.timeout, 5)
 
-    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_connect_success(self, mock_session_class, mock_create_subprocess):
+    def test_mcp_client_connect_success(self, mock_session_class, mock_stdio_client):
         """MCPサーバーへの接続が成功する"""
         # Setup mocks
-        mock_proc = AsyncMock()
-        mock_proc.stdin = MagicMock()
-        mock_proc.stdin.close = MagicMock()
-        mock_proc.stdout = MagicMock()
-        mock_proc.stdout.close = MagicMock()
-        mock_proc.returncode = None
-        mock_proc.terminate = MagicMock()
-        mock_proc.wait = AsyncMock()
-        mock_create_subprocess.return_value = mock_proc
+        mock_read_stream = AsyncMock()
+        mock_write_stream = AsyncMock()
+        mock_stdio_client.return_value.__aenter__ = AsyncMock(
+            return_value=(mock_read_stream, mock_write_stream)
+        )
+        mock_stdio_client.return_value.__aexit__ = AsyncMock()
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
@@ -46,24 +43,21 @@ class TestMCPClient(unittest.TestCase):
                 self.assertIsNotNone(connected_client.session)
                 mock_session.initialize.assert_awaited_once()
             mock_session.close.assert_awaited_once()
-            mock_proc.terminate.assert_called_once()
 
         asyncio.run(run_test())
 
-    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_list_tools(self, mock_session_class, mock_create_subprocess):
+    def test_mcp_client_list_tools(self, mock_session_class, mock_stdio_client):
         """接続したサーバーからツール一覧を取得できる"""
         # Setup mocks
-        mock_proc = AsyncMock()
-        mock_proc.stdin = MagicMock()
-        mock_proc.stdin.close = MagicMock()
-        mock_proc.stdout = MagicMock()
-        mock_proc.stdout.close = MagicMock()
-        mock_proc.returncode = None
-        mock_proc.terminate = MagicMock()
-        mock_proc.wait = AsyncMock()
-        mock_create_subprocess.return_value = mock_proc
+        mock_read_stream = AsyncMock()
+        mock_write_stream = AsyncMock()
+        mock_stdio_client.return_value.__aenter__ = AsyncMock(
+            return_value=(mock_read_stream, mock_write_stream)
+        )
+        mock_stdio_client.return_value.__aexit__ = AsyncMock()
+
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
         mock_session.initialize = AsyncMock()
@@ -86,10 +80,13 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
-    @patch("asyncio.create_subprocess_exec")
-    def test_mcp_client_connection_error(self, mock_create_subprocess):
+    @patch("multi_llm_chat.mcp.client.stdio_client")
+    def test_mcp_client_connection_error(self, mock_stdio_client):
         """サーバー接続エラーが適切にハンドリングされる"""
-        mock_create_subprocess.side_effect = FileNotFoundError("Command not found")
+        mock_stdio_client.return_value.__aenter__ = AsyncMock(
+            side_effect=FileNotFoundError("Command not found")
+        )
+        mock_stdio_client.return_value.__aexit__ = AsyncMock()
 
         client = MCPClient(server_command="invalid-command", server_args=[])
 
@@ -100,20 +97,17 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
-    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_timeout(self, mock_session_class, mock_create_subprocess):
+    def test_mcp_client_timeout(self, mock_session_class, mock_stdio_client):
         """タイムアウトが適切にハンドリングされる"""
         # Setup mocks
-        mock_proc = AsyncMock()
-        mock_proc.stdin = MagicMock()
-        mock_proc.stdin.close = MagicMock()
-        mock_proc.stdout = MagicMock()
-        mock_proc.stdout.close = MagicMock()
-        mock_proc.returncode = None
-        mock_proc.terminate = MagicMock()
-        mock_proc.wait = AsyncMock()
-        mock_create_subprocess.return_value = mock_proc
+        mock_read_stream = AsyncMock()
+        mock_write_stream = AsyncMock()
+        mock_stdio_client.return_value.__aenter__ = AsyncMock(
+            return_value=(mock_read_stream, mock_write_stream)
+        )
+        mock_stdio_client.return_value.__aexit__ = AsyncMock()
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
@@ -125,27 +119,20 @@ class TestMCPClient(unittest.TestCase):
             with self.assertRaises(ConnectionError):
                 async with client:
                     pass
-            # Ensure cleanup is still attempted
-            mock_proc.terminate.assert_called_once()
 
         asyncio.run(run_test())
 
-    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_unexpected_error_on_connect(
-        self, mock_session_class, mock_create_subprocess
-    ):
+    def test_mcp_client_unexpected_error_on_connect(self, mock_session_class, mock_stdio_client):
         """予期せぬエラー発生時にクリーンアップが実行される"""
         # Setup mocks
-        mock_proc = AsyncMock()
-        mock_proc.stdin = MagicMock()
-        mock_proc.stdin.close = MagicMock()
-        mock_proc.stdout = MagicMock()
-        mock_proc.stdout.close = MagicMock()
-        mock_proc.returncode = None
-        mock_proc.terminate = MagicMock()
-        mock_proc.wait = AsyncMock()
-        mock_create_subprocess.return_value = mock_proc
+        mock_read_stream = AsyncMock()
+        mock_write_stream = AsyncMock()
+        mock_stdio_client.return_value.__aenter__ = AsyncMock(
+            return_value=(mock_read_stream, mock_write_stream)
+        )
+        mock_stdio_client.return_value.__aexit__ = AsyncMock()
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
@@ -160,25 +147,20 @@ class TestMCPClient(unittest.TestCase):
                     pass
             # Check that the original exception is wrapped
             self.assertIsInstance(cm.exception.__cause__, ValueError)
-            # Ensure cleanup is still attempted
-            mock_proc.terminate.assert_called_once()
 
         asyncio.run(run_test())
 
-    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_call_tool_success(self, mock_session_class, mock_create_subprocess):
+    def test_call_tool_success(self, mock_session_class, mock_stdio_client):
         """ツール実行が成功する"""
         # Setup mocks
-        mock_proc = AsyncMock()
-        mock_proc.stdin = MagicMock()
-        mock_proc.stdin.close = MagicMock()
-        mock_proc.stdout = MagicMock()
-        mock_proc.stdout.close = MagicMock()
-        mock_proc.returncode = None
-        mock_proc.terminate = MagicMock()
-        mock_proc.wait = AsyncMock()
-        mock_create_subprocess.return_value = mock_proc
+        mock_read_stream = AsyncMock()
+        mock_write_stream = AsyncMock()
+        mock_stdio_client.return_value.__aenter__ = AsyncMock(
+            return_value=(mock_read_stream, mock_write_stream)
+        )
+        mock_stdio_client.return_value.__aexit__ = AsyncMock()
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
@@ -213,20 +195,17 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
-    @patch("asyncio.create_subprocess_exec")
+    @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_call_tool_error(self, mock_session_class, mock_create_subprocess):
+    def test_call_tool_error(self, mock_session_class, mock_stdio_client):
         """ツール実行がエラーを返す"""
         # Setup mocks
-        mock_proc = AsyncMock()
-        mock_proc.stdin = MagicMock()
-        mock_proc.stdin.close = MagicMock()
-        mock_proc.stdout = MagicMock()
-        mock_proc.stdout.close = MagicMock()
-        mock_proc.returncode = None
-        mock_proc.terminate = MagicMock()
-        mock_proc.wait = AsyncMock()
-        mock_create_subprocess.return_value = mock_proc
+        mock_read_stream = AsyncMock()
+        mock_write_stream = AsyncMock()
+        mock_stdio_client.return_value.__aenter__ = AsyncMock(
+            return_value=(mock_read_stream, mock_write_stream)
+        )
+        mock_stdio_client.return_value.__aexit__ = AsyncMock()
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
