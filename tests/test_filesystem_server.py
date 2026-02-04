@@ -50,23 +50,24 @@ class TestIsDangerousPath:
 
     def test_is_dangerous_path_windows_root(self):
         """Test that Windows drive roots are detected as dangerous."""
-        # Create a mock Path object that simulates Windows drive root behavior
-        mock_path = MagicMock(spec=Path)
-        mock_path.parent = mock_path  # Root characteristic
+        # Create mock Path objects
+        mock_resolved_path = MagicMock()
+        mock_resolved_path.parent = mock_resolved_path  # Root characteristic: parent == self
 
-        # Create a mock for home directory
-        mock_home = MagicMock(spec=Path)
-        mock_home.parent = MagicMock()  # Not root
+        mock_home_path = MagicMock()
+        mock_home_path.parent = MagicMock()  # Home is not root
 
-        with patch("pathlib.Path") as mock_path_class:
-            # When Path("C:\\").resolve() is called, return our mock
-            mock_path_class.return_value.resolve.return_value = mock_path
-            mock_path_class.return_value.resolve.return_value.parent = mock_path
+        # Patch Path constructor and home() method
+        with patch("multi_llm_chat.mcp.filesystem_server.Path") as mock_path_class:
+            # Path("C:\\").expanduser().resolve() returns mock_resolved_path
+            mock_path_obj = MagicMock()
+            mock_path_class.return_value = mock_path_obj
+            mock_path_obj.expanduser.return_value.resolve.return_value = mock_resolved_path
 
-            # Patch home() to return mock home
-            mock_path_class.home.return_value.resolve.return_value = mock_home
+            # Path.home().resolve() returns mock_home_path
+            mock_path_class.home.return_value.resolve.return_value = mock_home_path
 
-            # Patch os.name to simulate Windows
+            # Simulate Windows environment
             with patch("os.name", "nt"):
                 result = is_dangerous_path("C:\\\\")
                 assert result is True
