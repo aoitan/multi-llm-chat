@@ -17,7 +17,7 @@ Multi-LLM Chatは、MCP (Model Context Protocol) を通じて、LLMがローカ�
 
 ### 1. MCPサーバーのインストール
 
-filesystemサーバーは`uvx`経由で自動的に起動されます。追加のインストールは不要です。
+filesystemサーバーは`npx`経由で自動的に起動されます（`@modelcontextprotocol/server-filesystem`パッケージ）。Node.jsがインストールされていれば、追加のセットアップは不要です。
 
 ### 2. 環境変数の設定
 
