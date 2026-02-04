@@ -13,7 +13,7 @@ class TestChatServiceMCPIntegration(unittest.IsolatedAsyncioTestCase):
         """Test that ChatService uses MCPServerManager when available."""
         # Create mock manager
         mock_manager = MagicMock()
-        mock_manager.get_all_tools = AsyncMock(
+        mock_manager.get_all_tools = MagicMock(
             return_value=[
                 {
                     "name": "read_file",
@@ -41,7 +41,7 @@ class TestChatServiceMCPIntegration(unittest.IsolatedAsyncioTestCase):
     async def test_chat_service_works_without_mcp_manager(self):
         """Test that ChatService works when MCPServerManager is not available."""
         with patch("multi_llm_chat.chat_logic.get_mcp_manager", return_value=None):
-            _service = ChatService()  # noqa: F841
+            ChatService()
 
             # Should not crash - just work without MCP tools
             from multi_llm_chat.mcp import get_mcp_manager
@@ -64,7 +64,7 @@ class TestChatServiceMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 },
             }
         ]
-        mock_manager.get_all_tools = AsyncMock(return_value=mock_tools)
+        mock_manager.get_all_tools = MagicMock(return_value=mock_tools)
 
         # Mock provider
         mock_provider = MagicMock()
