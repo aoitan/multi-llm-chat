@@ -9,9 +9,9 @@ Multi-LLM Chatは、MCP (Model Context Protocol) を通じて、LLMがローカ�
 - コードベース内のファイル構造を把握
 - 特定のファイルの内容を基にした質問・回答
 
-**重要な制約**:
-- **Read-Only**: ファイルの読み取り専用です。書き込み・編集・削除はできません
-- **セキュリティ**: 指定したディレクトリ配下のみアクセス可能です
+**重要な前提**:
+- **読み取り系ツール想定**: 現在公開されているツール（read_file, list_directory等）は読み取り用途を想定していますが、将来的にmcp-server-filesystemのバージョンや設定により書き込み系ツールが追加される可能性があります。安全のため、重要なファイルが含まれないディレクトリを指定してください
+- **セキュリティ**: 指定したディレクトリ配下のみを対象とするよう構成されていますが、最終的な挙動は `mcp-server-filesystem` のバージョンや設定に依存します
 
 ## セットアップ
 
@@ -39,8 +39,8 @@ MCP_FILESYSTEM_ROOT=/path/to/your/project
 **❌ ブロックされるパス**:
 - システムルート: `/` または `C:\` (Windows)
 - ホームディレクトリ: `~`, `/home/username`, `/Users/username`
-- システムディレクトリ: `/etc`, `/bin`, `/tmp`, `/var`, `/usr`, `/boot`, `/sys`, `/proc`
-- Windows システムディレクトリ: `C:\Windows`, `C:\System32`, `C:\Program Files`
+- POSIXシステムディレクトリ: `/etc`, `/bin`, `/sbin`, `/usr/bin`, `/usr/sbin`, `/boot`, `/dev`, `/proc`, `/sys`, `/tmp`, `/var`
+- Windowsシステムディレクトリ: `C:\Windows`, `C:\Windows\System32`, `C:\Windows\SysWOW64`, `C:\Program Files`, `C:\Program Files (x86)`, `C:\ProgramData`
 
 **✅ 安全なパスの例**:
 ```bash
@@ -170,7 +170,7 @@ MCPサーバーは以下のツールを提供します：
 **確認事項**:
 1. `.env`ファイルで`MULTI_LLM_CHAT_MCP_ENABLED=true`が設定されているか
 2. `MCP_FILESYSTEM_ROOT`が存在するディレクトリを指しているか
-3. ログに`MCP server started`のようなメッセージが出力されているか
+3. ログに`Initializing MCP servers...`や`All MCP servers started successfully`のようなメッセージが出力されているか
 
 **デバッグ方法**:
 ```bash
@@ -180,17 +180,19 @@ python app.py 2>&1 | grep -i mcp
 
 ### 危険パスのエラー
 
-**症状**: `Dangerous path rejected`のようなエラーメッセージ
+**症状**: アプリケーション起動時に失敗し、スタックトレースとともに  
+`ValueError: [SECURITY ERROR] ... Cannot expose dangerous path ...`  
+のようなエラーメッセージが表示される
 
-**原因**: セキュリティ保護により、システムルートやホームディレクトリへのアクセスがブロックされています。
+**原因**: セキュリティ保護により、システムルートやホームディレクトリなどの危険なパスを`MCP_FILESYSTEM_ROOT`として公開しようとしています。
 
 **解決策**:
-1. プロジェクト専用のサブディレクトリを`MCP_FILESYSTEM_ROOT`に設定
-2. どうしても必要な場合は`MCP_ALLOW_DANGEROUS_PATHS=true`を設定（非推奨）
+1. プロジェクト専用のサブディレクトリを`MCP_FILESYSTEM_ROOT`に設定する
+2. どうしても必要な場合は`MCP_ALLOW_DANGEROUS_PATHS=true`を設定して起動する（非推奨・本番環境では禁止推奨）
 
 ### ツール呼び出しタイムアウト
 
-**症状**: `Tool execution timeout`エラー
+**症状**: `TimeoutError: Execution exceeded timeout of ... seconds`エラー
 
 **原因**: 大きなファイルの読み取りや複雑な検索でタイムアウトが発生
 
