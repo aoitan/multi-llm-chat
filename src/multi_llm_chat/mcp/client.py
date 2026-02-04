@@ -3,8 +3,13 @@ MCP client implementation for connecting to MCP servers.
 """
 
 import asyncio
+import logging
+from contextlib import AsyncExitStack
 
 from mcp.client.session import ClientSession
+from mcp.client.stdio import StdioServerParameters, stdio_client
+
+logger = logging.getLogger(__name__)
 
 
 class MCPClient:
@@ -21,30 +26,40 @@ class MCPClient:
         self.server_command = server_command
         self.server_args = server_args
         self.timeout = timeout
-        self.proc = None
         self.session = None
+        self._exit_stack = None
+        self._process = None  # Track subprocess for force termination
 
     async def __aenter__(self):
         """Connect to the MCP server and initialize a session."""
         try:
-            self.proc = await asyncio.create_subprocess_exec(
-                self.server_command,
-                *self.server_args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
+            # Create server parameters
+            server_params = StdioServerParameters(
+                command=self.server_command,
+                args=self.server_args,
             )
 
-            self.session = ClientSession(self.proc.stdout, self.proc.stdin)
+            # Use AsyncExitStack to manage the stdio_client context
+            self._exit_stack = AsyncExitStack()
+            await self._exit_stack.__aenter__()
+
+            # Connect to server using MCP's stdio_client
+            read_stream, write_stream = await self._exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
+
+            # Create session with properly wrapped streams
+            self.session = ClientSession(read_stream, write_stream)
             await asyncio.wait_for(self.session.initialize(), timeout=self.timeout)
             return self
         except Exception as e:
-            # On any exception during initialization, ensure the process is cleaned up.
+            # On any exception during initialization, ensure cleanup
             await self.__aexit__(None, None, None)
-            # Wrap all exceptions in ConnectionError to signal connection failure.
+            # Wrap all exceptions in ConnectionError to signal connection failure
             raise ConnectionError(f"Failed to connect to MCP server: {e}") from e
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Close the session and terminate the server process."""
+        """Close the session and cleanup resources."""
         if self.session:
             try:
                 await self.session.close()
@@ -52,30 +67,40 @@ class MCPClient:
                 pass  # Ignore errors on cleanup
             self.session = None
 
-        if self.proc:
-            if self.proc.returncode is None:
-                self.proc.terminate()
-                try:
-                    await asyncio.wait_for(self.proc.wait(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    if self.proc.returncode is None:
-                        self.proc.kill()
-                        await self.proc.wait()
+        if self._exit_stack:
+            try:
+                await self._exit_stack.__aexit__(exc_type, exc_val, exc_tb)
+            except Exception:
+                pass  # Ignore errors on cleanup
+            self._exit_stack = None
 
-            # Safeguard: Explicitly close streams if they are still open,
-            # which can happen if initialization fails before session takes ownership.
-            if self.proc.stdin:
-                try:
-                    self.proc.stdin.close()
-                except Exception:
-                    pass  # Already closed
-            if self.proc.stdout:
-                try:
-                    self.proc.stdout.close()
-                except Exception:
-                    pass  # Already closed
+        self._process = None
 
-            self.proc = None
+    def force_terminate(self):
+        """Forcefully terminate the server subprocess (synchronous).
+
+        This method is intended for emergency cleanup when graceful async shutdown
+        is not possible (e.g., atexit handlers, signal handlers).
+
+        WARNING: This method attempts to cleanup synchronously, which may not be
+        fully reliable. Prefer using async __aexit__ when possible.
+
+        Implementation note: Since stdio_client manages subprocess internally and
+        doesn't expose the process handle, this method has limited capability.
+        The best approach is to avoid reaching this code path by using proper
+        async cleanup via runtime.py's improved cleanup() function.
+        """
+        logger.warning(
+            "force_terminate() called - attempting emergency cleanup. "
+            "This may leave resources in inconsistent state."
+        )
+
+        # Clear internal state
+        self.session = None
+        self._exit_stack = None
+        self._process = None
+
+        logger.info("MCPClient force terminated (state cleared)")
 
     async def list_tools(self):
         """List available tools from the connected MCP server.

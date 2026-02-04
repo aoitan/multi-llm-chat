@@ -122,7 +122,7 @@ class MCPServerManager:
                     # Add original tool to cached list
                     self._all_tools.append(tool)
 
-    async def get_all_tools(self) -> list[dict]:
+    def get_all_tools(self) -> list[dict]:
         """Get aggregated tool list from all servers.
 
         Returns cached tool list built during start_all().
@@ -137,6 +137,20 @@ class MCPServerManager:
             raise RuntimeError("Servers are not started. Call start_all() first.")
 
         return self._all_tools.copy()
+
+    async def list_tools(self) -> list[dict]:
+        """Alias for get_all_tools() to match MCPClient interface.
+
+        This method exists for compatibility with the agentic loop which
+        expects mcp_client.list_tools(). Internally delegates to get_all_tools().
+
+        Returns:
+            list[dict]: List of tool definitions with name, description, inputSchema
+
+        Raises:
+            RuntimeError: If servers are not started
+        """
+        return self.get_all_tools()
 
     async def call_tool(self, tool_name: str, arguments: dict) -> dict:
         """Execute a tool on the appropriate server.
@@ -186,25 +200,25 @@ class MCPServerManager:
         """Forcefully stop all running servers (synchronous).
 
         This method is intended for emergency cleanup (e.g., atexit handlers)
-        when graceful async shutdown is not possible. It directly terminates
-        subprocesses without async cleanup.
-        """
-        logger.info("Force stopping all MCP servers...")
+        when graceful async shutdown is not possible.
 
+        Note: Calls force_terminate() on each client to ensure subprocesses are killed.
+        """
+        logger.warning("force_stop_all() called - terminating all server subprocesses")
+
+        # Force terminate each client's subprocess
         for name, client in list(self._clients.items()):
             try:
-                if client.proc and client.proc.returncode is None:
-                    logger.info(f"Force terminating server: {name}")
-                    client.proc.terminate()
-                    # Give process a moment to terminate
-                    import time
-
-                    time.sleep(0.1)
-                    if client.proc.poll() is None:
-                        logger.warning(f"Server '{name}' did not terminate, killing...")
-                        client.proc.kill()
+                if hasattr(client, "force_terminate"):
+                    client.force_terminate()
+                    logger.info(f"Force terminated server: {name}")
+                else:
+                    logger.warning(
+                        f"Client '{name}' does not support force_terminate(), "
+                        "subprocess may remain running"
+                    )
             except Exception as e:
-                logger.error(f"Error force stopping server '{name}': {e}")
+                logger.error(f"Error force terminating server '{name}': {e}")
 
         self._clients.clear()
         self._tool_to_server.clear()

@@ -101,12 +101,42 @@ async def execute_with_tools_stream(
     timed_out = False
     error = None
 
-    # Use provided tools if any, otherwise list from MCP client
-    if tools is None and mcp_client:
-        tools = await mcp_client.list_tools()
-
     iterations_count = 0
     try:
+        # Merge explicit tools with MCP tools (Issue #84 PR#3)
+        # This is inside try block to handle MCP connection failures gracefully
+        mcp_tools = []
+        if mcp_client:
+            try:
+                elapsed = time.time() - start_time
+                remaining_timeout = max(0.1, timeout - elapsed)
+                mcp_tools = await asyncio.wait_for(
+                    mcp_client.list_tools(), timeout=remaining_timeout
+                )
+            except (ConnectionError, TimeoutError, Exception) as e:
+                # MCP server is unavailable - fail gracefully without crashing
+                logger.error("Failed to list MCP tools: %s", e)
+                error_msg = f"MCPツールの取得に失敗しました: {str(e)}"
+                error_chunk = {"type": "error", "content": error_msg}
+                chunks.append(error_chunk)
+                yield error_chunk
+                # Set error and return result without raising
+                error = error_msg
+                # Yield final error result
+                yield AgenticLoopResult(
+                    chunks=chunks,
+                    history_delta=[],
+                    final_text="",
+                    iterations_used=0,
+                    timed_out=False,
+                    error=error,
+                )
+                return  # Exit gracefully
+
+        # Merge explicit tools with MCP tools
+        # Explicit tools take precedence if provided
+        tools = (tools or []) + mcp_tools
+
         for _iteration_index in range(max_iterations):
             # Check timeout before each iteration
             if time.time() - start_time > timeout:
@@ -116,7 +146,7 @@ async def execute_with_tools_stream(
             # Call LLM
             tool_calls_in_turn = []
             thought_text = ""
-            async for chunk in provider.call_api(working_history, system_prompt, tools):
+            async for chunk in provider.call_api(working_history, system_prompt, tools=tools):
                 # Check timeout during streaming
                 if time.time() - start_time > timeout:
                     logger.warning("Agentic loop timed out during streaming")
@@ -219,13 +249,51 @@ async def execute_with_tools_stream(
                         mcp_client.call_tool(name, arguments), timeout=remaining_timeout
                     )
 
-                    # Extract text content (simplify for LLM)
-                    text_parts = [
-                        item.get("text", "")
-                        for item in result.get("content", [])
-                        if item.get("type") == "text"
-                    ]
+                    # Extract text content with fallback for non-text types (resource, image)
+                    text_parts = []
+                    for item in result.get("content", []):
+                        item_type = item.get("type")
+
+                        if item_type == "text":
+                            # Primary: text type
+                            text_parts.append(item.get("text", ""))
+                        elif item_type == "resource":
+                            # Fallback: extract from resource
+                            resource = item.get("resource", {})
+                            # Try to get text content from resource
+                            if "text" in resource:
+                                text_parts.append(resource["text"])
+                            elif "uri" in resource:
+                                # Fallback to URI representation
+                                uri = resource["uri"]
+                                mime_type = resource.get("mimeType", "unknown")
+                                text_parts.append(f"[Resource: {uri} ({mime_type})]")
+                                logger.debug(
+                                    "Non-text resource converted to URI: type=%s, uri=%s",
+                                    mime_type,
+                                    uri,
+                                )
+                        elif item_type == "image":
+                            # Fallback: placeholder for image
+                            mime_type = item.get("mimeType", "image")
+                            text_parts.append(f"[画像: {mime_type}]")
+                            logger.debug(
+                                "Image content converted to placeholder: type=%s", mime_type
+                            )
+                        else:
+                            # Last resort: stringify the entire item
+                            import json
+
+                            text_parts.append(f"[Unknown content: {json.dumps(item)}]")
+                            logger.debug("Unknown content type stringified: type=%s", item_type)
+
                     result_text = "\n".join(text_parts) if text_parts else "(no text output)"
+
+                    # Check for error flag in MCP response
+                    is_error = result.get("isError", False)
+                    if is_error:
+                        result_text = f"[ERROR] {result_text}"
+                        logger.warning(f"Tool '{name}' returned error: {result_text}")
 
                     tool_result = {
                         "name": name,

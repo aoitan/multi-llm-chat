@@ -15,6 +15,7 @@ from .core import (
 from .history import get_llm_response
 from .history import reset_history as _reset_history
 from .llm_provider import create_provider
+from .mcp import get_mcp_manager
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,8 @@ class ChatService:
             system_prompt: Optional system prompt (default: "")
             gemini_provider: Optional Gemini provider instance (lazy-created if None)
             chatgpt_provider: Optional ChatGPT provider instance (lazy-created if None)
-            mcp_client: Optional MCP client for tool execution
+            mcp_client: Optional MCP client for tool execution.
+                       If None, will use global MCPServerManager from get_mcp_manager()
         """
         self.display_history = display_history if display_history is not None else []
         self.logic_history = logic_history if logic_history is not None else []
@@ -87,7 +89,13 @@ class ChatService:
         # Store injected providers or None for lazy initialization
         self._gemini_provider = gemini_provider
         self._chatgpt_provider = chatgpt_provider
-        self.mcp_client = mcp_client
+
+        # Use provided mcp_client or fall back to global MCPServerManager
+        if mcp_client is not None:
+            self.mcp_client = mcp_client
+        else:
+            # Try to get global MCPServerManager
+            self.mcp_client = get_mcp_manager()
 
     @property
     def gemini_provider(self):

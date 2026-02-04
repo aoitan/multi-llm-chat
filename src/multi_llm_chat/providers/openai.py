@@ -365,11 +365,18 @@ class ChatGPTProvider(LLMProvider):
                             item.get("name"),
                         )
                         continue
+                    # OpenAI expects tool content as plain string, not double-JSON-encoded
+                    # MCP call_tool() returns {"content": [{"type": "text", "text": "..."}], ...}
+                    # which is normalized to {"content": "...", ...} by agentic_loop
+                    content = item.get("content", item.get("result", ""))
+                    if isinstance(content, dict):
+                        # Fallback: if still dict, JSON encode it
+                        content = json.dumps(content)
                     chatgpt_history.append(
                         {
                             "role": "tool",
                             "tool_call_id": item["tool_call_id"],
-                            "content": json.dumps(item.get("result", "")),
+                            "content": content,
                         }
                     )
             elif role == "tool":

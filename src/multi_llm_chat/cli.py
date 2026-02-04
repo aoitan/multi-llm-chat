@@ -360,8 +360,6 @@ def _handle_copy_command(args, history):
 async def main():
     """Main CLI loop"""
 
-    from .mcp.client import MCPClient
-
     store = HistoryStore()
     user_id = _prompt_user_id()
 
@@ -370,26 +368,8 @@ async def main():
     is_dirty = False
 
     # Create session-scoped ChatService for provider reuse
+    # ChatService will automatically use global MCPServerManager if available
     service = ChatService()
-
-    # MCP support
-    mcp_enabled = core.MCP_ENABLED
-    mcp_client = None
-
-    if mcp_enabled:
-        # TODO: Load command/args from config
-        mcp_client = MCPClient("uvx", ["mcp-server-weather"])
-
-    async def run_cli():
-        nonlocal history, system_prompt, is_dirty
-
-        # Use MCP client if enabled
-        if mcp_client:
-            async with mcp_client:
-                service.mcp_client = mcp_client
-                await _cli_loop()
-        else:
-            await _cli_loop()
 
     async def _cli_loop():
         nonlocal history, system_prompt, is_dirty
@@ -445,7 +425,7 @@ async def main():
             _, history = await _process_service_stream(service, prompt)
             is_dirty = True
 
-    await run_cli()
+    await _cli_loop()
     return history, system_prompt
 
 

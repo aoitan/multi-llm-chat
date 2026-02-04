@@ -185,17 +185,30 @@ def _init_mcp(config: "AppConfig") -> None:
         # Register cleanup handler
         def cleanup():
             logger.info("Stopping MCP servers...")
-            # Try graceful shutdown first
+
+            # Try to determine if an event loop is running
             try:
-                asyncio.run(manager.stop_all())
-                logger.debug("MCP servers stopped gracefully")
-                return
-            except RuntimeError as e:
-                # If we're in an async context at exit, fall back to force stop
-                error_msg = str(e).lower()
-                if "running" in error_msg and "loop" in error_msg:
-                    logger.warning("Event loop active during cleanup, using force stop")
-                else:
+                loop = asyncio.get_running_loop()
+                # Event loop is running - schedule cleanup via call_soon_threadsafe
+                logger.debug("Event loop detected during cleanup, scheduling async stop")
+
+                # Create a future to wait for completion
+                future = asyncio.run_coroutine_threadsafe(manager.stop_all(), loop)
+                try:
+                    # Wait with timeout
+                    future.result(timeout=5.0)
+                    logger.debug("MCP servers stopped gracefully via event loop")
+                    return
+                except Exception as e:
+                    logger.warning(f"Failed to stop via event loop: {e}")
+            except RuntimeError:
+                # No event loop running - try direct asyncio.run
+                logger.debug("No running event loop, attempting direct asyncio.run")
+                try:
+                    asyncio.run(manager.stop_all())
+                    logger.debug("MCP servers stopped gracefully")
+                    return
+                except RuntimeError as e:
                     logger.warning(f"Could not cleanly stop MCP servers: {e}")
 
             # Fallback: forcefully terminate subprocesses

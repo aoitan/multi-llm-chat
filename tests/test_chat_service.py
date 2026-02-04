@@ -151,10 +151,11 @@ class TestChatServiceProcessMessage:
         tools = [{"name": "search"}]
         await consume_async_gen(service.process_message("@chatgpt hi", tools=tools))
 
-        # Verify that tools were passed to API (3rd positional argument)
+        # Verify that tools were passed to API as keyword argument
         mock_provider.call_api.assert_called_once()
-        call_args = mock_provider.call_api.call_args[0]
-        assert call_args[2] == tools
+        call_kwargs = mock_provider.call_api.call_args[1]
+        assert "tools" in call_kwargs
+        assert call_kwargs["tools"] == tools
 
     @patch("multi_llm_chat.chat_logic.create_provider")
     @pytest.mark.asyncio
