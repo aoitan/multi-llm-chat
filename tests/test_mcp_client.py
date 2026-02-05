@@ -12,21 +12,14 @@ from multi_llm_chat.mcp.client import MCPClient
 class TestMCPClient(unittest.TestCase):
     """Test MCPClient for connecting to MCP servers and listing tools."""
 
-    def test_mcp_client_initialization(self):
-        """MCPClientが正常に初期化できる"""
-        client = MCPClient(server_command="uvx", server_args=["mcp-server-time"], timeout=5)
-        self.assertEqual(client.server_command, "uvx")
-        self.assertEqual(client.server_args, ["mcp-server-time"])
-        self.assertEqual(client.timeout, 5)
-
-    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
-    @patch("multi_llm_chat.mcp.client.stdio_client")
-    @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_connect_success(
+    def _setup_successful_connection_mocks(
         self, mock_session_class, mock_stdio_client, mock_exit_stack_class
     ):
-        """MCPサーバーへの接続が成功する"""
-        # Setup mocks
+        """Setup mocks for successful MCP connection.
+
+        Returns:
+            mock_session: The mocked ClientSession instance
+        """
         mock_read_stream = AsyncMock()
         mock_write_stream = AsyncMock()
         mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
@@ -42,6 +35,25 @@ class TestMCPClient(unittest.TestCase):
                 (mock_read_stream, mock_write_stream),  # stdio_client
                 mock_session,  # ClientSession
             ]
+        )
+        return mock_session
+
+    def test_mcp_client_initialization(self):
+        """MCPClientが正常に初期化できる"""
+        client = MCPClient(server_command="uvx", server_args=["mcp-server-time"], timeout=5)
+        self.assertEqual(client.server_command, "uvx")
+        self.assertEqual(client.server_args, ["mcp-server-time"])
+        self.assertEqual(client.timeout, 5)
+
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
+    @patch("multi_llm_chat.mcp.client.stdio_client")
+    @patch("multi_llm_chat.mcp.client.ClientSession")
+    def test_mcp_client_connect_success(
+        self, mock_session_class, mock_stdio_client, mock_exit_stack_class
+    ):
+        """MCPサーバーへの接続が成功する"""
+        self._setup_successful_connection_mocks(
+            mock_session_class, mock_stdio_client, mock_exit_stack_class
         )
 
         client = MCPClient(server_command="uvx", server_args=["mcp-server-time"])
@@ -59,13 +71,9 @@ class TestMCPClient(unittest.TestCase):
         self, mock_session_class, mock_stdio_client, mock_exit_stack_class
     ):
         """接続したサーバーからツール一覧を取得できる"""
-        # Setup mocks
-        mock_read_stream = AsyncMock()
-        mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
-
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
+        mock_session = self._setup_successful_connection_mocks(
+            mock_session_class, mock_stdio_client, mock_exit_stack_class
+        )
 
         tool1 = MagicMock()
         tool1.name = "get_time"
@@ -74,16 +82,6 @@ class TestMCPClient(unittest.TestCase):
         mock_tools_response = MagicMock()
         mock_tools_response.tools = [tool1]
         mock_session.list_tools = AsyncMock(return_value=mock_tools_response)
-
-        mock_exit_stack = AsyncMock()
-        mock_exit_stack_class.return_value = mock_exit_stack
-        mock_exit_stack.__aenter__ = AsyncMock(return_value=mock_exit_stack)
-        mock_exit_stack.enter_async_context = AsyncMock(
-            side_effect=[
-                (mock_read_stream, mock_write_stream),  # stdio_client
-                mock_session,  # ClientSession
-            ]
-        )
 
         client = MCPClient(server_command="uvx", server_args=["mcp-server-time"])
 
@@ -179,13 +177,9 @@ class TestMCPClient(unittest.TestCase):
     @patch("multi_llm_chat.mcp.client.ClientSession")
     def test_call_tool_success(self, mock_session_class, mock_stdio_client, mock_exit_stack_class):
         """ツール実行が成功する"""
-        # Setup mocks
-        mock_read_stream = AsyncMock()
-        mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
-
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
+        mock_session = self._setup_successful_connection_mocks(
+            mock_session_class, mock_stdio_client, mock_exit_stack_class
+        )
 
         # Mock tool result
         mock_content_item = MagicMock()
@@ -197,16 +191,6 @@ class TestMCPClient(unittest.TestCase):
         mock_tool_result.isError = False
 
         mock_session.call_tool = AsyncMock(return_value=mock_tool_result)
-
-        mock_exit_stack = AsyncMock()
-        mock_exit_stack_class.return_value = mock_exit_stack
-        mock_exit_stack.__aenter__ = AsyncMock(return_value=mock_exit_stack)
-        mock_exit_stack.enter_async_context = AsyncMock(
-            side_effect=[
-                (mock_read_stream, mock_write_stream),  # stdio_client
-                mock_session,  # ClientSession
-            ]
-        )
 
         client = MCPClient(server_command="uvx", server_args=["mcp-server-weather"])
 
@@ -231,13 +215,9 @@ class TestMCPClient(unittest.TestCase):
     @patch("multi_llm_chat.mcp.client.ClientSession")
     def test_call_tool_error(self, mock_session_class, mock_stdio_client, mock_exit_stack_class):
         """ツール実行がエラーを返す"""
-        # Setup mocks
-        mock_read_stream = AsyncMock()
-        mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
-
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
+        mock_session = self._setup_successful_connection_mocks(
+            mock_session_class, mock_stdio_client, mock_exit_stack_class
+        )
 
         # Mock tool error result
         mock_content_item = MagicMock()
@@ -249,16 +229,6 @@ class TestMCPClient(unittest.TestCase):
         mock_tool_result.isError = True
 
         mock_session.call_tool = AsyncMock(return_value=mock_tool_result)
-
-        mock_exit_stack = AsyncMock()
-        mock_exit_stack_class.return_value = mock_exit_stack
-        mock_exit_stack.__aenter__ = AsyncMock(return_value=mock_exit_stack)
-        mock_exit_stack.enter_async_context = AsyncMock(
-            side_effect=[
-                (mock_read_stream, mock_write_stream),  # stdio_client
-                mock_session,  # ClientSession
-            ]
-        )
 
         client = MCPClient(server_command="uvx", server_args=["mcp-server-filesystem"])
 
