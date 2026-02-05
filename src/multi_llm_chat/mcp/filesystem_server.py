@@ -175,7 +175,7 @@ def create_filesystem_server_config(
 
     return MCPServerConfig(
         name="filesystem",
-        server_command="uvx",
-        server_args=["mcp-server-filesystem", str(resolved_root)],
+        server_command="npx",
+        server_args=["-y", "@modelcontextprotocol/server-filesystem", str(resolved_root)],
         timeout=timeout,
     )

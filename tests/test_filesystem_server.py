@@ -149,8 +149,9 @@ class TestCreateFilesystemServerConfig:
         # Use allow_dangerous=True for testing purposes.
         config = create_filesystem_server_config(str(tmp_path), allow_dangerous=True)
         assert config.name == "filesystem"
-        # Path should be resolved to absolute
-        assert str(tmp_path.resolve()) in config.server_args[1]
+        assert config.server_command == "npx"
+        # Path should be resolved to absolute in server_args[2] (after "-y" and package name)
+        assert str(tmp_path.resolve()) in config.server_args[2]
 
     def test_create_config_default_cwd(self):
         """Test creating config defaults to current working directory."""
@@ -162,7 +163,7 @@ class TestCreateFilesystemServerConfig:
                         "multi_llm_chat.mcp.filesystem_server.is_dangerous_path", return_value=False
                     ):
                         config = create_filesystem_server_config()
-                        assert "/mock/cwd" in config.server_args[1]
+                        assert "/mock/cwd" in config.server_args[2]
 
     def test_create_config_rejects_dangerous_path_by_default(self):
         """Test that dangerous paths are rejected by default."""
@@ -177,7 +178,11 @@ class TestCreateFilesystemServerConfig:
             # Need to mock is_dir to avoid actual filesystem check on /
             with patch("pathlib.Path.is_dir", return_value=True):
                 config = create_filesystem_server_config("/", allow_dangerous=True)
-                assert config.server_args == ["mcp-server-filesystem", "/"]
+                assert config.server_args == [
+                    "-y",
+                    "@modelcontextprotocol/server-filesystem",
+                    "/",
+                ]
                 # Should log warning even when allowed
                 assert any("DANGEROUS PATH ALLOWED" in record.message for record in caplog.records)
 
@@ -208,10 +213,10 @@ class TestCreateFilesystemServerConfig:
             create_filesystem_server_config("~")
 
     def test_create_config_command(self, tmp_path):
-        """Test that config uses uvx command."""
+        """Test that config uses npx command."""
         config = create_filesystem_server_config(str(tmp_path), allow_dangerous=True)
-        assert config.server_command == "uvx"
-        assert "mcp-server-filesystem" in config.server_args
+        assert config.server_command == "npx"
+        assert "@modelcontextprotocol/server-filesystem" in config.server_args
 
     def test_create_config_timeout(self, tmp_path):
         """Test that config uses default MCP timeout."""

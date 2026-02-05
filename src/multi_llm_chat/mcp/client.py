@@ -2,7 +2,6 @@
 MCP client implementation for connecting to MCP servers.
 """
 
-import asyncio
 import logging
 from contextlib import AsyncExitStack
 
@@ -49,8 +48,10 @@ class MCPClient:
             )
 
             # Create session with properly wrapped streams
-            self.session = ClientSession(read_stream, write_stream)
-            await asyncio.wait_for(self.session.initialize(), timeout=self.timeout)
+            # ClientSession's __aenter__ automatically calls initialize()
+            self.session = await self._exit_stack.enter_async_context(
+                ClientSession(read_stream, write_stream)
+            )
             return self
         except Exception as e:
             # On any exception during initialization, ensure cleanup
@@ -60,12 +61,8 @@ class MCPClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Close the session and cleanup resources."""
-        if self.session:
-            try:
-                await self.session.close()
-            except Exception:
-                pass  # Ignore errors on cleanup
-            self.session = None
+        # session is managed by exit_stack, so just clear the reference
+        self.session = None
 
         if self._exit_stack:
             try:

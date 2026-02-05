@@ -12,6 +12,32 @@ from multi_llm_chat.mcp.client import MCPClient
 class TestMCPClient(unittest.TestCase):
     """Test MCPClient for connecting to MCP servers and listing tools."""
 
+    def _setup_successful_connection_mocks(
+        self, mock_session_class, mock_stdio_client, mock_exit_stack_class
+    ):
+        """Setup mocks for successful MCP connection.
+
+        Returns:
+            mock_session: The mocked ClientSession instance
+        """
+        mock_read_stream = AsyncMock()
+        mock_write_stream = AsyncMock()
+        mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
+
+        mock_session = AsyncMock()
+        mock_session_class.return_value = mock_session
+
+        mock_exit_stack = AsyncMock()
+        mock_exit_stack_class.return_value = mock_exit_stack
+        mock_exit_stack.__aenter__ = AsyncMock(return_value=mock_exit_stack)
+        mock_exit_stack.enter_async_context = AsyncMock(
+            side_effect=[
+                (mock_read_stream, mock_write_stream),  # stdio_client
+                mock_session,  # ClientSession
+            ]
+        )
+        return mock_session
+
     def test_mcp_client_initialization(self):
         """MCPClientが正常に初期化できる"""
         client = MCPClient(server_command="uvx", server_args=["mcp-server-time"], timeout=5)
@@ -19,48 +45,35 @@ class TestMCPClient(unittest.TestCase):
         self.assertEqual(client.server_args, ["mcp-server-time"])
         self.assertEqual(client.timeout, 5)
 
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
     @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_connect_success(self, mock_session_class, mock_stdio_client):
+    def test_mcp_client_connect_success(
+        self, mock_session_class, mock_stdio_client, mock_exit_stack_class
+    ):
         """MCPサーバーへの接続が成功する"""
-        # Setup mocks
-        mock_read_stream = AsyncMock()
-        mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value.__aenter__ = AsyncMock(
-            return_value=(mock_read_stream, mock_write_stream)
+        self._setup_successful_connection_mocks(
+            mock_session_class, mock_stdio_client, mock_exit_stack_class
         )
-        mock_stdio_client.return_value.__aexit__ = AsyncMock()
-
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
-        mock_session.initialize = AsyncMock()
-        mock_session.close = AsyncMock()
 
         client = MCPClient(server_command="uvx", server_args=["mcp-server-time"])
 
         async def run_test():
             async with client as connected_client:
                 self.assertIsNotNone(connected_client.session)
-                mock_session.initialize.assert_awaited_once()
-            mock_session.close.assert_awaited_once()
 
         asyncio.run(run_test())
 
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
     @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_list_tools(self, mock_session_class, mock_stdio_client):
+    def test_mcp_client_list_tools(
+        self, mock_session_class, mock_stdio_client, mock_exit_stack_class
+    ):
         """接続したサーバーからツール一覧を取得できる"""
-        # Setup mocks
-        mock_read_stream = AsyncMock()
-        mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value.__aenter__ = AsyncMock(
-            return_value=(mock_read_stream, mock_write_stream)
+        mock_session = self._setup_successful_connection_mocks(
+            mock_session_class, mock_stdio_client, mock_exit_stack_class
         )
-        mock_stdio_client.return_value.__aexit__ = AsyncMock()
-
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
-        mock_session.initialize = AsyncMock()
 
         tool1 = MagicMock()
         tool1.name = "get_time"
@@ -97,21 +110,26 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
     @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_timeout(self, mock_session_class, mock_stdio_client):
+    def test_mcp_client_timeout(self, mock_session_class, mock_stdio_client, mock_exit_stack_class):
         """タイムアウトが適切にハンドリングされる"""
         # Setup mocks
         mock_read_stream = AsyncMock()
         mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value.__aenter__ = AsyncMock(
-            return_value=(mock_read_stream, mock_write_stream)
-        )
-        mock_stdio_client.return_value.__aexit__ = AsyncMock()
+        mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
-        mock_session.initialize = AsyncMock(side_effect=asyncio.TimeoutError("Connection timeout"))
+
+        mock_exit_stack = AsyncMock()
+        mock_exit_stack_class.return_value = mock_exit_stack
+        mock_exit_stack.__aenter__ = AsyncMock(return_value=mock_exit_stack)
+        # Simulate timeout during ClientSession context entry
+        mock_exit_stack.enter_async_context = AsyncMock(
+            side_effect=asyncio.TimeoutError("Connection timeout")
+        )
 
         client = MCPClient(server_command="uvx", server_args=["slow-server"], timeout=0.1)
 
@@ -122,22 +140,26 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
     @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_mcp_client_unexpected_error_on_connect(self, mock_session_class, mock_stdio_client):
+    def test_mcp_client_unexpected_error_on_connect(
+        self, mock_session_class, mock_stdio_client, mock_exit_stack_class
+    ):
         """予期せぬエラー発生時にクリーンアップが実行される"""
         # Setup mocks
         mock_read_stream = AsyncMock()
         mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value.__aenter__ = AsyncMock(
-            return_value=(mock_read_stream, mock_write_stream)
-        )
-        mock_stdio_client.return_value.__aexit__ = AsyncMock()
+        mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
+
+        mock_exit_stack = AsyncMock()
+        mock_exit_stack_class.return_value = mock_exit_stack
+        mock_exit_stack.__aenter__ = AsyncMock(return_value=mock_exit_stack)
         # Simulate an unexpected error during session initialization
-        mock_session.initialize = AsyncMock(side_effect=ValueError("Unexpected error"))
+        mock_exit_stack.enter_async_context = AsyncMock(side_effect=ValueError("Unexpected error"))
 
         client = MCPClient(server_command="uvx", server_args=["buggy-server"])
 
@@ -150,21 +172,14 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
     @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_call_tool_success(self, mock_session_class, mock_stdio_client):
+    def test_call_tool_success(self, mock_session_class, mock_stdio_client, mock_exit_stack_class):
         """ツール実行が成功する"""
-        # Setup mocks
-        mock_read_stream = AsyncMock()
-        mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value.__aenter__ = AsyncMock(
-            return_value=(mock_read_stream, mock_write_stream)
+        mock_session = self._setup_successful_connection_mocks(
+            mock_session_class, mock_stdio_client, mock_exit_stack_class
         )
-        mock_stdio_client.return_value.__aexit__ = AsyncMock()
-
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
-        mock_session.initialize = AsyncMock()
 
         # Mock tool result
         mock_content_item = MagicMock()
@@ -195,26 +210,19 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
     @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_call_tool_error(self, mock_session_class, mock_stdio_client):
+    def test_call_tool_error(self, mock_session_class, mock_stdio_client, mock_exit_stack_class):
         """ツール実行がエラーを返す"""
-        # Setup mocks
-        mock_read_stream = AsyncMock()
-        mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value.__aenter__ = AsyncMock(
-            return_value=(mock_read_stream, mock_write_stream)
+        mock_session = self._setup_successful_connection_mocks(
+            mock_session_class, mock_stdio_client, mock_exit_stack_class
         )
-        mock_stdio_client.return_value.__aexit__ = AsyncMock()
-
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
-        mock_session.initialize = AsyncMock()
 
         # Mock tool error result
         mock_content_item = MagicMock()
         mock_content_item.type = "text"
-        mock_content_item.model_dump = MagicMock(return_value={"text": "API key missing"})
+        mock_content_item.model_dump = MagicMock(return_value={"text": "File not found"})
 
         mock_tool_result = MagicMock()
         mock_tool_result.content = [mock_content_item]
@@ -222,14 +230,16 @@ class TestMCPClient(unittest.TestCase):
 
         mock_session.call_tool = AsyncMock(return_value=mock_tool_result)
 
-        client = MCPClient(server_command="uvx", server_args=["mcp-server-weather"])
+        client = MCPClient(server_command="uvx", server_args=["mcp-server-filesystem"])
 
         async def run_test():
             async with client as connected_client:
-                result = await connected_client.call_tool("get_weather", {"location": "Invalid"})
+                result = await connected_client.call_tool("read_file", {"path": "/nonexistent"})
 
+                self.assertIn("content", result)
+                self.assertEqual(len(result["content"]), 1)
                 self.assertTrue(result["isError"])
-                self.assertIn("API key missing", result["content"][0]["text"])
+                self.assertIn("File not found", result["content"][0]["text"])
 
         asyncio.run(run_test())
 
