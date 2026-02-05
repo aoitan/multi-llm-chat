@@ -43,3 +43,9 @@ select = ["E", "F", "B", "I"]
 [tool.ruff.lint.per-file-ignores]
 "src/multi_llm_chat/core.py" = ["E402"]  # load_dotenv() before imports is intentional
 "src/multi_llm_chat/llm_provider.py" = ["E402"]  # load_dotenv() before reading env vars
+
+[tool.pytest.ini_options]
+markers = [
+    "smoke: lightweight startup/health checks",
+    "e2e: end-to-end style tests using mocked providers",
+]
