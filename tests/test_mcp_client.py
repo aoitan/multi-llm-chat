@@ -174,21 +174,18 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
     @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_call_tool_success(self, mock_session_class, mock_stdio_client):
+    def test_call_tool_success(self, mock_session_class, mock_stdio_client, mock_exit_stack_class):
         """ツール実行が成功する"""
         # Setup mocks
         mock_read_stream = AsyncMock()
         mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value.__aenter__ = AsyncMock(
-            return_value=(mock_read_stream, mock_write_stream)
-        )
-        mock_stdio_client.return_value.__aexit__ = AsyncMock()
+        mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
-        mock_session.initialize = AsyncMock()
 
         # Mock tool result
         mock_content_item = MagicMock()
@@ -200,6 +197,16 @@ class TestMCPClient(unittest.TestCase):
         mock_tool_result.isError = False
 
         mock_session.call_tool = AsyncMock(return_value=mock_tool_result)
+
+        mock_exit_stack = AsyncMock()
+        mock_exit_stack_class.return_value = mock_exit_stack
+        mock_exit_stack.__aenter__ = AsyncMock(return_value=mock_exit_stack)
+        mock_exit_stack.enter_async_context = AsyncMock(
+            side_effect=[
+                (mock_read_stream, mock_write_stream),  # stdio_client
+                mock_session,  # ClientSession
+            ]
+        )
 
         client = MCPClient(server_command="uvx", server_args=["mcp-server-weather"])
 
@@ -219,26 +226,23 @@ class TestMCPClient(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    @patch("multi_llm_chat.mcp.client.AsyncExitStack")
     @patch("multi_llm_chat.mcp.client.stdio_client")
     @patch("multi_llm_chat.mcp.client.ClientSession")
-    def test_call_tool_error(self, mock_session_class, mock_stdio_client):
+    def test_call_tool_error(self, mock_session_class, mock_stdio_client, mock_exit_stack_class):
         """ツール実行がエラーを返す"""
         # Setup mocks
         mock_read_stream = AsyncMock()
         mock_write_stream = AsyncMock()
-        mock_stdio_client.return_value.__aenter__ = AsyncMock(
-            return_value=(mock_read_stream, mock_write_stream)
-        )
-        mock_stdio_client.return_value.__aexit__ = AsyncMock()
+        mock_stdio_client.return_value = (mock_read_stream, mock_write_stream)
 
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
-        mock_session.initialize = AsyncMock()
 
         # Mock tool error result
         mock_content_item = MagicMock()
         mock_content_item.type = "text"
-        mock_content_item.model_dump = MagicMock(return_value={"text": "API key missing"})
+        mock_content_item.model_dump = MagicMock(return_value={"text": "File not found"})
 
         mock_tool_result = MagicMock()
         mock_tool_result.content = [mock_content_item]
@@ -246,14 +250,26 @@ class TestMCPClient(unittest.TestCase):
 
         mock_session.call_tool = AsyncMock(return_value=mock_tool_result)
 
-        client = MCPClient(server_command="uvx", server_args=["mcp-server-weather"])
+        mock_exit_stack = AsyncMock()
+        mock_exit_stack_class.return_value = mock_exit_stack
+        mock_exit_stack.__aenter__ = AsyncMock(return_value=mock_exit_stack)
+        mock_exit_stack.enter_async_context = AsyncMock(
+            side_effect=[
+                (mock_read_stream, mock_write_stream),  # stdio_client
+                mock_session,  # ClientSession
+            ]
+        )
+
+        client = MCPClient(server_command="uvx", server_args=["mcp-server-filesystem"])
 
         async def run_test():
             async with client as connected_client:
-                result = await connected_client.call_tool("get_weather", {"location": "Invalid"})
+                result = await connected_client.call_tool("read_file", {"path": "/nonexistent"})
 
+                self.assertIn("content", result)
+                self.assertEqual(len(result["content"]), 1)
                 self.assertTrue(result["isError"])
-                self.assertIn("API key missing", result["content"][0]["text"])
+                self.assertIn("File not found", result["content"][0]["text"])
 
         asyncio.run(run_test())
 
