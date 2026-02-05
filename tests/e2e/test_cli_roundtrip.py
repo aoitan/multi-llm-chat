@@ -1,39 +1,19 @@
 import pytest
 
 from multi_llm_chat.chat_logic import ChatService
-from multi_llm_chat.core import AgenticLoopResult
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 @pytest.mark.e2e
-async def test_chatservice_roundtrip_with_mocked_provider(monkeypatch):
+async def test_chatservice_roundtrip_with_mocked_provider(
+    monkeypatch, fake_stream_factory, dummy_provider
+):
     """ChatServiceがモックプロバイダ経由で履歴を更新する簡易E2E。"""
 
-    async def fake_stream(provider, input_history, system_prompt, **kwargs):
-        yield {"type": "text", "content": "Hello from mock!"}
-        yield AgenticLoopResult(
-            chunks=[{"type": "text", "content": "Hello from mock!"}],
-            history_delta=[
-                {"role": "gemini", "content": [{"type": "text", "content": "Hello from mock!"}]}
-            ],
-            final_text="Hello from mock!",
-            iterations_used=1,
-            timed_out=False,
-        )
+    fake_stream = fake_stream_factory("Hello from mock!")
 
-    class DummyProvider:
-        """最小限のダミープロバイダ。"""
-
-        pass
-
-    monkeypatch.setattr(
-        "multi_llm_chat.core.execute_with_tools_stream",
-        fake_stream,
-    )
-    monkeypatch.setattr(
-        "multi_llm_chat.chat_logic.create_provider",
-        lambda name: DummyProvider(),
-    )
+    monkeypatch.setattr("multi_llm_chat.core.execute_with_tools_stream", fake_stream)
+    monkeypatch.setattr("multi_llm_chat.chat_logic.create_provider", lambda name: dummy_provider)
 
     service = ChatService()
 

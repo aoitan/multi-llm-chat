@@ -1,37 +1,19 @@
 import pytest
 
-from multi_llm_chat.core import AgenticLoopResult
 from multi_llm_chat.webui.handlers import validate_and_respond
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 @pytest.mark.e2e
-async def test_webui_validate_and_respond_roundtrip(monkeypatch):
+async def test_webui_validate_and_respond_roundtrip(
+    monkeypatch, fake_stream_factory, dummy_provider
+):
     """WebUIの応答パイプラインがモックプロバイダで履歴を更新するかを確認する。"""
 
-    async def fake_stream(provider, input_history, system_prompt, **kwargs):
-        yield {"type": "text", "content": "Hello WebUI!"}
-        yield AgenticLoopResult(
-            chunks=[{"type": "text", "content": "Hello WebUI!"}],
-            history_delta=[
-                {"role": "gemini", "content": [{"type": "text", "content": "Hello WebUI!"}]}
-            ],
-            final_text="Hello WebUI!",
-            iterations_used=1,
-            timed_out=False,
-        )
+    fake_stream = fake_stream_factory("Hello WebUI!")
 
-    class DummyProvider:
-        pass
-
-    monkeypatch.setattr(
-        "multi_llm_chat.core.execute_with_tools_stream",
-        fake_stream,
-    )
-    monkeypatch.setattr(
-        "multi_llm_chat.chat_logic.create_provider",
-        lambda name: DummyProvider(),
-    )
+    monkeypatch.setattr("multi_llm_chat.core.execute_with_tools_stream", fake_stream)
+    monkeypatch.setattr("multi_llm_chat.chat_logic.create_provider", lambda name: dummy_provider)
 
     display_history = []
     logic_history = []

@@ -6,7 +6,7 @@ import pytest
 
 
 @pytest.mark.smoke
-def test_cli_process_exits_cleanly(tmp_path):
+def test_cli_process_exits_cleanly():
     """CLIが起動し、終了コマンドで正常終了するかを確認するスモークテスト。"""
     env = os.environ.copy()
     env.update(

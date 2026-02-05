@@ -51,6 +51,7 @@ def test_webui_process_starts_and_serves_index():
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+            proc.wait(timeout=5)
 
     # terminate() で終了させるため SIGTERM (-15) を許容
-    assert proc.returncode in (0, None, -15)
+    assert proc.returncode in (0, -15)
