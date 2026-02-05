@@ -155,7 +155,10 @@ class TestChatServiceProcessMessage:
         mock_provider.call_api.assert_called_once()
         call_kwargs = mock_provider.call_api.call_args[1]
         assert "tools" in call_kwargs
-        assert call_kwargs["tools"] == tools
+        # Verify that the user-provided tool is included
+        tool_names = [t["name"] for t in call_kwargs["tools"]]
+        assert "search" in tool_names
+        # MCP tools may also be included if MCP is enabled
 
     @patch("multi_llm_chat.chat_logic.create_provider")
     @pytest.mark.asyncio
