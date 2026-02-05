@@ -38,10 +38,10 @@ async def test_chatservice_roundtrip_with_mocked_provider(monkeypatch):
     service = ChatService()
 
     # Collect final state from the stream
-    async for display_history, logic_history, _chunk in service.process_message("@gemini hi"):
+    async for _display_history, _logic_history, _chunk in service.process_message("@gemini hi"):
         pass
 
-    assert logic_history[-1]["role"] == "gemini"
-    assert logic_history[-1]["content"][0]["content"] == "Hello from mock!"
-    assert display_history[-1][1].startswith("**Gemini:**")
-    assert "Hello from mock!" in display_history[-1][1]
+    assert service.logic_history[-1]["role"] == "gemini"
+    assert service.logic_history[-1]["content"][0]["content"] == "Hello from mock!"
+    assert service.display_history[-1][1].startswith("**Gemini:**")
+    assert "Hello from mock!" in service.display_history[-1][1]

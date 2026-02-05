@@ -38,8 +38,18 @@ async def test_webui_validate_and_respond_roundtrip(monkeypatch):
     system_prompt = ""
     chat_service = None
 
-    async for display_history, _display_state, logic_history, chat_service in validate_and_respond(
-        "@gemini hi", display_history, logic_history, system_prompt, "user1", chat_service
+    async for (
+        _display_history,
+        _display_state,
+        _logic_history,
+        _chat_service,
+    ) in validate_and_respond(
+        "@gemini hi",
+        display_history,
+        logic_history,
+        system_prompt,
+        "user1",
+        chat_service,
     ):
         pass
 
