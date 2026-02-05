@@ -285,6 +285,6 @@ class TestMCPToolFormats(unittest.TestCase):
 
         # Verify config structure
         self.assertEqual(config.name, "filesystem")
-        self.assertEqual(config.server_command, "uvx")
-        self.assertIn("mcp-server-filesystem", config.server_args)
+        self.assertEqual(config.server_command, "npx")
+        self.assertIn("@modelcontextprotocol/server-filesystem", config.server_args)
         self.assertEqual(config.timeout, 120)  # Default timeout
