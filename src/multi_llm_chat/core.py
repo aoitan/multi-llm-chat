@@ -1,12 +1,21 @@
 """Core module - Facade for multi-LLM chat functionality.
 
-This module provides backward compatibility by re-exporting functions from:
-- core_modules.legacy_api: DEPRECATED API wrappers
+This module provides the public API for multi-LLM chat functionality:
 - core_modules.token_and_context: Token calculation and validation
 - core_modules.agentic_loop: Agentic Loop implementation
 - core_modules.providers_facade: Provider access utilities
 - llm_provider: Provider classes and configuration
 - history_utils: History management utilities
+
+⚠️ LEGACY API NOTICE:
+Legacy API functions (call_*_api, format_history_*, stream_*, etc.) are still
+available via direct import but are NOT part of the official public API.
+These functions are deprecated and will be removed in v2.0.0.
+
+To use legacy APIs, import directly from core_modules.legacy_api:
+    from multi_llm_chat.core_modules.legacy_api import call_gemini_api
+
+For migration guidance, see doc/deprecation_policy.md
 
 Note: Environment variables should be loaded by calling init_runtime()
 at application startup (see app.py, chat_logic.py).
@@ -66,20 +75,8 @@ from .llm_provider import (
     get_provider as get_provider,
 )
 
-# Define public API
+# Define public API (Issue #115: Legacy APIs removed from __all__)
 __all__ = [
-    # Legacy API (DEPRECATED)
-    "call_chatgpt_api",
-    "call_chatgpt_api_async",
-    "call_gemini_api",
-    "call_gemini_api_async",
-    "extract_text_from_chunk",
-    "format_history_for_chatgpt",
-    "format_history_for_gemini",
-    "load_api_key",
-    "prepare_request",
-    "stream_text_events",
-    "stream_text_events_async",
     # Token and context management
     "calculate_tokens",
     "get_max_context_length",

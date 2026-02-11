@@ -8,6 +8,11 @@ for code using the old core.py API. New code should use the underlying implement
 - Direct provider usage: provider = create_provider('gemini'); provider.call_api(...)
 
 All functions in this module are marked as DEPRECATED and may be removed in future versions.
+
+⚠️ DEPRECATION NOTICE:
+- All functions in this module will be removed in v2.0.0
+- Runtime DeprecationWarnings will be raised when these functions are called
+- See doc/deprecation_policy.md for migration guide
 """
 
 import asyncio
@@ -44,6 +49,13 @@ def load_api_key(env_var_name: str) -> str:
     Returns:
         str: API key value or None if not found
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "load_api_key() is deprecated. Use llm_provider.load_api_key() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     from ..llm_provider import load_api_key as _load_api_key
 
     return _load_api_key(env_var_name)
@@ -61,6 +73,13 @@ def format_history_for_gemini(history: List[Dict[str, Any]]) -> List[Dict[str, A
     Returns:
         List[Dict]: Gemini-formatted history
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "format_history_for_gemini() is deprecated. Use GeminiProvider.format_history() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return GeminiProvider.format_history(history)
 
 
@@ -76,6 +95,13 @@ def format_history_for_chatgpt(history: List[Dict[str, Any]]) -> List[Dict[str, 
     Returns:
         List[Dict]: ChatGPT-formatted history
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "format_history_for_chatgpt() is deprecated. Use ChatGPTProvider.format_history() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return ChatGPTProvider.format_history(history)
 
 
@@ -92,6 +118,13 @@ def extract_text_from_chunk(chunk: Any, model_name: str) -> str:
     Returns:
         str: Extracted text content
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "extract_text_from_chunk() is deprecated. Use provider.extract_text_from_chunk() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     try:
         provider_name = _get_provider_name_from_model(model_name)
         provider = create_provider(provider_name)
@@ -116,6 +149,13 @@ def prepare_request(history: List[Dict[str, Any]], system_prompt: Optional[str],
     Returns:
         Prepared request (format depends on provider)
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "prepare_request() is deprecated. Use history_utils.prepare_request() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return _prepare_request(history, system_prompt, model_name)
 
 
@@ -131,6 +171,13 @@ async def call_gemini_api_async(history: List[Dict[str, Any]], system_prompt: Op
     Yields:
         API response chunks
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "call_gemini_api_async() is deprecated. Use create_provider('gemini').call_api() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     try:
         provider = create_provider("gemini")
         async for chunk in provider.call_api(history, system_prompt):
@@ -157,9 +204,10 @@ def call_gemini_api(history: List[Dict[str, Any]], system_prompt: Optional[str] 
     Yields:
         API response chunks
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
     warnings.warn(
-        "call_gemini_api() is deprecated and will be removed. "
-        "Use ChatService or create_provider() instead.",
+        "call_gemini_api() is deprecated. Use create_provider('gemini').call_api() instead. "
+        "This function will be removed in v2.0.0.",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -192,6 +240,14 @@ async def call_chatgpt_api_async(
     Yields:
         API response chunks
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "call_chatgpt_api_async() is deprecated. "
+        "Use create_provider('chatgpt').call_api() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     try:
         provider = create_provider("chatgpt")
         async for chunk in provider.call_api(history, system_prompt):
@@ -220,9 +276,10 @@ def call_chatgpt_api(history: List[Dict[str, Any]], system_prompt: Optional[str]
     Yields:
         API response chunks
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
     warnings.warn(
-        "call_chatgpt_api() is deprecated and will be removed. "
-        "Use ChatService or create_provider() instead.",
+        "call_chatgpt_api() is deprecated. Use create_provider('chatgpt').call_api() instead. "
+        "This function will be removed in v2.0.0.",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -256,6 +313,13 @@ async def stream_text_events_async(
     Yields:
         Normalized text event chunks
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "stream_text_events_async() is deprecated. Use provider.stream_text_events() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     provider = create_provider(provider_name)
     async for chunk in provider.stream_text_events(history, system_prompt):
         yield chunk
@@ -276,6 +340,13 @@ def stream_text_events(
     Yields:
         Normalized text event chunks
     """
+    # Issue #115: Add runtime deprecation warning (will be removed in v2.0.0)
+    warnings.warn(
+        "stream_text_events() is deprecated. Use provider.stream_text_events() instead. "
+        "This function will be removed in v2.0.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:

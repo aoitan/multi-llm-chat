@@ -348,5 +348,14 @@ src/multi_llm_chat/
 
 これらのEpicを担当者単位に細分化する場合は、フェーズ1（完了済み）は`issues/done/009-task-sequential-core-system-prompt.md`を、フェーズ2（並行可能）は`issues/010-task-parallel-context-history.md`の補助タスク票を参照してください。
 
+## Legacy API（非推奨API）
+
+本プロジェクトでは、古い同期API（`call_gemini_api`, `call_chatgpt_api`等）を**Legacy API**として非推奨扱いしています。これらのAPIは将来的に削除される予定です。
+
+- **現在**: `DeprecationWarning`が表示され、`core.py`の公式APIから除外されています
+- **v2.0.0**: 完全削除予定
+
+新しいコードでは**Provider API**または**Agentic Loop API**を使用してください。詳細な移行ガイドは [doc/deprecation_policy.md](doc/deprecation_policy.md) を参照してください。
+
 ## ライセンス
 [LICENSE](LICENSE) (TBD)

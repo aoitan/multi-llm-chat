@@ -48,4 +48,5 @@ select = ["E", "F", "B", "I"]
 markers = [
     "smoke: lightweight startup/health checks",
     "e2e: end-to-end style tests using mocked providers",
+    "legacy: tests for deprecated legacy API functions (will be removed in v2.0.0)",
 ]
