@@ -4,7 +4,7 @@ import sys
 import pyperclip
 
 from . import core
-from .chat_logic import ChatService
+from .chat_service import ChatService
 from .history import HistoryStore, get_llm_response, reset_history, sanitize_name
 
 

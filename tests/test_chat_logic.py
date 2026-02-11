@@ -5,6 +5,83 @@ import pytest
 
 import multi_llm_chat.chat_logic as chat_logic
 
+# ===== Backward Compatibility Tests =====
+
+
+class TestChatLogicCompatibilityLayer:
+    """Test backward compatibility layer in chat_logic module"""
+
+    def test_chatservice_import_from_chat_logic_works(self):
+        """ChatService can be imported from chat_logic for backward compatibility"""
+        from multi_llm_chat.chat_logic import ChatService
+
+        # Verify it's the correct class
+        assert ChatService.__name__ == "ChatService"
+        assert hasattr(ChatService, "process_message")
+
+    def test_parse_mention_import_from_chat_logic_works(self):
+        """parse_mention can be imported from chat_logic for backward compatibility"""
+        from multi_llm_chat.chat_logic import parse_mention
+
+        # Verify it works correctly
+        assert parse_mention("@gemini hello") == "gemini"
+        assert parse_mention("@chatgpt hi") == "chatgpt"
+        assert parse_mention("@all test") == "all"
+        assert parse_mention("no mention") is None
+
+    def test_assistant_labels_import_from_chat_logic_works(self):
+        """ASSISTANT_LABELS can be imported from chat_logic for backward compatibility"""
+        from multi_llm_chat.chat_logic import ASSISTANT_LABELS
+
+        # Verify it's the correct constant
+        assert "gemini" in ASSISTANT_LABELS
+        assert "chatgpt" in ASSISTANT_LABELS
+        assert ASSISTANT_LABELS["gemini"] == "**Gemini:**\n"
+
+    def test_legacy_api_reexports_work(self):
+        """Legacy API functions are re-exported from chat_logic"""
+        from multi_llm_chat.chat_logic import (
+            CHATGPT_MODEL,
+            GEMINI_MODEL,
+            GOOGLE_API_KEY,
+            OPENAI_API_KEY,
+            call_chatgpt_api,
+            call_gemini_api,
+            format_history_for_chatgpt,
+            format_history_for_gemini,
+            get_llm_response,
+            list_gemini_models,
+            main,
+            reset_history,
+        )
+
+        # Just verify they are importable (we don't need to test their behavior)
+        assert callable(call_gemini_api)
+        assert callable(call_chatgpt_api)
+        assert callable(format_history_for_chatgpt)
+        assert callable(format_history_for_gemini)
+        assert callable(list_gemini_models)
+        assert callable(get_llm_response)
+        assert callable(main)
+        assert callable(reset_history)
+        assert isinstance(GEMINI_MODEL, str)
+        assert isinstance(CHATGPT_MODEL, str)
+        # GOOGLE_API_KEY and OPENAI_API_KEY might be None if not set
+        assert GOOGLE_API_KEY is None or isinstance(GOOGLE_API_KEY, str)
+        assert OPENAI_API_KEY is None or isinstance(OPENAI_API_KEY, str)
+
+    def test_chatservice_instantiation_from_chat_logic(self):
+        """ChatService can be instantiated from chat_logic import"""
+        from multi_llm_chat.chat_logic import ChatService
+
+        service = ChatService()
+        assert service.display_history == []
+        assert service.logic_history == []
+        assert service.system_prompt == ""
+
+
+# ===== Original Tests =====
+
 
 def _create_mock_provider(response_text, provider_type="gemini"):
     """Create a mock LLM provider that returns the given response text
@@ -45,7 +122,7 @@ def test_history_management_user_input():
         with patch("builtins.input", side_effect=test_inputs + ["exit"]):
             with patch("builtins.print"):  # Mock print to avoid console output
                 # Mock API calls to control history length
-                with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
+                with patch("multi_llm_chat.chat_service.create_provider") as mock_create_provider:
                     mock_create_provider.return_value = _create_mock_provider(
                         "Mocked Gemini Response"
                     )
@@ -73,7 +150,7 @@ def test_mention_routing():
     # Test @gemini
     with patch("builtins.input", side_effect=["test-user", "@gemini hello", "exit"]):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
+            with patch("multi_llm_chat.chat_service.create_provider") as mock_create_provider:
                 mock_gemini = _create_mock_provider("Mocked Gemini Response", "gemini")
                 mock_chatgpt = _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
 
@@ -96,7 +173,7 @@ def test_mention_routing():
     # Test @chatgpt
     with patch("builtins.input", side_effect=["test-user", "@chatgpt hello", "exit"]):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
+            with patch("multi_llm_chat.chat_service.create_provider") as mock_create_provider:
                 mock_gemini = _create_mock_provider("Mocked Gemini Response", "gemini")
                 mock_chatgpt = _create_mock_provider("Mocked ChatGPT Response", "chatgpt")
 
@@ -119,7 +196,7 @@ def test_mention_routing():
     # Test @all (calls both providers)
     with patch("builtins.input", side_effect=["test-user", "@all hello", "exit"]):
         with patch("builtins.print"):
-            with patch("multi_llm_chat.chat_logic.create_provider") as mock_create_provider:
+            with patch("multi_llm_chat.chat_service.create_provider") as mock_create_provider:
                 # Create different responses for each provider
                 def provider_factory(provider_name):
                     if provider_name == "gemini":

@@ -15,10 +15,11 @@ The project follows a 3-tier architecture with clear separation of concerns:
 ```
 src/multi_llm_chat/
 ├── core.py          # Core logic layer (API calls, history management, token calculation)
+├── chat_service.py  # Business logic layer (ChatService, parse_mention, ASSISTANT_LABELS)
 ├── cli.py           # CLI interface layer (REPL loop, command processing)
 ├── webui.py         # Web UI layer (Gradio interface)
 ├── app.py           # Backward compatibility layer (re-exports webui)
-└── chat_logic.py    # Backward compatibility layer (re-exports core + cli)
+└── chat_logic.py    # Backward compatibility layer (DEPRECATED: use chat_service)
 ```
 
 **Entry points** at the repository root:
@@ -32,13 +33,15 @@ src/multi_llm_chat/
   - `test_core.py` - Core logic tests (21 tests)
   - `test_cli.py` - CLI interface tests (9 tests)
   - `test_webui.py` - Web UI tests (7 tests)
+  - `test_chat_service.py` - ChatService business logic tests
   - `test_context_compression.py` - Context compression tests (26 tests)
   - `test_history_store.py` - History management tests (8 tests)
-  - `test_chat_logic.py` - Backward compatibility tests (3 tests)
+  - `test_chat_logic.py` - Backward compatibility tests
 
 **Design principles**:
 - Core layer is UI-agnostic (no `print()`/`input()` except for debugging utilities)
-- Both UI layers (`cli.py`, `webui.py`) import and use `core.py`
+- ChatService layer encapsulates business logic (mention parsing, LLM routing, history management)
+- Both UI layers (`cli.py`, `webui.py`) import and use `chat_service.py`
 - Backward compatibility layers (`app.py`, `chat_logic.py`) ensure existing code doesn't break
 - All modules are in `src/multi_llm_chat/` package to avoid circular dependencies
 

@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from multi_llm_chat.chat_logic import ChatService
+from multi_llm_chat.chat_service import ChatService
 from multi_llm_chat.llm_provider import ChatGPTProvider, GeminiProvider, create_provider
 
 

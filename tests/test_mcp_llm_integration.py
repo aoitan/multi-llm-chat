@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from multi_llm_chat.chat_logic import ChatService
+from multi_llm_chat.chat_service import ChatService
 
 
 class TestChatServiceMCPIntegration(unittest.IsolatedAsyncioTestCase):
@@ -31,7 +31,7 @@ class TestChatServiceMCPIntegration(unittest.IsolatedAsyncioTestCase):
         )
 
         # Mock get_mcp_manager to return our mock
-        with patch("multi_llm_chat.chat_logic.get_mcp_manager", return_value=mock_manager):
+        with patch("multi_llm_chat.chat_service.get_mcp_manager", return_value=mock_manager):
             service = ChatService()
 
             # ChatService should automatically use the global manager
@@ -40,7 +40,7 @@ class TestChatServiceMCPIntegration(unittest.IsolatedAsyncioTestCase):
 
     async def test_chat_service_works_without_mcp_manager(self):
         """Test that ChatService works when MCPServerManager is not available."""
-        with patch("multi_llm_chat.chat_logic.get_mcp_manager", return_value=None):
+        with patch("multi_llm_chat.chat_service.get_mcp_manager", return_value=None):
             ChatService()
 
             # Should not crash - just work without MCP tools
@@ -76,8 +76,8 @@ class TestChatServiceMCPIntegration(unittest.IsolatedAsyncioTestCase):
         mock_provider.call_api.return_value = mock_stream()
         mock_provider.name = "Gemini"
 
-        with patch("multi_llm_chat.chat_logic.get_mcp_manager", return_value=mock_manager):
-            with patch("multi_llm_chat.chat_logic.create_provider", return_value=mock_provider):
+        with patch("multi_llm_chat.chat_service.get_mcp_manager", return_value=mock_manager):
+            with patch("multi_llm_chat.chat_service.create_provider", return_value=mock_provider):
                 service = ChatService()
 
                 # Process a message
