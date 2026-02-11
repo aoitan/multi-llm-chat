@@ -12,7 +12,7 @@ async def test_webui_validate_and_respond_roundtrip(
 
     fake_stream = fake_stream_factory("Hello WebUI!")
 
-    monkeypatch.setattr("multi_llm_chat.core.execute_with_tools_stream", fake_stream)
+    monkeypatch.setattr("multi_llm_chat.chat_service.execute_with_tools_stream", fake_stream)
     monkeypatch.setattr("multi_llm_chat.chat_service.create_provider", lambda name: dummy_provider)
 
     display_history = []
