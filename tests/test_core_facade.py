@@ -1,54 +1,43 @@
-"""Tests for core.py - Facade pattern validation
+"""Tests for core.py - Legacy API backward compatibility validation
 
-This module tests that the core.py module correctly acts as a facade,
-re-exporting functionality from core_modules without breaking backward compatibility.
-These tests verify that the public API surface remains stable.
+⚠️ LEGACY API TESTS - These functions are deprecated and will be removed in v2.0.0
+This module tests that legacy APIs are still accessible via core.py for backward compatibility.
+These tests ensure existing code doesn't break immediately.
+
+For public API tests, see test_core_public_api.py
+For legacy API behavior tests, see test_core_legacy_api.py
 """
 
+import pytest
 
-def test_core_module_exports_expected_symbols():
-    """core.py should re-export all expected public symbols"""
+
+@pytest.mark.legacy
+def test_core_module_exports_legacy_api_functions():
+    """core.py should still allow importing legacy API functions (not in __all__)"""
     import multi_llm_chat.core as core
 
-    # Token & Context utilities
-    assert hasattr(core, "get_token_info")
-    assert hasattr(core, "calculate_tokens")
-    assert hasattr(core, "get_max_context_length")
-
-    # Legacy API functions
+    # Legacy API functions should be accessible via direct import
+    # (but not via `from core import *` since they're not in __all__)
     assert hasattr(core, "load_api_key")
     assert hasattr(core, "format_history_for_gemini")
     assert hasattr(core, "format_history_for_chatgpt")
     assert hasattr(core, "prepare_request")
     assert hasattr(core, "call_gemini_api")
     assert hasattr(core, "call_chatgpt_api")
+    assert hasattr(core, "call_gemini_api_async")
+    assert hasattr(core, "call_chatgpt_api_async")
     assert hasattr(core, "stream_text_events")
+    assert hasattr(core, "stream_text_events_async")
     assert hasattr(core, "extract_text_from_chunk")
 
-    # Agentic Loop
-    assert hasattr(core, "execute_with_tools")
-    assert hasattr(core, "execute_with_tools_stream")
-    assert hasattr(core, "execute_with_tools_sync")
-    assert hasattr(core, "AgenticLoopResult")
 
-
-def test_core_module_backward_compatibility_types():
-    """core.py should maintain backward compatible type signatures"""
-    import inspect
-
+@pytest.mark.legacy
+def test_legacy_functions_are_callable():
+    """Legacy functions should still be callable for backward compatibility"""
     import multi_llm_chat.core as core
 
-    # Verify get_token_info returns dict
-    result = core.get_token_info("test", "gemini-2.0-flash-exp")
-    assert isinstance(result, dict)
-    assert "token_count" in result
-    assert "max_context_length" in result
-    assert "is_estimated" in result
-
-    # Verify execute_with_tools (agentic loop) is callable
-    assert callable(core.execute_with_tools)
-    assert callable(core.execute_with_tools_stream)
-    assert callable(core.execute_with_tools_sync)
-
-    # Verify AgenticLoopResult is a class
-    assert inspect.isclass(core.AgenticLoopResult)
+    # Just verify they're callable - actual behavior tested in test_core_legacy_api.py
+    assert callable(core.call_gemini_api)
+    assert callable(core.call_chatgpt_api)
+    assert callable(core.format_history_for_gemini)
+    assert callable(core.format_history_for_chatgpt)

@@ -9,17 +9,21 @@ import warnings
 # Import from new chat_service module
 from .chat_service import ASSISTANT_LABELS, ChatService, parse_mention
 
-# Re-export legacy API from core and history
+# Re-export from core (non-legacy items)
 from .core import (
     CHATGPT_MODEL,
     GEMINI_MODEL,
     GOOGLE_API_KEY,
     OPENAI_API_KEY,
+    list_gemini_models,
+)
+
+# Re-export legacy API from core_modules.legacy_api (Issue #115: explicit import)
+from .core_modules.legacy_api import (
     call_chatgpt_api,
     call_gemini_api,
     format_history_for_chatgpt,
     format_history_for_gemini,
-    list_gemini_models,
 )
 from .history import get_llm_response
 from .history import reset_history as _reset_history
