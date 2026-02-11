@@ -7,6 +7,7 @@ the same business logic without duplication.
 
 import logging
 
+from .core import AgenticLoopResult, execute_with_tools_stream
 from .llm_provider import create_provider
 from .mcp import get_mcp_manager
 
@@ -36,6 +37,12 @@ ASSISTANT_LABELS = {
     "assistant": "**Assistant:**\n",
     "gemini": "**Gemini:**\n",
     "chatgpt": "**ChatGPT:**\n",
+}
+
+# Display name mapping for consistent label formatting
+PROVIDER_DISPLAY_NAMES = {
+    "gemini": "Gemini",
+    "chatgpt": "ChatGPT",
 }
 
 
@@ -111,7 +118,9 @@ class ChatService:
             error: Exception that occurred
             provider_name: Name of the provider ("gemini" or "chatgpt")
         """
-        provider_title = provider_name.capitalize()
+        provider_title = PROVIDER_DISPLAY_NAMES.get(provider_name, provider_name.capitalize())
+        label = ASSISTANT_LABELS.get(provider_name, f"**{provider_title}:**\n")
+
         if isinstance(error, ValueError):
             # API key errors
             error_msg = f"[System: エラー - {str(error)}]"
@@ -119,7 +128,7 @@ class ChatService:
             # Other API errors (network, blocked prompts, etc.)
             error_msg = f"[System: {provider_title} APIエラー - {str(error)}]"
 
-        self.display_history[-1][1] = f"**{provider_title}:**\n{error_msg}"
+        self.display_history[-1][1] = f"{label}{error_msg}"
         self.logic_history.append(
             {
                 "role": provider_name,
@@ -140,10 +149,6 @@ class ChatService:
         tuple:
             tuple: (display_history, logic_history, chunk) after each update
         """
-        import copy
-
-        from .core import execute_with_tools_stream
-
         mention = parse_mention(user_message)
 
         # Add user message to histories (structured format)
@@ -156,8 +161,8 @@ class ChatService:
         if mention is None:
             return
 
-        # For @all, create snapshot so both LLMs see same history (deepcopy to avoid side effects)
-        history_at_start = copy.deepcopy(self.logic_history)
+        # For @all, create lightweight snapshot; execute_with_tools_stream will deep-copy internally
+        history_at_start = list(self.logic_history) if mention == "all" else None
 
         # Process models
         models_to_call = []
@@ -179,8 +184,9 @@ class ChatService:
             yield self.display_history, self.logic_history, {"type": "text", "content": ""}
 
             # Prepare input history for this model
+            # execute_with_tools_stream will deep-copy it internally
             if mention == "all":
-                input_history = copy.deepcopy(history_at_start)
+                input_history = history_at_start
             else:
                 input_history = self.logic_history
 
@@ -197,8 +203,6 @@ class ChatService:
                     tools=tools,
                 ):
                     # Check if this is the final result
-                    from .core import AgenticLoopResult
-
                     if isinstance(item, AgenticLoopResult):
                         result = item
                         continue
@@ -239,10 +243,7 @@ class ChatService:
                         "role": model_name,
                         "content": [{"type": "text", "content": error_message}],
                     }
-                    if mention == "all":
-                        self.logic_history.append(new_entry)
-                    else:
-                        self.logic_history.append(new_entry)
+                    self.logic_history.append(new_entry)
 
             except (ValueError, Exception) as e:
                 self._handle_api_error(e, model_name)
