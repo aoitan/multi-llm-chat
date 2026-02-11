@@ -25,19 +25,19 @@ logger = logging.getLogger(__name__)
 
 def _sanitize_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
     """Remove JSON Schema fields that Gemini API doesn't accept.
-    
+
     Gemini only accepts: type, properties, required, description, items, enum.
     Removes validation keywords like minItems, maxItems, pattern, format, etc.
-    
+
     Args:
         schema: JSON Schema dictionary
-        
+
     Returns:
         Sanitized schema with only Gemini-compatible fields
     """
     if not isinstance(schema, dict):
         return schema
-    
+
     # Fields that Gemini accepts
     allowed_fields = {
         "type",
@@ -47,13 +47,13 @@ def _sanitize_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
         "items",
         "enum",
     }
-    
+
     # Recursively clean the schema
     cleaned = {}
     for key, value in schema.items():
         if key not in allowed_fields:
             continue
-            
+
         if key == "properties" and isinstance(value, dict):
             # Recursively clean nested properties
             cleaned[key] = {
@@ -65,7 +65,7 @@ def _sanitize_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
             cleaned[key] = _sanitize_schema_for_gemini(value)
         else:
             cleaned[key] = value
-    
+
     return cleaned
 
 
