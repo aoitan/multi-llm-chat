@@ -16,7 +16,6 @@ import multi_llm_chat.core as core
 
 # Issue #115: Test that DeprecationWarnings are raised
 @pytest.mark.legacy
-@pytest.mark.legacy
 def test_legacy_functions_raise_deprecation_warnings():
     """All legacy API functions should raise DeprecationWarning when called"""
     history = [{"role": "user", "content": "test"}]
@@ -38,7 +37,6 @@ def test_legacy_functions_raise_deprecation_warnings():
             core.load_api_key("TEST_KEY")
 
 
-@pytest.mark.legacy
 @pytest.mark.legacy
 def test_prepare_request_openai_adds_system_prompt():
     """prepare_request should add system prompt to OpenAI history at the beginning"""
