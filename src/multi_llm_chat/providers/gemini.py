@@ -49,6 +49,10 @@ def mcp_tools_to_gemini_format(mcp_tools: List[Dict[str, Any]]) -> Optional[List
             )
             continue
 
+        # Remove $schema field that Gemini doesn't accept
+        if parameters and isinstance(parameters, dict):
+            parameters = {k: v for k, v in parameters.items() if k != "$schema"}
+
         func_decl = FunctionDeclaration(
             name=name,
             description=description,

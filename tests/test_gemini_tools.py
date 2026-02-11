@@ -305,6 +305,37 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         self.assertEqual(chunks[0]["content"]["name"], "get_weather")
         self.assertEqual(chunks[0]["content"]["arguments"], {"location": "Tokyo"})
 
+    def test_mcp_tools_schema_field_is_removed(self):
+        """MCP toolsのinputSchemaから$schemaフィールドが削除されること"""
+        # MCPツールに$schemaフィールドを含める（実際のMCPサーバーの動作を模倣）
+        mcp_tools_with_schema = [
+            {
+                "name": "read_file",
+                "description": "Read a file",
+                "inputSchema": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                    },
+                    "required": ["path"],
+                },
+            }
+        ]
+
+        gemini_tools = mcp_tools_to_gemini_format(mcp_tools_with_schema)
+        self.assertIsNotNone(gemini_tools)
+        self.assertEqual(len(gemini_tools), 1)
+
+        func_decl = gemini_tools[0].function_declarations[0]
+        self.assertEqual(func_decl.name, "read_file")
+
+        # parameters should not contain $schema
+        # Check that the Schema object was created successfully (would fail if $schema was present)
+        schema_obj = func_decl.parameters
+        self.assertIsNotNone(schema_obj)
+        self.assertIn("path", schema_obj.properties)
+
 
 if __name__ == "__main__":
     unittest.main()
