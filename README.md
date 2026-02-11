@@ -294,10 +294,11 @@ src/multi_llm_chat/
 │   ├── openai.py    # OpenAI/ChatGPT実装
 │   ├── gemini.py    # Google Gemini実装
 │   └── __init__.py  # パッケージ公開API
+├── chat_service.py  # ビジネスロジック層（ChatService、parse_mention）
 ├── cli.py           # CLIインターフェース
 ├── webui.py         # Web UIインターフェース
 ├── app.py           # 互換性レイヤー
-└── chat_logic.py    # 互換性レイヤー
+└── chat_logic.py    # 互換性レイヤー（DEPRECATED: chat_service.pyを使用）
 ```
 
 詳細は[アーキテクチャ設計書](doc/architecture.md)を参照してください。

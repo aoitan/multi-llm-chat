@@ -1,6 +1,6 @@
 import pytest
 
-from multi_llm_chat.chat_logic import ChatService
+from multi_llm_chat.chat_service import ChatService
 
 
 @pytest.mark.asyncio
@@ -12,8 +12,8 @@ async def test_chatservice_roundtrip_with_mocked_provider(
 
     fake_stream = fake_stream_factory("Hello from mock!")
 
-    monkeypatch.setattr("multi_llm_chat.core.execute_with_tools_stream", fake_stream)
-    monkeypatch.setattr("multi_llm_chat.chat_logic.create_provider", lambda name: dummy_provider)
+    monkeypatch.setattr("multi_llm_chat.chat_service.execute_with_tools_stream", fake_stream)
+    monkeypatch.setattr("multi_llm_chat.chat_service.create_provider", lambda name: dummy_provider)
 
     service = ChatService()
 

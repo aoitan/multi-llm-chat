@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from multi_llm_chat.chat_logic import ChatService, parse_mention
+from multi_llm_chat.chat_service import ChatService, parse_mention
 
 
 async def consume_async_gen(gen):
@@ -81,7 +81,7 @@ class TestChatServiceMessageParsing(unittest.TestCase):
 class TestChatServiceProcessMessage:
     """Test main message processing logic"""
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_process_message_gemini(self, mock_create_provider):
         """Should call Gemini API for @gemini mention"""
@@ -109,7 +109,7 @@ class TestChatServiceProcessMessage:
         assert final_logic[1]["role"] == "gemini"
         assert final_logic[1]["content"] == [{"type": "text", "content": "Test response"}]
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_process_message_chatgpt(self, mock_create_provider):
         """Should call ChatGPT API for @chatgpt mention"""
@@ -133,7 +133,7 @@ class TestChatServiceProcessMessage:
         assert final_logic[1]["role"] == "chatgpt"
         assert final_logic[1]["content"] == [{"type": "text", "content": "Hello world"}]
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_process_message_chatgpt_supports_tools(self, mock_create_provider):
         """ChatGPT should support tools and pass them to API."""
@@ -160,7 +160,7 @@ class TestChatServiceProcessMessage:
         assert "search" in tool_names
         # MCP tools may also be included if MCP is enabled
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_process_message_gemini_tool_call(self, mock_create_provider):
         """Gemini tool_call chunks should be stored in structured content."""
@@ -200,7 +200,7 @@ class TestChatServiceProcessMessage:
         assert final_logic[2]["content"][0]["type"] == "tool_result"
         assert final_logic[2]["content"][0]["name"] == "search"
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_process_message_gemini_preserves_stream_order(self, mock_create_provider):
         """Gemini text/tool_callのストリーム順序を履歴に反映できること"""
@@ -245,7 +245,7 @@ class TestChatServiceProcessMessage:
         assert final_logic[3]["role"] == "gemini"
         assert final_logic[3]["content"][0] == {"type": "text", "content": "after"}
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_process_message_all(self, mock_create_provider):
         """Should call both APIs for @all mention"""
@@ -354,7 +354,7 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
     """Test history snapshot logic for @all"""
 
     @pytest.mark.asyncio
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     async def test_all_uses_same_history_snapshot(self, mock_create_provider):
         """@all should use identical history for both LLMs"""
         captured_histories = []
@@ -404,7 +404,7 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
 class TestChatServiceSystemPrompt(unittest.TestCase):
     """Test system prompt handling"""
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_system_prompt_passed_to_api(self, mock_create_provider):
         """System prompt should be passed to LLM API"""
@@ -438,7 +438,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
     """Test error handling for LLM API failures"""
 
     @pytest.mark.asyncio
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     async def test_network_error_handling(self, mock_create_provider):
         """Network errors should be caught and added to history as error message"""
         mock_provider = MagicMock()
@@ -465,7 +465,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         assert "[System: Gemini APIエラー" in final_display[0][1]
         assert "Network error" in final_display[0][1]
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_api_error_handling(self, mock_create_provider):
         """API errors should be caught and added to history as error message"""
@@ -491,7 +491,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         assert "[System: エラー" in final_display[0][1]
         assert "API key missing" in final_display[0][1]
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_gemini_empty_response_records_error(self, mock_create_provider):
         """空応答時にlogic_historyにエラーが記録されること
@@ -526,7 +526,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
             {"type": "text", "content": "[System: Geminiからの応答がありませんでした]"}
         ]
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_all_handles_partial_failure(self, mock_create_provider):
         """@all should handle when one LLM succeeds and one fails"""
@@ -570,7 +570,7 @@ class TestChatServiceErrorHandling(unittest.TestCase):
 class TestChatServiceEmptyResponseHandling(unittest.TestCase):
     """Test empty response handling (Issue #79 Review Fix)"""
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_empty_gemini_response_with_no_streaming_content(self, mock_create_provider):
         """Completely empty response should show error message."""
@@ -600,7 +600,7 @@ class TestChatServiceEmptyResponseHandling(unittest.TestCase):
         assert final_logic[1]["content"][0]["type"] == "text"
         assert "応答がありませんでした" in final_logic[1]["content"][0]["content"]
 
-    @patch("multi_llm_chat.chat_logic.create_provider")
+    @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
     async def test_empty_gemini_response_with_partial_streaming_content(self, mock_create_provider):
         """Streaming with partial content should NOT show error message."""

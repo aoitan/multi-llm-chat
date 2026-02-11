@@ -2,7 +2,7 @@
 
 import logging
 
-from ..chat_logic import ChatService
+from ..chat_service import ChatService
 from ..history import HistoryStore
 from ..history_utils import content_to_text
 from .components import ASSISTANT_LABELS, ASSISTANT_ROLES
