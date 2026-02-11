@@ -336,6 +336,52 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         self.assertIsNotNone(schema_obj)
         self.assertIn("path", schema_obj.properties)
 
+    def test_mcp_tools_validation_fields_are_removed(self):
+        """MCP toolsのinputSchemaからGeminiが受け付けないvalidationフィールドが削除されること"""
+        mcp_tools_with_validation = [
+            {
+                "name": "list_items",
+                "description": "List items",
+                "inputSchema": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "$id": "https://example.com/schema",
+                    "type": "object",
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100,
+                                "pattern": "^[a-z]+$",
+                            },
+                            "minItems": 1,
+                            "maxItems": 10,
+                        },
+                        "count": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100,
+                        },
+                    },
+                    "required": ["items"],
+                    "additionalProperties": False,
+                },
+            }
+        ]
+
+        gemini_tools = mcp_tools_to_gemini_format(mcp_tools_with_validation)
+        self.assertIsNotNone(gemini_tools)
+
+        func_decl = gemini_tools[0].function_declarations[0]
+        self.assertEqual(func_decl.name, "list_items")
+
+        # Schema should be created successfully (validates that unsupported fields were removed)
+        schema_obj = func_decl.parameters
+        self.assertIsNotNone(schema_obj)
+        self.assertIn("items", schema_obj.properties)
+        self.assertIn("count", schema_obj.properties)
+
 
 if __name__ == "__main__":
     unittest.main()

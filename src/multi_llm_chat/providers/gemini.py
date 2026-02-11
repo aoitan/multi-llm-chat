@@ -23,6 +23,52 @@ logger = logging.getLogger(__name__)
 # MCP Tool conversion functions (Gemini)
 
 
+def _sanitize_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove JSON Schema fields that Gemini API doesn't accept.
+    
+    Gemini only accepts: type, properties, required, description, items, enum.
+    Removes validation keywords like minItems, maxItems, pattern, format, etc.
+    
+    Args:
+        schema: JSON Schema dictionary
+        
+    Returns:
+        Sanitized schema with only Gemini-compatible fields
+    """
+    if not isinstance(schema, dict):
+        return schema
+    
+    # Fields that Gemini accepts
+    allowed_fields = {
+        "type",
+        "properties",
+        "required",
+        "description",
+        "items",
+        "enum",
+    }
+    
+    # Recursively clean the schema
+    cleaned = {}
+    for key, value in schema.items():
+        if key not in allowed_fields:
+            continue
+            
+        if key == "properties" and isinstance(value, dict):
+            # Recursively clean nested properties
+            cleaned[key] = {
+                prop_name: _sanitize_schema_for_gemini(prop_schema)
+                for prop_name, prop_schema in value.items()
+            }
+        elif key == "items" and isinstance(value, dict):
+            # Recursively clean array items schema
+            cleaned[key] = _sanitize_schema_for_gemini(value)
+        else:
+            cleaned[key] = value
+    
+    return cleaned
+
+
 def mcp_tools_to_gemini_format(mcp_tools: List[Dict[str, Any]]) -> Optional[List[Tool]]:
     """Convert MCP tool definitions to Gemini Tool format.
 
@@ -49,9 +95,9 @@ def mcp_tools_to_gemini_format(mcp_tools: List[Dict[str, Any]]) -> Optional[List
             )
             continue
 
-        # Remove $schema field that Gemini doesn't accept
+        # Sanitize schema to remove fields Gemini doesn't accept
         if parameters and isinstance(parameters, dict):
-            parameters = {k: v for k, v in parameters.items() if k != "$schema"}
+            parameters = _sanitize_schema_for_gemini(parameters)
 
         func_decl = FunctionDeclaration(
             name=name,
