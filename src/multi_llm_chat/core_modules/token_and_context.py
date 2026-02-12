@@ -18,7 +18,7 @@ from ..compression import (
     prune_history_sliding_window as _prune_history_sliding_window,
 )
 from ..history_utils import get_provider_name_from_model as _get_provider_name_from_model
-from ..llm_provider import get_provider
+from ..llm_provider import create_provider
 from ..token_utils import (
     estimate_tokens as _estimate_tokens_impl,
 )
@@ -73,7 +73,7 @@ def calculate_tokens(text: str, model_name: str) -> int:
         int: Token count
     """
     provider_name = _get_provider_name_from_model(model_name)
-    provider = get_provider(provider_name)
+    provider = create_provider(provider_name)  # Issue #116: Use create_provider
 
     result = provider.get_token_info(text, history=None, model_name=model_name)
 
@@ -102,7 +102,7 @@ def get_token_info(
     provider_name = _get_provider_name_from_model(model_name)
 
     # Get provider and delegate token calculation with actual model name
-    provider = get_provider(provider_name)
+    provider = create_provider(provider_name)  # Issue #116: Use create_provider
 
     result = provider.get_token_info(text, history, model_name=model_name)
 

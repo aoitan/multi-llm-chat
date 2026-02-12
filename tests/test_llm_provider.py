@@ -5,6 +5,7 @@ Provider-specific tests are in test_llm_provider_gemini.py and test_llm_provider
 """
 
 import unittest
+import warnings
 
 import pytest
 
@@ -57,6 +58,22 @@ class TestLLMProviderFactory(unittest.TestCase):
         """get_provider should raise ValueError for unknown provider (DEPRECATED)"""
         with pytest.raises(ValueError, match="Unknown LLM provider"):
             get_provider("unknown")
+
+    def test_get_provider_deprecation_warning(self):
+        """get_provider should emit DeprecationWarning (Issue #116)"""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            provider = get_provider("gemini")
+
+            # Should emit exactly one DeprecationWarning
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "get_provider() is deprecated" in str(w[0].message)
+            assert "create_provider()" in str(w[0].message)
+            assert "v2.0.0" in str(w[0].message)
+
+            # Should still return valid provider
+            assert isinstance(provider, GeminiProvider)
 
 
 class TestProviderCaching(unittest.TestCase):

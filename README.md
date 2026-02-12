@@ -176,8 +176,11 @@ Gemini: README.mdの内容を確認しました。このプロジェクトは...
 
 仮想環境がアクティベートされていることを確認し、以下のコマンドでWeb UIを起動します。
 ```bash
-python app.py
+python -m multi_llm_chat.webui
 ```
+
+> **⚠️ 非推奨**: `python app.py` での起動も可能ですが、この方法は将来のバージョンで削除される予定です。上記の推奨コマンドをご利用ください。
+
 ブラウザで `http://127.0.0.1:7860` を開いてください。
 
 #### システムプロンプトの設定
@@ -241,15 +244,19 @@ Web UIでは、ユーザーID別に会話履歴を保存・読み込み・管理
 同じネットワーク上のスマートフォンなど、他のデバイスからアクセスしたい場合は、以下のコマンドでアプリケーションを起動します。
 
 ```bash
-MLC_SERVER_NAME=0.0.0.0 python app.py
+MLC_SERVER_NAME=0.0.0.0 python -m multi_llm_chat.webui
 ```
+
+> **⚠️ 非推奨**: `MLC_SERVER_NAME=0.0.0.0 python app.py` での起動も可能ですが、この方法は将来のバージョンで削除される予定です。
 
 ### 3. CLI版の実行
 
-コマンドラインで対話を行いたい場合は、`chat_logic.py`を実行します。
+コマンドラインで対話を行いたい場合は、以下のコマンドを実行します。
 ```bash
-python chat_logic.py
+python -m multi_llm_chat.cli
 ```
+
+> **⚠️ 非推奨**: `python chat_logic.py` での起動も可能ですが、この方法は将来のバージョンで削除される予定です。
 
 #### CLIコマンド
 

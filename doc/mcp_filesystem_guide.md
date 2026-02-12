@@ -69,12 +69,12 @@ MCP_ALLOW_DANGEROUS_PATHS=true
 
 #### Web UI版
 ```bash
-python app.py
+python -m multi_llm_chat.webui
 ```
 
 #### CLI版
 ```bash
-python chat_logic.py
+python -m multi_llm_chat.cli
 ```
 
 どちらのインターフェースでもMCP機能は自動的に有効化されます。
@@ -175,7 +175,7 @@ MCPサーバーは以下のツールを提供します：
 **デバッグ方法**:
 ```bash
 # 起動時のログを確認
-python app.py 2>&1 | grep -i mcp
+python -m multi_llm_chat.webui 2>&1 | grep -i mcp
 ```
 
 ### 危険パスのエラー
