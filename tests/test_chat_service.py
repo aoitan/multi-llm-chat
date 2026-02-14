@@ -16,7 +16,7 @@ async def consume_async_gen(gen):
     return results
 
 
-class TestChatServiceBasics(unittest.TestCase):
+class TestChatServiceBasics(unittest.IsolatedAsyncioTestCase):  # Issue #119: async test support
     """Test basic ChatService initialization and state management"""
 
     @pytest.mark.asyncio
@@ -48,7 +48,9 @@ class TestChatServiceBasics(unittest.TestCase):
         assert service.system_prompt == sys_prompt
 
 
-class TestChatServiceMessageParsing(unittest.TestCase):
+class TestChatServiceMessageParsing(
+    unittest.IsolatedAsyncioTestCase
+):  # Issue #119: async test support
     """Test mention parsing logic"""
 
     def test_parse_mention_gemini(self):
@@ -350,7 +352,9 @@ class TestChatServiceProcessMessage:
         assert service.logic_history[0]["content"][1]["name"] == "valid2"
 
 
-class TestChatServiceHistorySnapshot(unittest.TestCase):
+class TestChatServiceHistorySnapshot(
+    unittest.IsolatedAsyncioTestCase
+):  # Issue #119: async test support
     """Test history snapshot logic for @all"""
 
     @pytest.mark.asyncio
@@ -401,7 +405,9 @@ class TestChatServiceHistorySnapshot(unittest.TestCase):
         assert gemini_hist[0]["role"] == "user"
 
 
-class TestChatServiceSystemPrompt(unittest.TestCase):
+class TestChatServiceSystemPrompt(
+    unittest.IsolatedAsyncioTestCase
+):  # Issue #119: async test support
     """Test system prompt handling"""
 
     @patch("multi_llm_chat.chat_service.create_provider")
@@ -434,7 +440,9 @@ class TestChatServiceSystemPrompt(unittest.TestCase):
         assert service.system_prompt == "New prompt"
 
 
-class TestChatServiceErrorHandling(unittest.TestCase):
+class TestChatServiceErrorHandling(
+    unittest.IsolatedAsyncioTestCase
+):  # Issue #119: async test support
     """Test error handling for LLM API failures"""
 
     @pytest.mark.asyncio
@@ -567,7 +575,9 @@ class TestChatServiceErrorHandling(unittest.TestCase):
         assert error_found
 
 
-class TestChatServiceEmptyResponseHandling(unittest.TestCase):
+class TestChatServiceEmptyResponseHandling(
+    unittest.IsolatedAsyncioTestCase
+):  # Issue #119: async test support
     """Test empty response handling (Issue #79 Review Fix)"""
 
     @patch("multi_llm_chat.chat_service.create_provider")

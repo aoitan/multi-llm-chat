@@ -172,12 +172,12 @@ class TestOpenAIToolCallParsing(unittest.TestCase):
         self.assertEqual(result["arguments"], {})
 
 
-class TestChatGPTProviderTools(unittest.TestCase):
+class TestChatGPTProviderTools(unittest.IsolatedAsyncioTestCase):  # Issue #119: async test support
     """ChatGPTProviderのツール対応をテスト"""
 
     def setUp(self):
-        """テスト用のProviderとツール定義を準備"""
-        self.provider = ChatGPTProvider()
+        """テスト用のツール定義とhistoryを準備"""
+        # Note: ChatGPTProvider instantiation moved to individual tests with proper mocking
         self.mcp_tools = [
             {
                 "name": "get_weather",
@@ -201,7 +201,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         mock_stream = iter([])
         mock_client.chat.completions.create.return_value = mock_stream
 
-        provider = ChatGPTProvider()
+        provider = ChatGPTProvider(api_key="test_key")  # Issue #119: Provide api_key for test
         await collect_async_generator(provider.call_api(self.history, tools=self.mcp_tools))
 
         # Verify API was called with tools
@@ -238,7 +238,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         mock_stream = iter([chunk1])
         mock_client.chat.completions.create.return_value = mock_stream
 
-        provider = ChatGPTProvider()
+        provider = ChatGPTProvider(api_key="test_key")  # Issue #119: Provide api_key for test
         results = await collect_async_generator(
             provider.call_api(self.history, tools=self.mcp_tools)
         )
@@ -301,7 +301,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         mock_stream = iter([chunk1, chunk2, chunk3])
         mock_client.chat.completions.create.return_value = mock_stream
 
-        provider = ChatGPTProvider()
+        provider = ChatGPTProvider(api_key="test_key")  # Issue #119: Provide api_key for test
         results = await collect_async_generator(
             provider.call_api(self.history, tools=self.mcp_tools)
         )
@@ -350,7 +350,7 @@ class TestChatGPTProviderTools(unittest.TestCase):
         mock_stream = iter([chunk1, chunk2])
         mock_client.chat.completions.create.return_value = mock_stream
 
-        provider = ChatGPTProvider()
+        provider = ChatGPTProvider(api_key="test_key")  # Issue #119: Provide api_key for test
         results = await collect_async_generator(
             provider.call_api(self.history, tools=self.mcp_tools)
         )
