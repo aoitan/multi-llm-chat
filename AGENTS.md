@@ -23,8 +23,8 @@ src/multi_llm_chat/
 ```
 
 **Entry points** at the repository root:
-- `app.py` → Launches Web UI via `python app.py`
-- `chat_logic.py` → Launches CLI via `python chat_logic.py`
+- `app.py` → **Deprecated**: Launches Web UI via `python app.py` (use `python -m multi_llm_chat.webui` instead)
+- `chat_logic.py` → **Deprecated**: Launches CLI via `python chat_logic.py` (use `python -m multi_llm_chat.cli` instead)
 
 **Supporting assets**:
 - `doc/` - Feature specifications and architecture documentation
@@ -56,8 +56,9 @@ uv sync --extra dev
 This installs everything defined in `pyproject.toml` / `uv.lock`, including the `dev` extra for tests and Ruff. When dependencies change, update `pyproject.toml`, refresh the lockfile via `uv lock`, and re-run `uv sync --extra dev`.
 
 **Running the applications**:
-- Web UI: `python app.py` (or `MLC_SERVER_NAME=0.0.0.0 python app.py` to share on a LAN)
-- CLI: `python chat_logic.py`
+- Web UI: `python -m multi_llm_chat.webui` (or `MLC_SERVER_NAME=0.0.0.0 python -m multi_llm_chat.webui` to share on a LAN)
+- CLI: `python -m multi_llm_chat.cli`
+- **Deprecated**: `python app.py` and `python chat_logic.py` still work but will be removed in v2.0.0
 
 **Linting and formatting**: The repository enforces Ruff checks in CI. Before committing, run:
 ```bash

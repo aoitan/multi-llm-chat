@@ -6,11 +6,20 @@ DEPRECATED: This module is deprecated. Import from chat_service instead:
 
 import warnings
 
+# Trigger deprecation warning on module import (before other imports to ensure visibility)
+warnings.warn(
+    "The 'multi_llm_chat.chat_logic' module is deprecated. "
+    "Import ChatService, parse_mention, and ASSISTANT_LABELS from "
+    "'multi_llm_chat.chat_service' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 # Import from new chat_service module
-from .chat_service import ASSISTANT_LABELS, ChatService, parse_mention
+from .chat_service import ASSISTANT_LABELS, ChatService, parse_mention  # noqa: E402
 
 # Re-export from core (non-legacy items)
-from .core import (
+from .core import (  # noqa: E402
     CHATGPT_MODEL,
     GEMINI_MODEL,
     GOOGLE_API_KEY,
@@ -19,23 +28,14 @@ from .core import (
 )
 
 # Re-export legacy API from core_modules.legacy_api (Issue #115: explicit import)
-from .core_modules.legacy_api import (
+from .core_modules.legacy_api import (  # noqa: E402
     call_chatgpt_api,
     call_gemini_api,
     format_history_for_chatgpt,
     format_history_for_gemini,
 )
-from .history import get_llm_response
-from .history import reset_history as _reset_history
-
-# Trigger deprecation warning on module import
-warnings.warn(
-    "The 'multi_llm_chat.chat_logic' module is deprecated. "
-    "Import ChatService, parse_mention, and ASSISTANT_LABELS from "
-    "'multi_llm_chat.chat_service' instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
+from .history import get_llm_response  # noqa: E402
+from .history import reset_history as _reset_history  # noqa: E402
 
 
 def main():

@@ -135,6 +135,14 @@ def get_provider(provider_name):
     Raises:
         ValueError: If provider_name is not registered
     """
+    # Deprecated in v1.X, will be removed in v2.0.0 (Issue #116)
+    warnings.warn(
+        "get_provider() is deprecated. Use create_provider() for session-scoped providers. "
+        "Will be removed in v2.0.0",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     if provider_name not in _PROVIDERS:
         raise ValueError(f"Unknown LLM provider: {provider_name}")
 
