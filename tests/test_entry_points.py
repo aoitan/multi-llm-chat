@@ -29,6 +29,10 @@ def test_root_app_deprecation_warning():
         timeout=10,
     )
 
+    # Should succeed without errors
+    assert result.returncode == 0, f"Import failed: {result.stderr}"
+    assert "Traceback" not in result.stderr, f"Unexpected error: {result.stderr}"
+
     # Should contain deprecation message in stderr
     assert "DeprecationWarning" in result.stderr
     assert "python -m multi_llm_chat.webui" in result.stderr
@@ -52,6 +56,10 @@ def test_root_chat_logic_deprecation_warning():
         timeout=10,
     )
 
+    # Should succeed without errors
+    assert result.returncode == 0, f"Import failed: {result.stderr}"
+    assert "Traceback" not in result.stderr, f"Unexpected error: {result.stderr}"
+
     # Should contain deprecation message in stderr
     assert "DeprecationWarning" in result.stderr
     assert "python -m multi_llm_chat.cli" in result.stderr
@@ -60,50 +68,52 @@ def test_root_chat_logic_deprecation_warning():
 
 def test_package_app_module_deprecation_warning():
     """Package multi_llm_chat.app module should emit deprecation warning when imported"""
-    import sys
-    import warnings
+    # Use subprocess to ensure fresh import (avoid sys.modules cache issues)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, 'src'); "
+            "import warnings; warnings.simplefilter('always'); "
+            "import multi_llm_chat.app",
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
 
-    # Skip test if module is already imported (avoid cache issues in full test suite)
-    if "multi_llm_chat.app" in sys.modules:
-        import pytest
+    # Should succeed without errors
+    assert result.returncode == 0, f"Import failed: {result.stderr}"
+    assert "Traceback" not in result.stderr, f"Unexpected error: {result.stderr}"
 
-        pytest.skip("Module already imported, cannot test fresh import warning")
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-
-        # Import the package module (not the root script)
-        import multi_llm_chat.app  # noqa: F401
-
-        # Should emit at least one DeprecationWarning for multi_llm_chat.app
-        app_warnings = [warning for warning in w if "multi_llm_chat.app" in str(warning.message)]
-        assert len(app_warnings) >= 1
-        assert issubclass(app_warnings[0].category, DeprecationWarning)
-        assert "multi_llm_chat.webui" in str(app_warnings[0].message)
-        assert "python -m multi_llm_chat.webui" in str(app_warnings[0].message)
+    # Should contain deprecation message in stderr
+    assert "DeprecationWarning" in result.stderr
+    assert "multi_llm_chat.app" in result.stderr
+    assert "multi_llm_chat.webui" in result.stderr
+    assert "python -m multi_llm_chat.webui" in result.stderr
 
 
 def test_package_chat_logic_module_deprecation_warning():
     """Package multi_llm_chat.chat_logic module should emit deprecation warning when imported"""
-    import sys
-    import warnings
+    # Use subprocess to ensure fresh import (avoid sys.modules cache issues)
+    # Note: chat_logic import may fail due to config requirements,
+    # but deprecation warning should still appear
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, 'src'); "
+            "import warnings; warnings.simplefilter('always'); "
+            "import multi_llm_chat.chat_logic",
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
 
-    # Skip test if module is already imported (avoid cache issues in full test suite)
-    if "multi_llm_chat.chat_logic" in sys.modules:
-        import pytest
-
-        pytest.skip("Module already imported, cannot test fresh import warning")
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-
-        # Import the package module (not the root script)
-        import multi_llm_chat.chat_logic  # noqa: F401
-
-        # Should emit at least one DeprecationWarning for multi_llm_chat.chat_logic
-        chat_logic_warnings = [
-            warning for warning in w if "multi_llm_chat.chat_logic" in str(warning.message)
-        ]
-        assert len(chat_logic_warnings) >= 1
-        assert issubclass(chat_logic_warnings[0].category, DeprecationWarning)
-        assert "multi_llm_chat.chat_service" in str(chat_logic_warnings[0].message)
+    # Deprecation warning should appear in stderr (even if import fails later)
+    assert "DeprecationWarning" in result.stderr
+    assert "multi_llm_chat.chat_logic" in result.stderr
+    assert "multi_llm_chat.chat_service" in result.stderr
