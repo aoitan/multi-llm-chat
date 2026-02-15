@@ -8,7 +8,6 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-import google.generativeai as genai
 from google.generativeai.types import FunctionDeclaration, Tool
 
 from ..config import get_config
@@ -511,36 +510,40 @@ class GeminiProvider(LLMProvider):
         stream_completed_successfully = False
 
         try:
-            response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
+            with self._adapter.handle_api_errors():
+                response = model.generate_content(gemini_history, stream=True, tools=gemini_tools)
 
-            for chunk in response:
-                parts = getattr(chunk, "parts", None)
-                if parts:
-                    for part in parts:
-                        if hasattr(part, "function_call") and part.function_call:
-                            tool_event = assembler.process_function_call(part, part.function_call)
-                            if tool_event:
-                                yield tool_event
-                            continue
+                for chunk in response:
+                    parts = getattr(chunk, "parts", None)
+                    if parts:
+                        for part in parts:
+                            if hasattr(part, "function_call") and part.function_call:
+                                tool_event = assembler.process_function_call(
+                                    part, part.function_call
+                                )
+                                if tool_event:
+                                    yield tool_event
+                                continue
 
-                        try:
-                            part_text = part.text
-                        except (ValueError, AttributeError):
-                            part_text = ""
-                        if part_text:
-                            yield {"type": "text", "content": part_text}
+                            try:
+                                part_text = part.text
+                            except (ValueError, AttributeError):
+                                part_text = ""
+                            if part_text:
+                                yield {"type": "text", "content": part_text}
 
-                    continue
+                        continue
 
-                chunk_text = _safe_chunk_text(chunk)
-                if chunk_text:
-                    yield {"type": "text", "content": chunk_text}
+                    chunk_text = _safe_chunk_text(chunk)
+                    if chunk_text:
+                        yield {"type": "text", "content": chunk_text}
 
-            # Mark as successful only if we processed all chunks without exception
-            stream_completed_successfully = True
+                # Mark as successful only if we processed all chunks without exception
+                stream_completed_successfully = True
 
-        except genai.types.BlockedPromptException as e:
-            raise ValueError(f"Prompt was blocked due to safety concerns: {e}") from e
+        except ValueError:
+            # Re-raise ValueError (including converted BlockedPromptException)
+            raise
         except Exception as e:
             logger.error(f"Unexpected error during Gemini API call: {e}")
             raise

@@ -91,6 +91,49 @@ class TestLegacyGeminiAdapter(unittest.TestCase):
         self.assertLessEqual(len(adapter._models_cache), 10)
 
     @patch("google.generativeai")
+    def test_different_model_names(self, mock_genai):
+        """Should cache models separately by model name"""
+        model1 = MagicMock()
+        model2 = MagicMock()
+        mock_genai.GenerativeModel.side_effect = [model1, model2]
+
+        adapter = LegacyGeminiAdapter(api_key="test_key")
+
+        # Get two different models with same system instruction
+        result1 = adapter.get_model("gemini-1.5-pro", "same prompt")
+        result2 = adapter.get_model("gemini-2.0-flash", "same prompt")
+
+        # Should return different model instances
+        self.assertIs(result1, model1)
+        self.assertIs(result2, model2)
+        self.assertIsNot(result1, result2)
+
+        # Should have 2 cache entries with different keys
+        self.assertEqual(len(adapter._models_cache), 2)
+
+    @patch("google.generativeai")
+    def test_default_model_by_name(self, mock_genai):
+        """Should cache default models separately by model name"""
+        model1 = MagicMock()
+        model2 = MagicMock()
+        mock_genai.GenerativeModel.side_effect = [model1, model2]
+
+        adapter = LegacyGeminiAdapter(api_key="test_key")
+
+        # Get two different models without system instruction
+        result1 = adapter.get_model("gemini-1.5-pro")
+        result2 = adapter.get_model("gemini-2.0-flash")
+
+        # Should return different model instances
+        self.assertIs(result1, model1)
+        self.assertIs(result2, model2)
+
+        # Should have 2 default model entries
+        self.assertEqual(len(adapter._default_models), 2)
+        self.assertIn("gemini-1.5-pro", adapter._default_models)
+        self.assertIn("gemini-2.0-flash", adapter._default_models)
+
+    @patch("google.generativeai")
     def test_hash_prompt(self, mock_genai):
         """Should generate consistent hash for prompts"""
         adapter = LegacyGeminiAdapter(api_key="test_key")
@@ -102,6 +145,37 @@ class TestLegacyGeminiAdapter(unittest.TestCase):
         self.assertEqual(hash1, hash2)
         self.assertNotEqual(hash1, hash3)
         self.assertEqual(len(hash1), 64)  # SHA256 hex length
+
+    @patch("google.generativeai")
+    def test_handle_api_errors_blocked_prompt(self, mock_genai):
+        """Should convert BlockedPromptException to ValueError"""
+
+        # Create BlockedPromptException class
+        class BlockedPromptException(Exception):
+            pass
+
+        mock_genai.types.BlockedPromptException = BlockedPromptException
+        adapter = LegacyGeminiAdapter(api_key="test_key")
+
+        # Test that BlockedPromptException is converted to ValueError
+        with self.assertRaises(ValueError) as ctx:
+            with adapter.handle_api_errors():
+                raise BlockedPromptException("Safety filter triggered")
+
+        self.assertIn("Prompt was blocked", str(ctx.exception))
+        self.assertIn("Safety filter triggered", str(ctx.exception))
+
+    @patch("google.generativeai")
+    def test_handle_api_errors_passthrough(self, mock_genai):
+        """Should pass through other exceptions unchanged"""
+        adapter = LegacyGeminiAdapter(api_key="test_key")
+
+        # Test that other exceptions pass through
+        with self.assertRaises(RuntimeError) as ctx:
+            with adapter.handle_api_errors():
+                raise RuntimeError("Some other error")
+
+        self.assertEqual(str(ctx.exception), "Some other error")
 
 
 if __name__ == "__main__":

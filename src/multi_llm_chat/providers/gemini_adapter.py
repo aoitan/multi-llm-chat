@@ -16,7 +16,8 @@ import hashlib
 import threading
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Optional
+from contextlib import contextmanager
+from typing import Any, Generator, Optional
 
 
 class GeminiSDKAdapter(ABC):
@@ -35,6 +36,20 @@ class GeminiSDKAdapter(ABC):
 
         Returns:
             Model instance (SDK-specific type)
+        """
+        pass
+
+    @abstractmethod
+    @contextmanager
+    def handle_api_errors(self) -> Generator[None, None, None]:
+        """Context manager to handle SDK-specific exceptions
+
+        This allows the adapter to catch SDK-specific exceptions and convert them
+        to standard exceptions (e.g., ValueError) that the provider layer understands.
+
+        Example:
+            with adapter.handle_api_errors():
+                response = model.generate_content(...)
         """
         pass
 
@@ -61,8 +76,10 @@ class LegacyGeminiAdapter(GeminiSDKAdapter):
 
         genai.configure(api_key=api_key)
         self.genai = genai
-        self._default_model = None
-        self._models_cache: OrderedDict[str, tuple[str, Any]] = OrderedDict()
+        # Cache for models without system instruction: {model_name: model}
+        self._default_models: dict[str, Any] = {}
+        # LRU cache for models with system instruction: {(model_name, prompt_hash): (prompt, model)}
+        self._models_cache: OrderedDict[tuple[str, str], tuple[str, Any]] = OrderedDict()
         self._cache_max_size = 10
         self._cache_lock = threading.Lock()
 
@@ -76,28 +93,29 @@ class LegacyGeminiAdapter(GeminiSDKAdapter):
         Returns:
             GenerativeModel instance from google.generativeai
         """
-        # If no system instruction, use the default cached model
+        # If no system instruction, cache by model_name only
         if not system_instruction or not system_instruction.strip():
             with self._cache_lock:
-                if self._default_model is None:
-                    self._default_model = self.genai.GenerativeModel(model_name)
-                return self._default_model
+                if model_name not in self._default_models:
+                    self._default_models[model_name] = self.genai.GenerativeModel(model_name)
+                return self._default_models[model_name]
 
-        # For system instructions, use LRU cache with hash key
+        # For system instructions, use LRU cache with (model_name, prompt_hash) key
         prompt_hash = self._hash_prompt(system_instruction)
+        cache_key = (model_name, prompt_hash)
 
         with self._cache_lock:
-            if prompt_hash in self._models_cache:
+            if cache_key in self._models_cache:
                 # Verify prompt hasn't changed (hash collision check)
-                cached_prompt, cached_model = self._models_cache[prompt_hash]
+                cached_prompt, cached_model = self._models_cache[cache_key]
                 if cached_prompt == system_instruction:
                     # Move to end (most recently used)
-                    self._models_cache.move_to_end(prompt_hash)
+                    self._models_cache.move_to_end(cache_key)
                     return cached_model
 
             # Create new model with system instruction
             model = self.genai.GenerativeModel(model_name, system_instruction=system_instruction)
-            self._models_cache[prompt_hash] = (system_instruction, model)
+            self._models_cache[cache_key] = (system_instruction, model)
 
             # LRU eviction if cache is full
             if len(self._models_cache) > self._cache_max_size:
@@ -116,3 +134,19 @@ class LegacyGeminiAdapter(GeminiSDKAdapter):
             SHA256 hash as hexadecimal string
         """
         return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+    @contextmanager
+    def handle_api_errors(self) -> Generator[None, None, None]:
+        """Handle google.generativeai specific exceptions
+
+        Catches BlockedPromptException and converts to ValueError.
+        """
+        try:
+            yield
+        except Exception as e:
+            # Check if it's a BlockedPromptException by class name
+            # (avoid direct type check as it may not be defined in test environment)
+            if type(e).__name__ == "BlockedPromptException":
+                raise ValueError(f"Prompt was blocked due to safety concerns: {e}") from e
+            # Re-raise other exceptions unchanged
+            raise
