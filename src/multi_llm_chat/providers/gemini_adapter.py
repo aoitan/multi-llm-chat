@@ -1,0 +1,118 @@
+"""Gemini SDK Adapter - Abstraction layer for SDK migration
+
+This module provides an abstraction layer between GeminiProvider and the underlying
+Google Gemini SDK. It allows us to migrate from google.generativeai to google.genai
+in a phased approach without breaking existing functionality.
+
+Phase 1 (Current): LegacyGeminiAdapter wraps google.generativeai
+Phase 2: NewGeminiAdapter implements google.genai
+Phase 3: Switch default to NewGeminiAdapter
+Phase 4: Remove LegacyGeminiAdapter
+
+Issue: #133 (Gemini SDK Migration)
+"""
+
+import hashlib
+import threading
+from abc import ABC, abstractmethod
+from collections import OrderedDict
+from typing import Any, Optional
+
+
+class GeminiSDKAdapter(ABC):
+    """Abstract base class for Gemini SDK adapters
+
+    This defines the interface that both legacy and new SDK adapters must implement.
+    """
+
+    @abstractmethod
+    def get_model(self, model_name: str, system_instruction: Optional[str] = None) -> Any:
+        """Get or create a model instance
+
+        Args:
+            model_name: Name of the Gemini model
+            system_instruction: Optional system instruction/prompt
+
+        Returns:
+            Model instance (SDK-specific type)
+        """
+        pass
+
+
+class LegacyGeminiAdapter(GeminiSDKAdapter):
+    """Adapter for google.generativeai (deprecated SDK)
+
+    This adapter wraps the deprecated google.generativeai SDK to maintain
+    backward compatibility during the migration to google.genai.
+
+    Features:
+        - Thread-safe LRU caching for models with system instructions
+        - Separate default model cache for no-system-instruction case
+        - Hash-based cache key with collision detection
+    """
+
+    def __init__(self, api_key: str):
+        """Initialize the legacy adapter
+
+        Args:
+            api_key: Google API key for authentication
+        """
+        import google.generativeai as genai
+
+        genai.configure(api_key=api_key)
+        self.genai = genai
+        self._default_model = None
+        self._models_cache: OrderedDict[str, tuple[str, Any]] = OrderedDict()
+        self._cache_max_size = 10
+        self._cache_lock = threading.Lock()
+
+    def get_model(self, model_name: str, system_instruction: Optional[str] = None) -> Any:
+        """Get or create a cached Gemini model instance
+
+        Args:
+            model_name: Name of the Gemini model
+            system_instruction: Optional system instruction for the model
+
+        Returns:
+            GenerativeModel instance from google.generativeai
+        """
+        # If no system instruction, use the default cached model
+        if not system_instruction or not system_instruction.strip():
+            with self._cache_lock:
+                if self._default_model is None:
+                    self._default_model = self.genai.GenerativeModel(model_name)
+                return self._default_model
+
+        # For system instructions, use LRU cache with hash key
+        prompt_hash = self._hash_prompt(system_instruction)
+
+        with self._cache_lock:
+            if prompt_hash in self._models_cache:
+                # Verify prompt hasn't changed (hash collision check)
+                cached_prompt, cached_model = self._models_cache[prompt_hash]
+                if cached_prompt == system_instruction:
+                    # Move to end (most recently used)
+                    self._models_cache.move_to_end(prompt_hash)
+                    return cached_model
+
+            # Create new model with system instruction
+            model = self.genai.GenerativeModel(model_name, system_instruction=system_instruction)
+            self._models_cache[prompt_hash] = (system_instruction, model)
+
+            # LRU eviction if cache is full
+            if len(self._models_cache) > self._cache_max_size:
+                self._models_cache.popitem(last=False)
+
+            return model
+
+    @staticmethod
+    def _hash_prompt(prompt: str) -> str:
+        """Generate SHA256 hash for a prompt to use as cache key
+
+        Args:
+            prompt: System instruction text
+
+        Returns:
+            SHA256 hash as hexadecimal string
+        """
+        return hashlib.sha256(prompt.encode("utf-8")).hexdigest()

@@ -1,13 +1,11 @@
 """Google Gemini provider implementation
 
 Extracted from llm_provider.py as part of Issue #101 refactoring.
+Updated for Adapter pattern as part of Issue #136.
 """
 
-import hashlib
 import json
 import logging
-import threading
-from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
 import google.generativeai as genai
@@ -17,6 +15,7 @@ from ..config import get_config
 from ..history_utils import content_to_text
 from ..token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
 from .base import LLMProvider
+from .gemini_adapter import LegacyGeminiAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -353,63 +352,22 @@ class GeminiProvider(LLMProvider):
         config = get_config()
         self.api_key = api_key or config.google_api_key
         self.model_name = model_name or config.gemini_model
-        self._default_model = None
-        self._models_cache = OrderedDict()  # LRU cache: hash -> (prompt, model)
-        self._cache_max_size = 10  # Limit cache size to prevent memory leak
-        self._cache_lock = threading.Lock()  # Protect cache operations
-        self._configure()
 
-    def _configure(self):
-        """Configure the Gemini SDK if an API key is available"""
-        if self.api_key:
-            genai.configure(api_key=self.api_key)
-            return True
-        return False
-
-    @staticmethod
-    def _hash_prompt(prompt):
-        """Generate SHA256 hash for a prompt to use as cache key"""
-        return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        # Use adapter pattern for SDK abstraction (Issue #136)
+        self._adapter = LegacyGeminiAdapter(self.api_key) if self.api_key else None
 
     def _get_model(self, system_prompt=None):
-        """Get or create a cached Gemini model instance with thread-safe LRU eviction
+        """Get or create a cached Gemini model instance
 
         Args:
             system_prompt: Optional system instruction for the model
 
         Returns:
-            GenerativeModel instance
+            GenerativeModel instance (via adapter)
         """
-        # If no system prompt, use the default cached model
-        if not system_prompt or not system_prompt.strip():
-            with self._cache_lock:
-                if self._default_model is None:
-                    self._default_model = genai.GenerativeModel(self.model_name)
-                return self._default_model
-
-        # For system prompts, use LRU cache with hash key
-        prompt_hash = self._hash_prompt(system_prompt)
-
-        with self._cache_lock:
-            if prompt_hash in self._models_cache:
-                # Verify prompt hasn't changed (hash collision check)
-                cached_prompt, cached_model = self._models_cache[prompt_hash]
-                if cached_prompt == system_prompt:
-                    # Move to end (most recently used)
-                    self._models_cache.move_to_end(prompt_hash)
-                    return cached_model
-                # Hash collision detected - explicitly evict old entry
-                del self._models_cache[prompt_hash]
-
-            # Create new model and add to cache
-            model = genai.GenerativeModel(self.model_name, system_instruction=system_prompt)
-            self._models_cache[prompt_hash] = (system_prompt, model)
-
-            # Evict oldest if cache is full
-            if len(self._models_cache) > self._cache_max_size:
-                self._models_cache.popitem(last=False)
-
-            return model
+        if not self._adapter:
+            raise ValueError("GOOGLE_API_KEY is not set")
+        return self._adapter.get_model(self.model_name, system_prompt)
 
     @staticmethod
     def format_history(history):
