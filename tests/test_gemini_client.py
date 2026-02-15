@@ -123,5 +123,95 @@ class TestHandleApiErrors(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "Generic error")
 
 
+class TestCachingAndThreadSafety(unittest.TestCase):
+    """Tests for LRU caching and thread safety"""
+
+    @patch("google.genai.Client")
+    def test_lru_eviction(self, mock_client_class):
+        """LRU cache should evict oldest entries when exceeding max_size"""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+
+        adapter = NewGeminiAdapter(api_key="test-key")
+        # Override max size for testing
+        adapter._cache_max_size = 3
+
+        # Create 4 models (exceeds max_size=3)
+        _model1 = adapter.get_model("model1", "prompt1")
+        _model2 = adapter.get_model("model2", "prompt2")
+        _model3 = adapter.get_model("model3", "prompt3")
+        _model4 = adapter.get_model("model4", "prompt4")  # Should evict model1
+
+        # Cache should only have 3 entries
+        self.assertEqual(len(adapter._model_cache), 3)
+
+        # model1 should have been evicted
+        # Create a new cache key for model1
+        prompt_hash = adapter._hash_prompt("prompt1")
+        model1_key = ("model1", prompt_hash)
+        self.assertNotIn(model1_key, adapter._model_cache)
+
+        # model2, model3, model4 should still be cached
+        prompt_hash2 = adapter._hash_prompt("prompt2")
+        prompt_hash3 = adapter._hash_prompt("prompt3")
+        prompt_hash4 = adapter._hash_prompt("prompt4")
+        self.assertIn(("model2", prompt_hash2), adapter._model_cache)
+        self.assertIn(("model3", prompt_hash3), adapter._model_cache)
+        self.assertIn(("model4", prompt_hash4), adapter._model_cache)
+
+    @patch("google.genai.Client")
+    def test_prompt_hashing(self, mock_client_class):
+        """Different prompts should produce different hashes"""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+
+        adapter = NewGeminiAdapter(api_key="test-key")
+
+        hash1 = adapter._hash_prompt("prompt1")
+        hash2 = adapter._hash_prompt("prompt2")
+        hash3 = adapter._hash_prompt("prompt1")  # Same as first
+
+        # Different prompts → different hashes
+        self.assertNotEqual(hash1, hash2)
+        # Same prompt → same hash
+        self.assertEqual(hash1, hash3)
+
+    @patch("google.genai.Client")
+    def test_thread_safety_concurrent_cache_access(self, mock_client_class):
+        """Cache should be thread-safe under concurrent access"""
+        import threading
+        import time
+
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+
+        adapter = NewGeminiAdapter(api_key="test-key")
+        errors = []
+
+        def access_cache(thread_id):
+            try:
+                for i in range(10):
+                    model_name = f"model{i % 3}"  # Reuse some model names
+                    prompt = f"prompt{thread_id}_{i}"
+                    adapter.get_model(model_name, prompt)
+                    time.sleep(0.001)  # Small delay to increase contention
+            except Exception as e:
+                errors.append(e)
+
+        # Create 5 threads accessing cache concurrently
+        threads = []
+        for i in range(5):
+            t = threading.Thread(target=access_cache, args=(i,))
+            threads.append(t)
+            t.start()
+
+        # Wait for all threads to complete
+        for t in threads:
+            t.join()
+
+        # No errors should have occurred
+        self.assertEqual(len(errors), 0, f"Thread safety errors: {errors}")
+
+
 if __name__ == "__main__":
     unittest.main()
