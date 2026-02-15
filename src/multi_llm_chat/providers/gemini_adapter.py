@@ -74,7 +74,8 @@ class LegacyGeminiAdapter(GeminiSDKAdapter):
         """
         import google.generativeai as genai
 
-        genai.configure(api_key=api_key)
+        if api_key:
+            genai.configure(api_key=api_key)
         self.genai = genai
         # Cache for models without system instruction: {model_name: model}
         self._default_models: dict[str, Any] = {}
