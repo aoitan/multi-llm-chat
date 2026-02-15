@@ -31,7 +31,7 @@ class TestGeminiProvider:
         """Setup common test data"""
         self.history = [{"role": "user", "content": "Hello"}]
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_yields_text_chunks(self, mock_genai):
         """call_api should yield unified text dictionaries."""
@@ -58,7 +58,7 @@ class TestGeminiProvider:
         assert result == expected
         mock_model.generate_content.assert_called_once()
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_yields_single_tool_call(self, mock_genai):
         """call_api should yield a unified tool_call dictionary for a single tool call."""
@@ -99,7 +99,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_yields_multiple_tool_calls(self, mock_genai):
         """call_api should yield multiple tool_call dictionaries."""
@@ -156,7 +156,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_allows_tool_call_without_args(self, mock_genai):
         """call_api should allow tool calls with empty args."""
@@ -188,7 +188,7 @@ class TestGeminiProvider:
             }
         ]
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_handles_mixed_text_and_tool_call(self, mock_genai):
         """call_api should handle responses with both text and tool calls."""
@@ -231,7 +231,7 @@ class TestGeminiProvider:
         assert result == expected
 
     @pytest.mark.asyncio
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     async def test_call_api_handles_chunk_text_value_error(self, mock_genai):
         """call_api should handle chunks that raise on .text access."""
 
@@ -277,7 +277,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_maps_tool_calls_by_index(self, mock_genai):
         """call_api should map tool call args to matching indexed calls."""
@@ -335,7 +335,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_maps_tool_calls_without_index(self, mock_genai):
         """call_api should map tool call args in the same order when indexes are missing."""
@@ -389,7 +389,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_handles_interleaved_parallel_tool_calls(self, mock_genai):
         """並列ツール呼び出しでパーツが交互に到着する場合のテスト"""
@@ -451,7 +451,7 @@ class TestGeminiProvider:
         assert result == expected
 
     @pytest.mark.asyncio
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     async def test_call_api_finalizes_pending_calls_once_on_error(self, mock_genai):
         """例外発生時は未完のツール呼び出しを出力しない（Issue #79 Review Fix）"""
 
@@ -489,7 +489,7 @@ class TestGeminiProvider:
         tool_calls = [r for r in results if r.get("type") == "tool_call"]
         assert len(tool_calls) == 0, "No tool calls should be emitted on error"
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_handles_name_and_args_in_same_chunk(self, mock_genai):
         """nameとargsが同一チャンクで到着した場合の処理テスト (Critical Fix A1)"""
@@ -532,7 +532,7 @@ class TestGeminiProvider:
         ]
         assert result == expected
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     @pytest.mark.asyncio
     async def test_call_api_handles_mixed_chunk_patterns(self, mock_genai):
         """複数の順次ツール呼び出しでチャンクパターンが混在するケース (Critical Fix A1)"""
@@ -619,16 +619,16 @@ class TestGeminiProvider:
         assert "input_tokens" in result
         assert "max_tokens" in result
 
-    @patch("multi_llm_chat.providers.gemini.genai")
+    @patch("google.generativeai")
     def test_model_cache(self, mock_genai):
-        """GeminiProvider should cache model instances based on system prompt"""
+        """GeminiProvider should cache model instances based on system prompt (via adapter)"""
         # Ensure GenerativeModel returns a new mock each time it's called
         mock_genai.GenerativeModel.side_effect = lambda *args, **kwargs: MagicMock()
 
         provider = GeminiProvider()
         system_prompt = "You are a helpful assistant."
 
-        # First call creates new model
+        # First call creates new model (via adapter)
         model1 = provider._get_model(system_prompt)
         assert mock_genai.GenerativeModel.call_count == 1
 

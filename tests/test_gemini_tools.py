@@ -73,7 +73,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         )
         self.assertEqual(list(schema_obj.required), expected_schema_dict["required"])
 
-    @patch("multi_llm_chat.providers.gemini.genai.GenerativeModel")
+    @patch("google.generativeai.GenerativeModel")
     def test_gemini_response_with_function_call(self, mock_model_class):
         """Geminiからのツール呼び出しレスポンスを共通形式にパースして返す"""
         mock_model = MagicMock()
@@ -124,7 +124,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         self.assertEqual(tool_chunk["content"]["name"], "get_weather")
         self.assertEqual(tool_chunk["content"]["arguments"], {"location": "Tokyo"})
 
-    @patch("multi_llm_chat.providers.gemini.genai.GenerativeModel")
+    @patch("google.generativeai.GenerativeModel")
     def test_gemini_tool_call_order_is_preserved(self, mock_model_class):
         """ツール呼び出しがテキストより先に来た場合の順序を保証する"""
         mock_model = MagicMock()
@@ -164,7 +164,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         self.assertEqual(chunks[0]["content"]["arguments"], {"location": "Osaka"})
         self.assertEqual(chunks[1]["content"], "Done")
 
-    @patch("multi_llm_chat.providers.gemini.genai.GenerativeModel")
+    @patch("google.generativeai.GenerativeModel")
     def test_gemini_tool_call_args_after_text_are_preserved(self, mock_model_class):
         """ツール呼び出しの引数がテキスト後に届いても欠落しないこと"""
         mock_model = MagicMock()
@@ -204,7 +204,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         self.assertEqual(chunks[1]["content"]["name"], "get_weather")
         self.assertEqual(chunks[1]["content"]["arguments"], {"location": "Nagoya"})
 
-    @patch("multi_llm_chat.providers.gemini.genai.GenerativeModel")
+    @patch("google.generativeai.GenerativeModel")
     def test_no_tool_calls_emitted_on_blocked_prompt(self, mock_model_class):
         """BlockedPromptExceptionが発生した場合、未完のツール呼び出しを出力しない"""
         import google.generativeai as genai
@@ -227,7 +227,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
 
         self.assertIn("blocked", str(context.exception).lower())
 
-    @patch("multi_llm_chat.providers.gemini.genai.GenerativeModel")
+    @patch("google.generativeai.GenerativeModel")
     def test_no_tool_calls_emitted_on_api_error(self, mock_model_class):
         """API エラーが発生した場合、未完のツール呼び出しを出力しない"""
         mock_model = MagicMock()
@@ -263,7 +263,7 @@ class TestGeminiToolsIntegration(unittest.TestCase):
         # Actually I fixed mock_aiter to take self=None.
         self.assertIn("API connection error", str(context.exception))
 
-    @patch("multi_llm_chat.providers.gemini.genai.GenerativeModel")
+    @patch("google.generativeai.GenerativeModel")
     def test_tool_calls_emitted_only_on_success(self, mock_model_class):
         """ストリームが正常に完了した場合のみ、未完のツール呼び出しを出力する"""
         mock_model = MagicMock()
