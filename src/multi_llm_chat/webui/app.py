@@ -96,13 +96,14 @@ with gr.Blocks() as demo:
     chat_service_state = gr.State(None)
 
     # UIコンポーネント
-    # Issue #119: Updated Gradio Chatbot parameters for future v6.0 compatibility
+    # Issue #119: Gradio Chatbot configuration for v5.x compatibility
     # Note: 'buttons' parameter requires Gradio >=6.0 (currently using 5.x)
     chatbot_ui = gr.Chatbot(
         label="Conversation",
         height=600,
-        type="messages",  # New openai-style format (was 'tuples')
-        show_copy_button=True,  # TODO: Replace with buttons=["copy"] when upgrading to Gradio 6.0
+        # type="tuples" is the default - handlers.py returns [[user, assistant], ...]
+        # show_copy_button removed to eliminate DeprecationWarning
+        #   (use buttons=["copy"] in Gradio 6.0)
         allow_tags=False,  # Explicit value (default changing in v6.0)
     )
 
