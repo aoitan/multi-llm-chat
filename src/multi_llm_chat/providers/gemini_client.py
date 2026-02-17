@@ -91,9 +91,9 @@ class NewGeminiAdapter(GeminiSDKAdapter):
             prompt: System instruction text
 
         Returns:
-            SHA256 hash of the prompt (first 16 chars)
+            SHA256 hash of the prompt (full 64 chars for collision safety)
         """
-        return hashlib.sha256(prompt.encode()).hexdigest()[:16]
+        return hashlib.sha256(prompt.encode()).hexdigest()
 
     def get_model(self, model_name: str, system_instruction: Optional[str] = None) -> _ModelProxy:
         """Get model proxy that wraps new SDK client
@@ -130,7 +130,17 @@ class NewGeminiAdapter(GeminiSDKAdapter):
     def handle_api_errors(self) -> Generator[None, None, None]:
         """Context manager for SDK-specific error handling
 
-        The new SDK may have different exception types than the legacy SDK.
-        For now, we pass through all exceptions as-is.
+        Handles new SDK exceptions and converts safety blocks to ValueError
+        for consistency with LegacyGeminiAdapter.
         """
-        yield
+        try:
+            yield
+        except Exception as e:
+            # Check for ClientError with safety blocking (by status code or message)
+            if type(e).__name__ in ("ClientError", "APIError"):
+                error_msg = str(e).lower()
+                # New SDK reports safety blocks in error messages
+                if any(keyword in error_msg for keyword in ["safety", "blocked", "harm"]):
+                    raise ValueError(f"Prompt was blocked due to safety concerns: {e}") from e
+            # Re-raise other exceptions unchanged
+            raise

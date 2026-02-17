@@ -122,6 +122,38 @@ class TestHandleApiErrors(unittest.TestCase):
 
         self.assertEqual(str(ctx.exception), "Generic error")
 
+    @patch("google.genai.Client")
+    def test_handle_api_errors_converts_safety_blocks(self, mock_client_class):
+        """handle_api_errors should convert safety blocks to ValueError"""
+        from google.genai.errors import ClientError
+
+        adapter = NewGeminiAdapter(api_key="test-key")
+
+        # Simulate safety blocking error (code=400 for client error)
+        safety_error = ClientError(400, {"error": "Request blocked due to safety filters"})
+
+        with self.assertRaises(ValueError) as ctx:
+            with adapter.handle_api_errors():
+                raise safety_error
+
+        self.assertIn("safety concerns", str(ctx.exception))
+
+    @patch("google.genai.Client")
+    def test_handle_api_errors_converts_harm_blocks(self, mock_client_class):
+        """handle_api_errors should convert harm-related blocks to ValueError"""
+        from google.genai.errors import APIError
+
+        adapter = NewGeminiAdapter(api_key="test-key")
+
+        # Simulate harm blocking error (code=400)
+        harm_error = APIError(400, {"error": "Content blocked due to harmful content detection"})
+
+        with self.assertRaises(ValueError) as ctx:
+            with adapter.handle_api_errors():
+                raise harm_error
+
+        self.assertIn("safety concerns", str(ctx.exception))
+
 
 class TestCachingAndThreadSafety(unittest.TestCase):
     """Tests for LRU caching and thread safety"""
@@ -161,7 +193,7 @@ class TestCachingAndThreadSafety(unittest.TestCase):
 
     @patch("google.genai.Client")
     def test_prompt_hashing(self, mock_client_class):
-        """Different prompts should produce different hashes"""
+        """Different prompts should produce different hashes (64 chars SHA256)"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
@@ -175,6 +207,9 @@ class TestCachingAndThreadSafety(unittest.TestCase):
         self.assertNotEqual(hash1, hash2)
         # Same prompt → same hash
         self.assertEqual(hash1, hash3)
+        # Should be full SHA256 (64 hex chars)
+        self.assertEqual(len(hash1), 64)
+        self.assertEqual(len(hash2), 64)
 
     @patch("google.genai.Client")
     def test_thread_safety_concurrent_cache_access(self, mock_client_class):
