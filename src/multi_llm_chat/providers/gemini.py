@@ -10,7 +10,11 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from google.generativeai.types import FunctionDeclaration, Tool
+# Dynamic import based on SDK selection (Issue #137 - Critical fix)
+if os.getenv("USE_NEW_GEMINI_SDK", "0") == "1":
+    from google.genai.types import FunctionDeclaration, Tool
+else:
+    from google.generativeai.types import FunctionDeclaration, Tool
 
 from ..config import get_config
 from ..history_utils import content_to_text

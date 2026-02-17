@@ -115,6 +115,51 @@ class TestGeminiProviderNewSDK:
 
     @patch("google.genai.Client")
     @pytest.mark.asyncio
+    async def test_tool_serialization_new_sdk(self, mock_client_class):
+        """Tools should be properly serialized for new SDK (Critical: Issue #141)"""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+
+        mock_chunk = Mock()
+        mock_chunk.text = "Calling tool"
+        mock_chunk.parts = []
+        mock_client.models.generate_content_stream.return_value = iter([mock_chunk])
+
+        provider = GeminiProvider(api_key="test-key", model_name="gemini-2.0-flash-exp")
+        tools = [
+            {
+                "name": "get_weather",
+                "description": "Get current weather",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"location": {"type": "string"}},
+                    "required": ["location"],
+                },
+            }
+        ]
+
+        async for _ in provider.call_api(self.history, tools=tools):
+            pass
+
+        # Verify tools were converted to new SDK format
+        call_args = mock_client.models.generate_content_stream.call_args
+        config = call_args.kwargs.get("config")
+        assert "tools" in config
+
+        # Verify the tools are google.genai.types.Tool instances (not legacy SDK)
+        tools_arg = config["tools"]
+        assert len(tools_arg) == 1
+        # New SDK accepts Tool objects from google.genai.types
+        # This test will fail if we're passing legacy SDK Tool objects
+        from google.genai.types import Tool as NewTool
+
+        assert isinstance(tools_arg[0], NewTool), (
+            f"Expected google.genai.types.Tool, got {type(tools_arg[0]).__module__}."
+            f"{type(tools_arg[0]).__name__}"
+        )
+
+    @patch("google.genai.Client")
+    @pytest.mark.asyncio
     async def test_model_caching_new_sdk(self, mock_client_class):
         """Model proxy should be cached across calls"""
         mock_client = Mock()
