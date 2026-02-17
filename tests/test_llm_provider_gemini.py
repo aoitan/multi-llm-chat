@@ -1,9 +1,11 @@
-"""Tests for GeminiProvider implementation
+"""Tests for GeminiProvider implementation (Legacy SDK)
 
 Extracted from test_llm_provider.py as part of Issue #101 refactoring.
+Updated for SDK migration: These tests run only with Legacy SDK (google.generativeai)
 """
 
 import json
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +15,12 @@ from multi_llm_chat.providers.gemini import (
     GeminiProvider,
     GeminiToolCallAssembler,
     _parse_tool_response_payload,
+)
+
+# Skip these tests when USE_NEW_GEMINI_SDK=1
+pytestmark = pytest.mark.skipif(
+    os.getenv("USE_NEW_GEMINI_SDK", "0") == "1",
+    reason="These tests only run with Legacy SDK (USE_NEW_GEMINI_SDK=0)",
 )
 
 

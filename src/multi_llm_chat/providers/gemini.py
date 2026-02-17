@@ -2,19 +2,26 @@
 
 Extracted from llm_provider.py as part of Issue #101 refactoring.
 Updated for Adapter pattern as part of Issue #136.
+Updated for SDK switching as part of Issue #137.
 """
 
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
-from google.generativeai.types import FunctionDeclaration, Tool
+# Dynamic import based on SDK selection (Issue #137 - Critical fix)
+if os.getenv("USE_NEW_GEMINI_SDK", "0") == "1":
+    from google.genai.types import FunctionDeclaration, Tool
+else:
+    from google.generativeai.types import FunctionDeclaration, Tool
 
 from ..config import get_config
 from ..history_utils import content_to_text
 from ..token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
 from .base import LLMProvider
 from .gemini_adapter import LegacyGeminiAdapter
+from .gemini_client import NewGeminiAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -352,8 +359,12 @@ class GeminiProvider(LLMProvider):
         self.api_key = api_key or config.google_api_key
         self.model_name = model_name or config.gemini_model
 
+        # SDK switching via environment variable (Issue #137)
+        use_new_sdk = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
+        adapter_class = NewGeminiAdapter if use_new_sdk else LegacyGeminiAdapter
+
         # Use adapter pattern for SDK abstraction (Issue #136)
-        self._adapter = LegacyGeminiAdapter(self.api_key) if self.api_key else None
+        self._adapter = adapter_class(self.api_key) if self.api_key else None
 
     def _get_model(self, system_prompt=None):
         """Get or create a cached Gemini model instance
@@ -367,7 +378,9 @@ class GeminiProvider(LLMProvider):
         if not self._adapter:
             # In test environments, adapter might not be initialized
             # Try to create it with the current api_key (which might be None for mocked tests)
-            self._adapter = LegacyGeminiAdapter(self.api_key)
+            use_new_sdk = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
+            adapter_class = NewGeminiAdapter if use_new_sdk else LegacyGeminiAdapter
+            self._adapter = adapter_class(self.api_key)
         return self._adapter.get_model(self.model_name, system_prompt)
 
     @staticmethod

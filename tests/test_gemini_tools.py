@@ -1,12 +1,20 @@
 import asyncio
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
 from google.generativeai.types import Tool
 
 from multi_llm_chat.llm_provider import (
     GeminiProvider,
     mcp_tools_to_gemini_format,
+)
+
+# Skip these tests when USE_NEW_GEMINI_SDK=1
+pytestmark = pytest.mark.skipif(
+    os.getenv("USE_NEW_GEMINI_SDK", "0") == "1",
+    reason="These tests only run with Legacy SDK (USE_NEW_GEMINI_SDK=0)",
 )
 
 

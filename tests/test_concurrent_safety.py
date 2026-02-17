@@ -8,6 +8,7 @@ These tests verify that:
 """
 
 import asyncio
+import os
 import threading
 import unittest
 from unittest.mock import MagicMock, patch
@@ -32,6 +33,10 @@ async def consume_async_gen(gen):
     return results
 
 
+@pytest.mark.skipif(
+    os.getenv("USE_NEW_GEMINI_SDK", "0") == "1",
+    reason="Legacy SDK concurrent tests (USE_NEW_GEMINI_SDK=0 only)",
+)
 class TestGeminiConcurrentSafety(unittest.TestCase):
     """Test concurrent safety for GeminiProvider"""
 
