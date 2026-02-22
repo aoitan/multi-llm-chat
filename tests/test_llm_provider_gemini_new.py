@@ -1,9 +1,10 @@
 """Tests for GeminiProvider with New SDK (google.genai)
 
 These tests verify that GeminiProvider works correctly with the new SDK
-when USE_NEW_GEMINI_SDK=1 is set.
+(default behavior after Issue #138).
 
 Issue: #137 (Phase 2: New SDK Implementation)
+Issue: #138 (Phase 3: New SDK as Default)
 """
 
 import os
@@ -14,10 +15,10 @@ import pytest
 
 from multi_llm_chat.providers.gemini import GeminiProvider
 
-# Skip these tests unless USE_NEW_GEMINI_SDK=1
+# Skip these tests when legacy SDK is explicitly requested
 pytestmark = pytest.mark.skipif(
-    os.getenv("USE_NEW_GEMINI_SDK", "0") != "1",
-    reason="These tests only run with USE_NEW_GEMINI_SDK=1",
+    os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1",
+    reason="These tests only run with New SDK (default unless USE_LEGACY_GEMINI_SDK=1)",
 )
 
 

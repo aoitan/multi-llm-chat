@@ -1,10 +1,14 @@
 """Tests for Gemini SDK Adapter layer
 
 Issue: #136 (Phase 1 - Adapter層導入)
+Issue: #138 (Phase 3 - New SDK as Default)
 """
 
+import os
 import unittest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from multi_llm_chat.providers.gemini_adapter import GeminiSDKAdapter, LegacyGeminiAdapter
 
@@ -18,6 +22,11 @@ class TestGeminiSDKAdapter(unittest.TestCase):
             GeminiSDKAdapter()
 
 
+# Skip legacy adapter tests when new SDK is used (default after Issue #138)
+@pytest.mark.skipif(
+    os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "0",
+    reason="Legacy adapter tests only run with USE_LEGACY_GEMINI_SDK=1",
+)
 class TestLegacyGeminiAdapter(unittest.TestCase):
     """Test LegacyGeminiAdapter wrapper"""
 

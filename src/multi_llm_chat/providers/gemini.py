@@ -8,14 +8,34 @@ Updated for SDK switching as part of Issue #137.
 import json
 import logging
 import os
+import warnings
 from typing import Any, Dict, List, Optional
 
-# Dynamic import based on SDK selection (Issue #137 - Critical fix)
-if os.getenv("USE_NEW_GEMINI_SDK", "0") == "1":
-    from google.genai.types import FunctionDeclaration, Tool
-else:
-    from google.generativeai.types import FunctionDeclaration, Tool
+# Dynamic import based on SDK selection (Issue #137/#138)
+# SDK selection logic:
+# 1. If USE_LEGACY_GEMINI_SDK=1, use legacy SDK.
+# 2. Else if USE_NEW_GEMINI_SDK=1, use new SDK (deprecated flag, but still honored).
+# 3. Else, use new SDK by default.
 
+use_legacy_sdk = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
+use_new_sdk_deprecated = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
+
+if use_new_sdk_deprecated:
+    warnings.warn(
+        "USE_NEW_GEMINI_SDK is deprecated. The new SDK is now the default. "
+        "To use legacy SDK, set USE_LEGACY_GEMINI_SDK=1 instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+# Determine which SDK to use based on priority
+if use_legacy_sdk:
+    from google.generativeai.types import FunctionDeclaration, Tool
+else:
+    # Use new SDK (either explicitly requested or default)
+    from google.genai.types import FunctionDeclaration, Tool
+
+# ruff: noqa: E402 - Conditional import above is intentional
 from ..config import get_config
 from ..history_utils import content_to_text
 from ..token_utils import estimate_tokens, get_buffer_factor, get_max_context_length
@@ -359,9 +379,9 @@ class GeminiProvider(LLMProvider):
         self.api_key = api_key or config.google_api_key
         self.model_name = model_name or config.gemini_model
 
-        # SDK switching via environment variable (Issue #137)
-        use_new_sdk = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
-        adapter_class = NewGeminiAdapter if use_new_sdk else LegacyGeminiAdapter
+        # SDK switching via environment variable (Issue #137/#138)
+        # Use module-level variable to avoid redundant environment variable checks
+        adapter_class = LegacyGeminiAdapter if use_legacy_sdk else NewGeminiAdapter
 
         # Use adapter pattern for SDK abstraction (Issue #136)
         self._adapter = adapter_class(self.api_key) if self.api_key else None
@@ -378,8 +398,8 @@ class GeminiProvider(LLMProvider):
         if not self._adapter:
             # In test environments, adapter might not be initialized
             # Try to create it with the current api_key (which might be None for mocked tests)
-            use_new_sdk = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
-            adapter_class = NewGeminiAdapter if use_new_sdk else LegacyGeminiAdapter
+            # Use module-level variable to avoid redundant environment variable checks
+            adapter_class = LegacyGeminiAdapter if use_legacy_sdk else NewGeminiAdapter
             self._adapter = adapter_class(self.api_key)
         return self._adapter.get_model(self.model_name, system_prompt)
 

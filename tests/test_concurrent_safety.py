@@ -34,8 +34,8 @@ async def consume_async_gen(gen):
 
 
 @pytest.mark.skipif(
-    os.getenv("USE_NEW_GEMINI_SDK", "0") == "1",
-    reason="Legacy SDK concurrent tests (USE_NEW_GEMINI_SDK=0 only)",
+    os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "0",
+    reason="Legacy SDK concurrent tests (USE_LEGACY_GEMINI_SDK=1 only)",
 )
 class TestGeminiConcurrentSafety(unittest.TestCase):
     """Test concurrent safety for GeminiProvider"""
@@ -322,6 +322,10 @@ class TestChatGPTConcurrentSafety(unittest.TestCase):
         self.assertEqual(len(results), 10, "Not all requests completed")
 
 
+@pytest.mark.skipif(
+    os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "0",
+    reason="Legacy SDK provider tests (USE_LEGACY_GEMINI_SDK=1 only)",
+)
 class TestSessionScopedProviders(unittest.TestCase):
     """Test session-scoped provider isolation"""
 
