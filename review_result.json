@@ -1,0 +1,12 @@
+{
+  "reviewer_name": "Gemini CLI Architect",
+  "critical_issues_found": true,
+  "reason": "新SDKアダプターにおけるTool定義の型不一致による実行時エラーの可能性が高い",
+  "review_score": 65,
+  "actionable_feedback": [
+    "**Tool定義の型不一致 (Critical)**: `GeminiProvider` は `google.generativeai.types.Tool` オブジェクト（旧SDK型）を生成して渡していますが、`NewGeminiAdapter` (`_ModelProxy`) はこれを変換せずにそのまま新SDK (`google.genai`) に渡しています。新SDKは旧SDKの型を受け付けないため、ツール使用時に `TypeError` または `ValueError` が発生します。`NewGeminiAdapter` 内で旧SDKの `Tool` オブジェクトを新SDK互換の形式（Dict等）に変換するロジックを実装してください。",
+    "**エラーハンドリングの欠如**: `NewGeminiAdapter.handle_api_errors` が実装されておらず、例外をそのまま通過させています。新SDK固有の例外（APIエラーやSafety Filterによるブロック等）を捕捉し、プロバイダー層が期待する共通例外（`ValueError` 等）に変換する処理を追加してください。",
+    "**コード重複 (DRY)**: `_hash_prompt` メソッドのロジックが `LegacyGeminiAdapter` と `NewGeminiAdapter` で重複しています。基底クラス `GeminiSDKAdapter` に移動して共通化することを推奨します。",
+    "**テストのカバレッジ不足**: 現行のテスト (`test_gemini_client.py`) はモックを使用しているため、上記の型不一致を検出できていません。`NewGeminiAdapter` が旧SDK形式の `Tool` オブジェクトを受け取った際に、正しく新SDK形式に変換してクライアント呼び出しを行っているかを検証するテストケースを追加してください。"
+  ]
+}
