@@ -8,6 +8,7 @@ Updated for SDK switching as part of Issue #137.
 import json
 import logging
 import os
+import warnings
 from typing import Any, Dict, List, Optional
 
 # Dynamic import based on SDK selection (Issue #137/#138)
@@ -15,7 +16,6 @@ from typing import Any, Dict, List, Optional
 # 1. If USE_LEGACY_GEMINI_SDK=1, use legacy SDK.
 # 2. Else if USE_NEW_GEMINI_SDK=1, use new SDK (deprecated flag, but still honored).
 # 3. Else, use new SDK by default.
-import warnings
 
 use_legacy_sdk = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
 use_new_sdk_deprecated = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
@@ -35,6 +35,7 @@ else:
     # Use new SDK (either explicitly requested or default)
     from google.genai.types import FunctionDeclaration, Tool
 
+# ruff: noqa: E402 - Conditional import above is intentional
 from ..config import get_config
 from ..history_utils import content_to_text
 from ..token_utils import estimate_tokens, get_buffer_factor, get_max_context_length

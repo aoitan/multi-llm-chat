@@ -34,6 +34,7 @@ else:
     # Use new SDK (either explicitly requested or default)
     import google.genai as genai
 
+# ruff: noqa: E402 - Conditional import above is intentional
 from ..config import get_config
 
 logger = logging.getLogger(__name__)
@@ -72,13 +73,13 @@ def list_gemini_models(verbose: bool = True) -> list:
                 # New SDK models have supported_actions field
                 # Filter for models that support GENERATE_CONTENT action
                 model_name = m.name if hasattr(m, "name") else str(m)
-                
+
                 # Check if model supports generateContent action
                 if hasattr(m, "supported_actions") and m.supported_actions:
                     if "GENERATE_CONTENT" not in m.supported_actions:
                         logger.debug("Skipping model (no GENERATE_CONTENT): %s", model_name)
                         continue
-                
+
                 models.append(model_name)
                 logger.debug("Available Gemini model: %s", model_name)
     except Exception as e:
