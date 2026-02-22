@@ -10,11 +10,26 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-# Dynamic import based on SDK selection (Issue #137 - Critical fix)
-if os.getenv("USE_NEW_GEMINI_SDK", "0") == "1":
-    from google.genai.types import FunctionDeclaration, Tool
-else:
+# Dynamic import based on SDK selection (Issue #137/#138)
+# Support backward compatibility: USE_NEW_GEMINI_SDK is deprecated but still works
+# Default to new SDK unless USE_LEGACY_GEMINI_SDK=1 is explicitly set
+import warnings
+
+use_legacy_sdk = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
+use_new_sdk_deprecated = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
+
+if use_new_sdk_deprecated:
+    warnings.warn(
+        "USE_NEW_GEMINI_SDK is deprecated. The new SDK is now the default. "
+        "To use legacy SDK, set USE_LEGACY_GEMINI_SDK=1 instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+if use_legacy_sdk:
     from google.generativeai.types import FunctionDeclaration, Tool
+else:
+    from google.genai.types import FunctionDeclaration, Tool
 
 from ..config import get_config
 from ..history_utils import content_to_text
@@ -359,9 +374,11 @@ class GeminiProvider(LLMProvider):
         self.api_key = api_key or config.google_api_key
         self.model_name = model_name or config.gemini_model
 
-        # SDK switching via environment variable (Issue #137)
-        use_new_sdk = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
-        adapter_class = NewGeminiAdapter if use_new_sdk else LegacyGeminiAdapter
+        # SDK switching via environment variable (Issue #137/#138)
+        # Default to new SDK, use legacy only if explicitly requested
+        # Support backward compatibility with deprecated USE_NEW_GEMINI_SDK
+        use_legacy = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
+        adapter_class = LegacyGeminiAdapter if use_legacy else NewGeminiAdapter
 
         # Use adapter pattern for SDK abstraction (Issue #136)
         self._adapter = adapter_class(self.api_key) if self.api_key else None
@@ -378,8 +395,9 @@ class GeminiProvider(LLMProvider):
         if not self._adapter:
             # In test environments, adapter might not be initialized
             # Try to create it with the current api_key (which might be None for mocked tests)
-            use_new_sdk = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
-            adapter_class = NewGeminiAdapter if use_new_sdk else LegacyGeminiAdapter
+            # Support backward compatibility with deprecated USE_NEW_GEMINI_SDK
+            use_legacy = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
+            adapter_class = LegacyGeminiAdapter if use_legacy else NewGeminiAdapter
             self._adapter = adapter_class(self.api_key)
         return self._adapter.get_model(self.model_name, system_prompt)
 

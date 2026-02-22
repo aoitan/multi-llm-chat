@@ -114,3 +114,22 @@ Pull requests should:
 
 ## Security & Configuration Tips
 Store secrets in `.env`; `GOOGLE_API_KEY` is mandatory, while `OPENAI_API_KEY` unlocks ChatGPT routing. Never commit `.env` or paste raw keys in logs. When debugging API errors, prefer the safe helper `list_gemini_models()` instead of printing keys, and document any new environment variables in `README.md`.
+
+## Troubleshooting
+
+### Gemini SDK 関連
+
+**FutureWarning が表示される場合**:
+- デフォルトでは新SDK (`google-genai`) を使用します
+- 旧SDK使用時のみ FutureWarning が表示されます
+
+**旧SDKを使用する場合**（互換性確認用）:
+```bash
+export USE_LEGACY_GEMINI_SDK=1
+uv run pytest
+```
+
+**新SDKで問題が発生した場合**:
+1. まず Issue #133 を確認
+2. 旧SDKで動作するか確認（`USE_LEGACY_GEMINI_SDK=1`）
+3. 新しいIssueを作成して報告

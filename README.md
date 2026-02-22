@@ -48,6 +48,25 @@ Web UI版とCLI版の2つのインターフェースを提供します。
    ```
    `pyproject.toml`と`uv.lock`に定義されたランタイム／テスト依存（`dev`エクストラを含む）がすべてインストールされます。依存関係を追加・更新した場合は`pyproject.toml`を編集した上で`uv lock`を実行し、続けて`uv sync --extra dev`で環境を最新化してください。
 
+### Gemini SDK について
+
+このプロジェクトは、Googleの新しいGemini SDK (`google-genai`) を使用しています。
+
+**旧SDK (`google.generativeai`) について**:
+- 旧SDKは 2025年11月30日にサポート終了
+- デフォルトでは新SDKを使用（FutureWarning なし）
+- 互換性のため旧SDKも利用可能
+
+**旧SDKの使用方法**（トラブルシューティング用）:
+```bash
+export USE_LEGACY_GEMINI_SDK=1
+uv run pytest
+# または
+USE_LEGACY_GEMINI_SDK=1 python app.py
+```
+
+**注意**: 旧SDKは将来のバージョンで削除される予定です。
+
 ## 開発
 
 このプロジェクトは**テスト駆動開発（TDD）**を採用しています。機能追加やバグ修正を行う際は、**必ずテストを先に書いてから実装**してください。詳細は `CONTRIBUTING.md` を参照してください。

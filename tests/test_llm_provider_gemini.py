@@ -17,10 +17,10 @@ from multi_llm_chat.providers.gemini import (
     _parse_tool_response_payload,
 )
 
-# Skip these tests when USE_NEW_GEMINI_SDK=1
+# Skip these tests when new SDK is used (default behavior after Issue #138)
 pytestmark = pytest.mark.skipif(
-    os.getenv("USE_NEW_GEMINI_SDK", "0") == "1",
-    reason="These tests only run with Legacy SDK (USE_NEW_GEMINI_SDK=0)",
+    os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "0",
+    reason="These tests only run with Legacy SDK (USE_LEGACY_GEMINI_SDK=1)",
 )
 
 
