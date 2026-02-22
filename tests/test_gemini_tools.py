@@ -18,8 +18,7 @@ else:
     # Import from new SDK to avoid warnings (tests will be skipped anyway)
     from google.genai.types import Tool
 
-# ruff: noqa: E402 - Conditional import above is intentional
-from multi_llm_chat.llm_provider import (
+from multi_llm_chat.llm_provider import (  # ruff: noqa: E402 - Conditional import above is intentional
     GeminiProvider,
     mcp_tools_to_gemini_format,
 )

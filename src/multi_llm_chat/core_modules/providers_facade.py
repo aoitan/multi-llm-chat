@@ -12,7 +12,10 @@ import os
 import warnings
 
 # Dynamic import based on SDK selection (Issue #138)
-# Support backward compatibility: USE_NEW_GEMINI_SDK is deprecated but still works
+# SDK selection logic:
+# 1. If USE_LEGACY_GEMINI_SDK=1, use legacy SDK.
+# 2. Else if USE_NEW_GEMINI_SDK=1, use new SDK (deprecated flag, but still honored).
+# 3. Else, use new SDK by default.
 use_legacy_sdk = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
 use_new_sdk_deprecated = os.getenv("USE_NEW_GEMINI_SDK", "0") == "1"
 
@@ -24,9 +27,11 @@ if use_new_sdk_deprecated:
         stacklevel=2,
     )
 
+# Determine which SDK to use based on priority
 if use_legacy_sdk:
     import google.generativeai as genai
 else:
+    # Use new SDK (either explicitly requested or default)
     import google.genai as genai
 
 from ..config import get_config
@@ -42,8 +47,8 @@ def list_gemini_models(verbose: bool = True) -> list:
 
     Returns:
         List of model names that support generateContent.
-        Note: For new SDK, filtering by supported_actions may not be available
-        on all model types, so we include all returned models.
+        Note: For the new SDK, we attempt to filter for models that support the
+        'GENERATE_CONTENT' action, but models without this attribute may also be included.
     """
     config = get_config()
     if not config.google_api_key:
@@ -51,10 +56,9 @@ def list_gemini_models(verbose: bool = True) -> list:
         return []
 
     models = []
-    use_legacy = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
 
     try:
-        if use_legacy:
+        if use_legacy_sdk:
             # Legacy SDK (google.generativeai)
             genai.configure(api_key=config.google_api_key)
             for m in genai.list_models():

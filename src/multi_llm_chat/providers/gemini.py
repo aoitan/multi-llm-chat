@@ -11,8 +11,10 @@ import os
 from typing import Any, Dict, List, Optional
 
 # Dynamic import based on SDK selection (Issue #137/#138)
-# Support backward compatibility: USE_NEW_GEMINI_SDK is deprecated but still works
-# Default to new SDK unless USE_LEGACY_GEMINI_SDK=1 is explicitly set
+# SDK selection logic:
+# 1. If USE_LEGACY_GEMINI_SDK=1, use legacy SDK.
+# 2. Else if USE_NEW_GEMINI_SDK=1, use new SDK (deprecated flag, but still honored).
+# 3. Else, use new SDK by default.
 import warnings
 
 use_legacy_sdk = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
@@ -26,9 +28,11 @@ if use_new_sdk_deprecated:
         stacklevel=2,
     )
 
+# Determine which SDK to use based on priority
 if use_legacy_sdk:
     from google.generativeai.types import FunctionDeclaration, Tool
 else:
+    # Use new SDK (either explicitly requested or default)
     from google.genai.types import FunctionDeclaration, Tool
 
 from ..config import get_config
@@ -375,10 +379,8 @@ class GeminiProvider(LLMProvider):
         self.model_name = model_name or config.gemini_model
 
         # SDK switching via environment variable (Issue #137/#138)
-        # Default to new SDK, use legacy only if explicitly requested
-        # Support backward compatibility with deprecated USE_NEW_GEMINI_SDK
-        use_legacy = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
-        adapter_class = LegacyGeminiAdapter if use_legacy else NewGeminiAdapter
+        # Use module-level variable to avoid redundant environment variable checks
+        adapter_class = LegacyGeminiAdapter if use_legacy_sdk else NewGeminiAdapter
 
         # Use adapter pattern for SDK abstraction (Issue #136)
         self._adapter = adapter_class(self.api_key) if self.api_key else None
@@ -395,9 +397,8 @@ class GeminiProvider(LLMProvider):
         if not self._adapter:
             # In test environments, adapter might not be initialized
             # Try to create it with the current api_key (which might be None for mocked tests)
-            # Support backward compatibility with deprecated USE_NEW_GEMINI_SDK
-            use_legacy = os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "1"
-            adapter_class = LegacyGeminiAdapter if use_legacy else NewGeminiAdapter
+            # Use module-level variable to avoid redundant environment variable checks
+            adapter_class = LegacyGeminiAdapter if use_legacy_sdk else NewGeminiAdapter
             self._adapter = adapter_class(self.api_key)
         return self._adapter.get_model(self.model_name, system_prompt)
 
