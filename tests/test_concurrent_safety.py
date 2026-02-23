@@ -245,16 +245,16 @@ class TestSessionScopedProviders(unittest.TestCase):
     """Test session-scoped provider isolation with new SDK (Issue #139 migration)"""
 
     @patch("google.genai.Client")
-    @patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"})
     def test_session_isolated_providers(self, mock_client_class):
         """create_provider should return different instances for different sessions"""
-        from multi_llm_chat.llm_provider import create_provider
+        from multi_llm_chat.providers.gemini import GeminiProvider
 
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
 
-        provider1 = create_provider("gemini")
-        provider2 = create_provider("gemini")
+        # api_key を直接渡してアダプターが必ず生成されるようにする
+        provider1 = GeminiProvider(api_key="test-key-1")
+        provider2 = GeminiProvider(api_key="test-key-2")
 
         self.assertIsNot(provider1, provider2, "Sessions should have isolated provider instances")
 
