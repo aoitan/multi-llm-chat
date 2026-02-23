@@ -8,6 +8,7 @@ authors = [
     { name = "Multi LLM Chat Contributors" },
 ]
 dependencies = [
+    "google-generativeai>=0.4",
     "google-genai>=1.0",
     "gradio>=4.0,<6.0",
     "mcp>=1.0",

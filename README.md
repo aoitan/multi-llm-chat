@@ -52,6 +52,21 @@ Web UI版とCLI版の2つのインターフェースを提供します。
 
 このプロジェクトは、Googleの新しいGemini SDK (`google-genai`) を使用しています。
 
+**旧SDK (`google.generativeai`) について**:
+- 旧SDKは 2025年11月30日にサポート終了
+- デフォルトでは新SDKを使用（FutureWarning なし）
+- 互換性のため旧SDKも利用可能
+
+**旧SDKの使用方法**（トラブルシューティング用）:
+```bash
+export USE_LEGACY_GEMINI_SDK=1
+uv run pytest
+# または
+USE_LEGACY_GEMINI_SDK=1 python app.py
+```
+
+**注意**: 旧SDKは将来のバージョンで削除される予定です。
+
 ## 開発
 
 このプロジェクトは**テスト駆動開発（TDD）**を採用しています。機能追加やバグ修正を行う際は、**必ずテストを先に書いてから実装**してください。詳細は `CONTRIBUTING.md` を参照してください。

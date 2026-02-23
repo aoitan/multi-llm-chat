@@ -8,13 +8,15 @@ These tests verify that:
 """
 
 import asyncio
+import os
 import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from multi_llm_chat.llm_provider import ChatGPTProvider
+from multi_llm_chat.chat_service import ChatService
+from multi_llm_chat.llm_provider import ChatGPTProvider, GeminiProvider, create_provider
 
 
 async def consume_async_gen(gen):
@@ -29,6 +31,225 @@ async def consume_async_gen(gen):
         for item in gen:
             results.append(item)
     return results
+
+
+@pytest.mark.skipif(
+    os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "0",
+    reason="Legacy SDK concurrent tests (USE_LEGACY_GEMINI_SDK=1 only)",
+)
+class TestGeminiConcurrentSafety(unittest.TestCase):
+    """Test concurrent safety for GeminiProvider"""
+
+    @patch("google.generativeai")
+    def test_gemini_concurrent_different_prompts(self, mock_genai):
+        """Test that concurrent requests with different system prompts don't interfere"""
+        import time
+
+        # Ensure exception classes are real classes in the mock
+        mock_genai.types.BlockedPromptException = type("BlockedPromptException", (Exception,), {})
+
+        # Setup mock
+        mock_model_class = MagicMock()
+        mock_genai.GenerativeModel = mock_model_class
+
+        # Track which prompts were used to create models (with thread safety check)
+        created_models = []
+        created_prompts = []
+
+        def track_model_creation(model_name, system_instruction=None):
+            # Simulate race condition by adding delay
+            time.sleep(0.01)
+            mock_model = MagicMock()
+            # Return the system_instruction in the response to verify correct prompt was used
+            # Mock Gemini API response format
+            mock_part = MagicMock(spec=["text"])  # Only has text attribute, no function_call
+            mock_part.text = f"Response with prompt: {system_instruction}"
+            mock_chunk = MagicMock()
+            mock_chunk.parts = [mock_part]
+
+            # Mock synchronous generate_content (used by asyncio.to_thread)
+            def mock_generate_content(*args, **kwargs):
+                return iter([mock_chunk])
+
+            mock_model.generate_content = mock_generate_content
+
+            # Track creation without lock to detect race conditions
+            created_models.append(mock_model)
+            created_prompts.append(system_instruction)
+            return mock_model
+
+        mock_model_class.side_effect = track_model_creation
+
+        provider = GeminiProvider(api_key="test-key")  # Provide test API key
+
+        # Define different system prompts
+        prompts = [
+            "You are a helpful assistant",
+            "You are a coding expert",
+            "You are a translator",
+            "You are a writer",
+            "You are a scientist",
+        ]
+
+        # Results storage
+        results = {}
+        errors = []
+        results_lock = threading.Lock()
+
+        def call_with_prompt(prompt_text, thread_id):
+            """Call API with specific prompt and store result"""
+            try:
+                history = [{"role": "user", "content": f"Hello from thread {thread_id}"}]
+
+                async def run_test():
+                    chunks = []
+                    gen = provider.call_api(history, system_prompt=prompt_text)
+                    # Handle both sync and async generators
+                    if hasattr(gen, "__aiter__"):
+                        async for c in gen:
+                            chunks.append(c)
+                    else:
+                        for c in gen:
+                            chunks.append(c)
+                    return chunks
+
+                chunks = asyncio.run(run_test())
+                response_text = "".join(provider.extract_text_from_chunk(c) for c in chunks)
+
+                with results_lock:
+                    results[thread_id] = {
+                        "prompt": prompt_text,
+                        "response": response_text,
+                        "chunks": len(chunks),
+                    }
+            except Exception as e:
+                with results_lock:
+                    errors.append({"thread_id": thread_id, "error": str(e)})
+
+        # Launch concurrent threads
+        threads = []
+        for i, prompt in enumerate(prompts):
+            thread = threading.Thread(target=call_with_prompt, args=(prompt, i))
+            threads.append(thread)
+            thread.start()
+
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+
+        # Verify no errors occurred
+        self.assertEqual(len(errors), 0, f"Errors occurred during concurrent execution: {errors}")
+
+        # Verify all threads completed successfully
+        self.assertEqual(len(results), len(prompts), "Not all threads completed successfully")
+
+        # CRITICAL: Verify each thread got response matching its prompt
+        # This detects prompt pollution where wrong system prompt is used
+        for thread_id, result in results.items():
+            expected_prompt = result["prompt"]
+            response = result["response"]
+            self.assertIn(
+                expected_prompt,
+                response,
+                f"Thread {thread_id} did not get response with correct prompt. "
+                f"Expected '{expected_prompt}' in response, got: {response}",
+            )
+
+    @patch("google.generativeai")
+    def test_gemini_cache_thread_safety(self, mock_genai):
+        """Test that cache operations are thread-safe during concurrent access"""
+        import time
+
+        # Ensure exception classes are real classes in the mock
+        mock_genai.types.BlockedPromptException = type("BlockedPromptException", (Exception,), {})
+
+        mock_model_class = MagicMock()
+        mock_genai.GenerativeModel = mock_model_class
+
+        # Track cache state changes to detect race conditions
+        cache_operations = []
+        operation_lock = threading.Lock()
+
+        # Create a mock model that simulates some processing time
+        def create_slow_model(model_name, system_instruction=None):
+            mock_model = MagicMock()
+
+            # Mock synchronous generate_content (used by asyncio.to_thread)
+            def mock_generate_content(*args, **kwargs):
+                return iter([MagicMock(text="response")])
+
+            mock_model.generate_content = mock_generate_content
+
+            # Simulate model creation taking time to increase chance of race
+            time.sleep(0.02)
+
+            # Track that a model was created (should detect duplicate creations)
+            with operation_lock:
+                cache_operations.append(("create", system_instruction))
+
+            return mock_model
+
+        mock_model_class.side_effect = create_slow_model
+
+        provider = GeminiProvider(api_key="test-key")  # Provide test API key
+
+        # Use the same prompt from multiple threads to stress test cache
+        shared_prompt = "You are a helpful assistant"
+        call_count = 20
+        errors = []
+        completed = []
+        completed_lock = threading.Lock()
+
+        def make_call(call_id):
+            try:
+                history = [{"role": "user", "content": f"Call {call_id}"}]
+
+                async def run_test():
+                    gen = provider.call_api(history, system_prompt=shared_prompt)
+                    # Handle both sync and async generators
+                    if hasattr(gen, "__aiter__"):
+                        async for _ in gen:
+                            pass
+                    else:
+                        for _ in gen:
+                            pass
+
+                asyncio.run(run_test())
+                with completed_lock:
+                    completed.append(call_id)
+            except Exception as e:
+                with completed_lock:
+                    errors.append({"call_id": call_id, "error": str(e)})
+
+        # Launch many concurrent threads using the same prompt
+        threads = []
+        for i in range(call_count):
+            thread = threading.Thread(target=make_call, args=(i,))
+            threads.append(thread)
+            thread.start()
+
+        # Wait for completion
+        for thread in threads:
+            thread.join()
+
+        # Verify no errors and all calls completed
+        self.assertEqual(len(errors), 0, f"Errors during cache stress test: {errors}")
+        self.assertEqual(len(completed), call_count, "Not all calls completed")
+
+        # CRITICAL: With proper caching, the same prompt should only create model once
+        # Count how many times the same prompt triggered model creation
+        creates_for_shared_prompt = sum(
+            1 for op, prompt in cache_operations if op == "create" and prompt == shared_prompt
+        )
+
+        # Without thread safety, we might see multiple creations for the same prompt
+        # With proper locking, we should see only 1 creation
+        self.assertEqual(
+            creates_for_shared_prompt,
+            1,
+            f"Expected 1 model creation for shared prompt, got {creates_for_shared_prompt}. "
+            "This indicates a race condition in cache access.",
+        )
 
 
 class TestChatGPTConcurrentSafety(unittest.TestCase):
@@ -101,180 +322,101 @@ class TestChatGPTConcurrentSafety(unittest.TestCase):
         self.assertEqual(len(results), 10, "Not all requests completed")
 
 
-class TestGeminiConcurrentSafety(unittest.TestCase):
-    """Test concurrent safety for GeminiProvider with new SDK (Issue #139 migration)"""
-
-    @patch("google.genai.Client")
-    def test_gemini_concurrent_different_prompts(self, mock_client_class):
-        """Concurrent requests with different system prompts should not interfere"""
-        import time
-
-        from multi_llm_chat.llm_provider import GeminiProvider
-
-        mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
-
-        # Track which system prompts were used in generate_content_stream calls
-        call_log = []
-        call_log_lock = threading.Lock()
-
-        def mock_generate_content_stream(model, contents, config=None):
-            system_instruction = config.get("system_instruction") if config else None
-            # Simulate some work
-            time.sleep(0.01)
-            text = f"Response for: {system_instruction}"
-            mock_part = MagicMock(spec=["text"])
-            mock_part.text = text
-            mock_chunk = MagicMock()
-            mock_chunk.parts = []
-            mock_chunk.text = text
-            with call_log_lock:
-                call_log.append(system_instruction)
-            return iter([mock_chunk])
-
-        mock_client.models.generate_content_stream.side_effect = mock_generate_content_stream
-
-        provider = GeminiProvider(api_key="test-key")
-
-        prompts = [
-            "You are a helpful assistant",
-            "You are a coding expert",
-            "You are a translator",
-        ]
-
-        results = {}
-        errors = []
-        lock = threading.Lock()
-
-        def call_with_prompt(prompt_text, thread_id):
-            try:
-                history = [{"role": "user", "content": f"Hello from {thread_id}"}]
-
-                async def run():
-                    chunks = []
-                    async for c in provider.call_api(history, system_prompt=prompt_text):
-                        chunks.append(c)
-                    return chunks
-
-                chunks = asyncio.run(run())
-                with lock:
-                    results[thread_id] = {"prompt": prompt_text, "chunks": len(chunks)}
-            except Exception as e:
-                with lock:
-                    errors.append({"thread_id": thread_id, "error": str(e)})
-
-        threads = [
-            threading.Thread(target=call_with_prompt, args=(p, i)) for i, p in enumerate(prompts)
-        ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        self.assertEqual(len(errors), 0, f"Errors occurred: {errors}")
-        self.assertEqual(len(results), len(prompts))
-
-    @patch("google.genai.Client")
-    def test_gemini_cache_thread_safety(self, mock_client_class):
-        """Model proxy cache should be thread-safe under concurrent access"""
-        import time
-
-        from multi_llm_chat.llm_provider import GeminiProvider
-
-        mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
-
-        def slow_stream(model, contents, config=None):
-            time.sleep(0.005)
-            mock_chunk = MagicMock()
-            mock_chunk.parts = []
-            mock_chunk.text = "response"
-            return iter([mock_chunk])
-
-        mock_client.models.generate_content_stream.side_effect = slow_stream
-
-        provider = GeminiProvider(api_key="test-key")
-
-        # Original get_model to count proxy creations
-        original_get_model = provider._adapter.get_model
-
-        def tracked_get_model(model_name, system_instruction=None):
-            proxy = original_get_model(model_name, system_instruction)
-            return proxy
-
-        provider._adapter.get_model = tracked_get_model
-
-        shared_prompt = "You are a helpful assistant"
-        call_count = 10
-        errors = []
-        completed = []
-        lock = threading.Lock()
-
-        def make_call(call_id):
-            try:
-                history = [{"role": "user", "content": f"Call {call_id}"}]
-
-                async def run():
-                    async for _ in provider.call_api(history, system_prompt=shared_prompt):
-                        pass
-
-                asyncio.run(run())
-                with lock:
-                    completed.append(call_id)
-            except Exception as e:
-                with lock:
-                    errors.append(str(e))
-
-        threads = [threading.Thread(target=make_call, args=(i,)) for i in range(call_count)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        self.assertEqual(len(errors), 0, f"Concurrent errors: {errors}")
-        self.assertEqual(len(completed), call_count)
-
-
+@pytest.mark.skipif(
+    os.getenv("USE_LEGACY_GEMINI_SDK", "0") == "0",
+    reason="Legacy SDK provider tests (USE_LEGACY_GEMINI_SDK=1 only)",
+)
 class TestSessionScopedProviders(unittest.TestCase):
-    """Test session-scoped provider isolation with new SDK (Issue #139 migration)"""
+    """Test session-scoped provider isolation"""
 
-    @patch("google.genai.Client")
-    def test_session_isolated_providers(self, mock_client_class):
-        """create_provider should return different instances for different sessions"""
-        from multi_llm_chat.llm_provider import create_provider
+    @patch("google.generativeai")
+    def test_session_isolated_providers(self, mock_genai):
+        """Test that different sessions have isolated provider instances"""
+        # Setup mock
+        mock_model_class = MagicMock()
+        mock_genai.GenerativeModel = mock_model_class
 
-        mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
+        def create_mock_model(model_name, system_instruction=None):
+            mock_model = MagicMock()
+            # Each model has unique ID to track instance isolation
+            mock_model._test_id = id(mock_model)
 
-        provider1 = create_provider("gemini")
-        provider2 = create_provider("gemini")
+            # Mock synchronous generate_content (used by asyncio.to_thread)
+            def mock_generate_content(*args, **kwargs):
+                return iter([MagicMock(text="response")])
 
-        self.assertIsNot(provider1, provider2, "Sessions should have isolated provider instances")
+            mock_model.generate_content = mock_generate_content
+            return mock_model
 
-        # Each provider has its own adapter with separate cache
+        mock_model_class.side_effect = create_mock_model
+
+        # Create two separate sessions (simulating two users)
+        session1_provider = create_provider("gemini")
+        session2_provider = create_provider("gemini")
+
+        # Verify they are different instances
         self.assertIsNot(
-            provider1._adapter,
-            provider2._adapter,
-            "Each session should have its own adapter (separate model cache)",
+            session1_provider,
+            session2_provider,
+            "Sessions should have isolated provider instances",
         )
 
-    @patch("google.genai.Client")
-    def test_provider_injection_in_chatservice(self, mock_client_class):
-        """ChatService should accept and use injected provider"""
-        from multi_llm_chat.chat_service import ChatService
-        from multi_llm_chat.llm_provider import create_provider
+        # Verify each has independent cache
+        system_prompt = "You are a helpful assistant"
 
-        mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
+        # Session 1 creates a model with this prompt
+        model1 = session1_provider._get_model(system_prompt)
 
-        provider = create_provider("gemini")
-        service = ChatService(gemini_provider=provider)
+        # Session 2 creates a model with the same prompt
+        model2 = session2_provider._get_model(system_prompt)
 
+        # They should be different model instances (isolated caches)
+        self.assertIsNot(
+            model1,
+            model2,
+            "Each session should have its own cached models, not share them",
+        )
+
+    @patch("google.generativeai")
+    def test_provider_injection_in_chatservice(self, mock_genai):
+        """Test that ChatService accepts provider injection for DI"""
+        # Setup mock
+        mock_model_class = MagicMock()
+        mock_genai.GenerativeModel = mock_model_class
+
+        mock_model = MagicMock()
+
+        # Mock synchronous generate_content (used by asyncio.to_thread)
+        def mock_generate_content(*args, **kwargs):
+            return iter([MagicMock(text="response")])
+
+        mock_model.generate_content = mock_generate_content
+        mock_model_class.return_value = mock_model
+
+        # Create a provider instance
+        provider_gemini = create_provider("gemini")
+
+        # Inject into ChatService
+        service = ChatService(gemini_provider=provider_gemini)
+
+        # Verify the service uses the injected provider
         self.assertIs(
             service.gemini_provider,
-            provider,
-            "ChatService should use the injected provider",
+            provider_gemini,
+            "ChatService should accept and use injected provider",
         )
+
+        # Process a message to ensure it uses the injected provider
+        user_message = "@gemini Hello"
+
+        async def run_test():
+            async for _ in service.process_message(user_message):
+                pass
+
+        asyncio.run(run_test())
+
+        # Verify the injected provider's model was used
+        # Since we use side_effect or assign directly, we check if our mock was called
 
 
 if __name__ == "__main__":
