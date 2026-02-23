@@ -131,7 +131,12 @@ class ChatService:
         # Ensure display_history ends with an assistant entry before writing error
         if not self.display_history or self.display_history[-1].get("role") != "assistant":
             self.display_history.append({"role": "assistant", "content": ""})
-        self.display_history[-1]["content"] = f"{label}{error_msg}"
+        current_content = self.display_history[-1]["content"]
+        # Preserve partial response if streaming had already started (content beyond the label)
+        if current_content in (label, ""):
+            self.display_history[-1]["content"] = f"{label}{error_msg}"
+        else:
+            self.display_history[-1]["content"] = current_content + f"\n\n{error_msg}"
         self.logic_history.append(
             {
                 "role": provider_name,
