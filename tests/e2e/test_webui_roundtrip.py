@@ -37,5 +37,5 @@ async def test_webui_validate_and_respond_roundtrip(
 
     assert logic_history[-1]["role"] == "gemini"
     assert logic_history[-1]["content"][0]["content"] == "Hello WebUI!"
-    assert display_history[-1][1].startswith("**Gemini:**")
-    assert "Hello WebUI!" in display_history[-1][1]
+    assert display_history[-1]["content"].startswith("**Gemini:**")
+    assert "Hello WebUI!" in display_history[-1]["content"]

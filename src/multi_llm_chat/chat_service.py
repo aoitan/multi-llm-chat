@@ -128,7 +128,7 @@ class ChatService:
             # Other API errors (network, blocked prompts, etc.)
             error_msg = f"[System: {provider_title} APIエラー - {str(error)}]"
 
-        self.display_history[-1][1] = f"{label}{error_msg}"
+        self.display_history[-1]["content"] = f"{label}{error_msg}"
         self.logic_history.append(
             {
                 "role": provider_name,
@@ -154,7 +154,7 @@ class ChatService:
         # Add user message to histories (structured format)
         user_entry = {"role": "user", "content": [{"type": "text", "content": user_message}]}
         self.logic_history.append(user_entry)
-        self.display_history.append([user_message, None])
+        self.display_history.append({"role": "user", "content": user_message})
         yield self.display_history, self.logic_history, {"type": "text", "content": ""}
 
         # If no mention, treat as memo (no LLM call)
@@ -175,11 +175,8 @@ class ChatService:
             provider = self.gemini_provider if model_name == "gemini" else self.chatgpt_provider
             label = ASSISTANT_LABELS[model_name]
 
-            # For @all, we might need a new row in display_history for the second model
-            if mention == "all" and model_name == "chatgpt":
-                self.display_history.append([None, label])
-            else:
-                self.display_history[-1][1] = label
+            # Add assistant entry for this model's response
+            self.display_history.append({"role": "assistant", "content": label})
 
             yield self.display_history, self.logic_history, {"type": "text", "content": ""}
 
@@ -215,7 +212,7 @@ class ChatService:
 
                     if chunk_type == "text":
                         if content:
-                            self.display_history[-1][1] += content
+                            self.display_history[-1]["content"] += content
 
                     yield self.display_history, self.logic_history, chunk
 
@@ -238,7 +235,7 @@ class ChatService:
                     error_message = (
                         f"[System: {model_name.capitalize()}からの応答がありませんでした]"
                     )
-                    self.display_history[-1][1] += error_message
+                    self.display_history[-1]["content"] += error_message
                     new_entry = {
                         "role": model_name,
                         "content": [{"type": "text", "content": error_message}],

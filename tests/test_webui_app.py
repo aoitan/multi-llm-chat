@@ -117,7 +117,10 @@ class TestWebUIApp:
         display_history = logic_history_to_display(logic_history)
 
         # Now includes tool call in formatted output
-        assert display_history == [["hi", "**Gemini:**\nG-1 G-2\n\n🔧 **Tool Call**: tool\n"]]
+        assert display_history == [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "**Gemini:**\nG-1 G-2\n\n🔧 **Tool Call**: tool\n"},
+        ]
 
     def test_logic_history_to_display_preserves_tool_execution_logs(self):
         """Test that tool role entries and tool_result are preserved in display history."""
@@ -157,8 +160,9 @@ class TestWebUIApp:
         display_history = logic_history_to_display(logic_history)
 
         # Tool call and tool result should be visible
-        assert len(display_history) == 1
-        user_msg, assistant_msg = display_history[0]
+        assert len(display_history) == 2
+        user_msg = display_history[0]["content"]
+        assistant_msg = display_history[1]["content"]
         assert user_msg == "search for python"
         assert "Let me search." in assistant_msg
         assert "🔧 **Tool Call**: web_search" in assistant_msg

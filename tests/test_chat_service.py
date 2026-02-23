@@ -299,8 +299,7 @@ class TestChatServiceProcessMessage:
 
         # Display should show user message with no response
         assert len(final_display) == 1
-        assert final_display[0][0] == "This is a memo"
-        assert final_display[0][1] is None
+        assert final_display[0]["content"] == "This is a memo"
 
     @pytest.mark.asyncio
     async def test_append_tool_results_adds_tool_entry(self):
@@ -468,10 +467,10 @@ class TestChatServiceErrorHandling(
         final_display, final_logic, _chunk = results[-1]
 
         # Error message should be in display history
-        assert len(final_display) == 1
-        assert "hello" in final_display[0][0]
-        assert "[System: Gemini APIエラー" in final_display[0][1]
-        assert "Network error" in final_display[0][1]
+        assert len(final_display) == 2
+        assert "hello" in final_display[0]["content"]
+        assert "[System: Gemini APIエラー" in final_display[1]["content"]
+        assert "Network error" in final_display[1]["content"]
 
     @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
@@ -496,8 +495,8 @@ class TestChatServiceErrorHandling(
         final_display, final_logic, _chunk = results[-1]
 
         # Error message should be in display history
-        assert "[System: エラー" in final_display[0][1]
-        assert "API key missing" in final_display[0][1]
+        assert "[System: エラー" in final_display[1]["content"]
+        assert "API key missing" in final_display[1]["content"]
 
     @patch("multi_llm_chat.chat_service.create_provider")
     @pytest.mark.asyncio
@@ -523,8 +522,8 @@ class TestChatServiceErrorHandling(
         final_display, final_logic, _chunk = results[-1]
 
         # display_historyにエラーメッセージが表示されること
-        assert len(final_display) == 1
-        assert "応答がありませんでした" in final_display[0][1]
+        assert len(final_display) == 2
+        assert "応答がありませんでした" in final_display[1]["content"]
 
         # logic_historyにもgeminiのエラーメッセージが記録されること (修正後の動作)
         gemini_entries = [e for e in final_logic if e.get("role") == "gemini"]
@@ -570,7 +569,9 @@ class TestChatServiceErrorHandling(
         assert len(final_display) >= 1
         # Check that error message is present (with actual error format)
         error_found = any(
-            "[System:" in msg[1] and "エラー" in msg[1] for msg in final_display if msg[1]
+            "[System:" in msg["content"] and "エラー" in msg["content"]
+            for msg in final_display
+            if msg.get("role") == "assistant" and msg.get("content")
         )
         assert error_found
 
@@ -601,8 +602,8 @@ class TestChatServiceEmptyResponseHandling(
 
         # Should have added error message to display_history
         final_display, final_logic, _chunk = results[-1]
-        assert len(final_display) == 1
-        assert "[System: Geminiからの応答がありませんでした]" in final_display[0][1]
+        assert len(final_display) == 2
+        assert "[System: Geminiからの応答がありませんでした]" in final_display[1]["content"]
 
         # Logic history should also have error message
         assert len(final_logic) == 2  # user + gemini
@@ -631,10 +632,10 @@ class TestChatServiceEmptyResponseHandling(
 
         # Should NOT have error message (streaming succeeded partially)
         final_display, final_logic, _chunk = results[-1]
-        assert len(final_display) == 1
+        assert len(final_display) == 2
         # Should only have the gemini label + streamed text
-        assert "部分的な応答" in final_display[0][1]
-        assert "[System: Geminiからの応答がありませんでした]" not in final_display[0][1]
+        assert "部分的な応答" in final_display[1]["content"]
+        assert "[System: Geminiからの応答がありませんでした]" not in final_display[1]["content"]
 
         # Logic history should have accumulated text (concatenated in one entry)
         assert len(final_logic) == 2
