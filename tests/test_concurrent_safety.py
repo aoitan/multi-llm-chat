@@ -180,7 +180,8 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
         self.assertEqual(len(results), len(prompts))
         # 各スレッドが自分のプロンプトに対応した応答を受け取っていることを確認
         for _thread_id, result in results.items():
-            self.assertIn(result["prompt"], result["response"])
+            expected_response = f"Response for: {result['prompt']}"
+            self.assertEqual(result["response"], expected_response)
 
     @patch("google.genai.Client")
     def test_gemini_cache_thread_safety(self, mock_client_class):
@@ -236,7 +237,7 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
         self.assertEqual(
             len(provider._adapter._model_cache),
             1,
-            "Model proxy should be cached exactly once for the same prompt",
+            "同一プロンプトに対してモデルプロキシは一度だけキャッシュされるべきです",
         )
 
 
