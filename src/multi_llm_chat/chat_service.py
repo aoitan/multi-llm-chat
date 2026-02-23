@@ -128,6 +128,9 @@ class ChatService:
             # Other API errors (network, blocked prompts, etc.)
             error_msg = f"[System: {provider_title} APIエラー - {str(error)}]"
 
+        # Ensure display_history ends with an assistant entry before writing error
+        if not self.display_history or self.display_history[-1].get("role") != "assistant":
+            self.display_history.append({"role": "assistant", "content": ""})
         self.display_history[-1]["content"] = f"{label}{error_msg}"
         self.logic_history.append(
             {
