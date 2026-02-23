@@ -168,3 +168,23 @@ class TestWebUIApp:
         assert "🔧 **Tool Call**: web_search" in assistant_msg
         assert "✅ **Result** (web_search):" in assistant_msg
         assert "Found results!" in assistant_msg
+
+    def test_logic_history_to_display_all_produces_separate_bubbles(self):
+        """@all の Gemini/ChatGPT 応答はそれぞれ別のアシスタントバブルになること"""
+        logic_history = [
+            {"role": "user", "content": "@all compare"},
+            {"role": "gemini", "content": [{"type": "text", "content": "Gemini answer"}]},
+            {"role": "chatgpt", "content": [{"type": "text", "content": "ChatGPT answer"}]},
+        ]
+
+        display_history = logic_history_to_display(logic_history)
+
+        # user + gemini bubble + chatgpt bubble = 3 entries
+        assert len(display_history) == 3
+        assert display_history[0] == {"role": "user", "content": "@all compare"}
+        assert display_history[1]["role"] == "assistant"
+        assert "**Gemini:**" in display_history[1]["content"]
+        assert "Gemini answer" in display_history[1]["content"]
+        assert display_history[2]["role"] == "assistant"
+        assert "**ChatGPT:**" in display_history[2]["content"]
+        assert "ChatGPT answer" in display_history[2]["content"]

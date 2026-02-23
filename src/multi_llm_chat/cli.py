@@ -47,7 +47,7 @@ async def _process_service_stream(service, user_message):
     # Process message through ChatService with streaming
     async for display_hist, logic_hist, chunk in service.process_message(user_message):  # noqa: B007
         # Print only new content from display_history (incremental streaming)
-        # display_history format: [[user_msg, assistant_msg], ...]
+        # display_history format: [{"role": "user"/"assistant", "content": "..."}, ...]
 
         if not display_hist:
             continue
@@ -67,7 +67,8 @@ async def _process_service_stream(service, user_message):
             last_printed_idx = len(display_hist)
 
         # Get the latest assistant message (currently streaming)
-        _user_msg, assistant_msg = display_hist[-1]
+        last_entry = display_hist[-1]
+        assistant_msg = last_entry["content"] if last_entry.get("role") == "assistant" else ""
 
         if not assistant_msg:
             continue

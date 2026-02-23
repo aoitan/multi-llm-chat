@@ -40,8 +40,11 @@ def logic_history_to_display(logic_history):
     Returns a list of {"role": "user"/"assistant", "content": str} dicts
     compatible with Gradio v6 Chatbot (messages format).
     Tool execution logs (tool_call and tool_result) are preserved for audit trails.
+    Each assistant model (e.g., Gemini vs ChatGPT) gets its own separate entry,
+    while consecutive turns from the same model are merged.
     """
     display_history = []
+    current_assistant_role = None  # Track which model occupies the current assistant bubble
     for turn in logic_history:
         if turn["role"] == "user":
             display_history.append(
@@ -50,6 +53,7 @@ def logic_history_to_display(logic_history):
                     "content": content_to_text(turn.get("content", ""), include_tool_data=False),
                 }
             )
+            current_assistant_role = None
         elif turn["role"] in ASSISTANT_ROLES and display_history:
             # Extract text content and tool execution logs separately
             content = turn.get("content", "")
@@ -74,16 +78,23 @@ def logic_history_to_display(logic_history):
             if tool_logs:
                 formatted_content += "".join(tool_logs)
 
-            # Add to or merge into the last assistant entry
-            if not display_history or display_history[-1]["role"] != "assistant":
+            # Different model from current → start a new assistant bubble
+            need_new_bubble = (
+                current_assistant_role != turn["role"]
+                or not display_history
+                or display_history[-1]["role"] != "assistant"
+            )
+            if need_new_bubble:
                 display_history.append({"role": "assistant", "content": ""})
+                current_assistant_role = turn["role"]
+
             current_response = display_history[-1]["content"]
             if current_response:
                 display_history[-1]["content"] = current_response + "\n\n" + formatted_content
             else:
                 display_history[-1]["content"] = formatted_content
         elif turn["role"] == "tool" and display_history:
-            # Handle tool role (contains tool_result)
+            # Handle tool role (contains tool_result); append to current assistant bubble
             content = turn.get("content", [])
             if isinstance(content, list):
                 tool_logs = []
