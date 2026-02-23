@@ -245,6 +245,7 @@ class TestSessionScopedProviders(unittest.TestCase):
     """Test session-scoped provider isolation with new SDK (Issue #139 migration)"""
 
     @patch("google.genai.Client")
+    @patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"})
     def test_session_isolated_providers(self, mock_client_class):
         """create_provider should return different instances for different sessions"""
         from multi_llm_chat.llm_provider import create_provider
@@ -258,6 +259,9 @@ class TestSessionScopedProviders(unittest.TestCase):
         self.assertIsNot(provider1, provider2, "Sessions should have isolated provider instances")
 
         # Each provider has its own adapter with separate cache
+        self.assertIsNotNone(
+            provider1._adapter, "Adapter should be initialized when API key is set"
+        )
         self.assertIsNot(
             provider1._adapter,
             provider2._adapter,
