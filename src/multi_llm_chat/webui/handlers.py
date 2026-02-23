@@ -35,16 +35,25 @@ def format_tool_response(response_type, content):
 
 
 def logic_history_to_display(logic_history):
-    """Converts logic history to display history format.
+    """Converts logic history to display history format (messages format).
 
-    Now preserves tool execution logs (tool_call and tool_result) for audit trails.
+    Returns a list of {"role": "user"/"assistant", "content": str} dicts
+    compatible with Gradio v6 Chatbot (messages format).
+    Tool execution logs (tool_call and tool_result) are preserved for audit trails.
+    Each assistant model (e.g., Gemini vs ChatGPT) gets its own separate entry,
+    while consecutive turns from the same model are merged.
     """
     display_history = []
+    current_assistant_role = None  # Track which model occupies the current assistant bubble
     for turn in logic_history:
         if turn["role"] == "user":
             display_history.append(
-                [content_to_text(turn.get("content", ""), include_tool_data=False), ""]
+                {
+                    "role": "user",
+                    "content": content_to_text(turn.get("content", ""), include_tool_data=False),
+                }
             )
+            current_assistant_role = None
         elif turn["role"] in ASSISTANT_ROLES and display_history:
             # Extract text content and tool execution logs separately
             content = turn.get("content", "")
@@ -69,13 +78,23 @@ def logic_history_to_display(logic_history):
             if tool_logs:
                 formatted_content += "".join(tool_logs)
 
-            current_response = display_history[-1][1]
+            # Different model from current → start a new assistant bubble
+            need_new_bubble = (
+                current_assistant_role != turn["role"]
+                or not display_history
+                or display_history[-1]["role"] != "assistant"
+            )
+            if need_new_bubble:
+                display_history.append({"role": "assistant", "content": ""})
+                current_assistant_role = turn["role"]
+
+            current_response = display_history[-1]["content"]
             if current_response:
-                display_history[-1][1] = current_response + "\n\n" + formatted_content
+                display_history[-1]["content"] = current_response + "\n\n" + formatted_content
             else:
-                display_history[-1][1] = formatted_content
+                display_history[-1]["content"] = formatted_content
         elif turn["role"] == "tool" and display_history:
-            # Handle tool role (contains tool_result)
+            # Handle tool role (contains tool_result); append to current assistant bubble
             content = turn.get("content", [])
             if isinstance(content, list):
                 tool_logs = []
@@ -84,8 +103,9 @@ def logic_history_to_display(logic_history):
                         tool_logs.append(format_tool_response("tool_result", part))
 
                 if tool_logs:
-                    current_response = display_history[-1][1]
-                    display_history[-1][1] = current_response + "".join(tool_logs)
+                    if not display_history or display_history[-1]["role"] != "assistant":
+                        display_history.append({"role": "assistant", "content": ""})
+                    display_history[-1]["content"] += "".join(tool_logs)
     return display_history
 
 
@@ -258,7 +278,7 @@ async def respond(
             # Format and add tool response to display history
             formatted = format_tool_response(chunk_type, chunk.get("content", {}))
             if formatted:
-                updated_display[-1][1] += formatted
+                updated_display[-1]["content"] += formatted
 
         yield updated_display, updated_display, updated_logic, chat_service
 
@@ -271,7 +291,10 @@ async def validate_and_respond(
     user_idを検証し、無効な場合はエラーを返し、有効な場合は `respond` に処理を委譲します。
     """
     if not user_id or not user_id.strip():
-        display_history.append([user_message, "[System: ユーザーIDを入力してください]"])
+        display_history.append({"role": "user", "content": user_message})
+        display_history.append(
+            {"role": "assistant", "content": "[System: ユーザーIDを入力してください]"}
+        )
         yield display_history, display_history, logic_history, chat_service
         return
 

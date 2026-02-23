@@ -96,14 +96,12 @@ with gr.Blocks() as demo:
     chat_service_state = gr.State(None)
 
     # UIコンポーネント
-    # Issue #119: Gradio Chatbot configuration for v5.x compatibility
+    # Gradio 6.x: messages形式がデフォルト（type引数は廃止）
     chatbot_ui = gr.Chatbot(
         label="Conversation",
         height=600,
-        type="tuples",  # handlers.py returns [[user, assistant], ...] format
-        # show_copy_button removed to eliminate DeprecationWarning
-        #   (use buttons=["copy"] in Gradio 6.0)
-        allow_tags=False,  # Explicit value (default changing in v6.0)
+        buttons=["copy"],
+        allow_tags=False,
     )
 
     with gr.Row():

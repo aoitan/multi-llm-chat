@@ -138,7 +138,7 @@ class TestWebUIHandlers:
         results = asyncio.run(consume_async_gen(result_gen))
         assert len(results) == 1
         final_display = results[0][0]
-        assert "ユーザーIDを入力してください" in final_display[0][1]
+        assert "ユーザーIDを入力してください" in final_display[1]["content"]
 
     def test_validate_and_respond_delegates_to_respond(self):
         """handlers.validate_and_respond: should delegate to respond() when user_id is valid."""
@@ -241,9 +241,10 @@ class TestWebUIHandlers:
 
             # Verify tool logs are in display history
             assert display is not None
-            # Should have one turn with tool logs embedded in assistant response
-            assert len(display) == 1
-            user_msg, assistant_msg = display[0]
+            # Should have user + assistant messages with tool logs embedded
+            assert len(display) == 2
+            user_msg = display[0]["content"]
+            assistant_msg = display[1]["content"]
             assert "Use a tool" in user_msg
             # Tool logs should be formatted with emojis
             assert "🔧" in assistant_msg  # Tool call indicator

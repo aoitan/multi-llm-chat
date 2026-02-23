@@ -430,7 +430,10 @@ def test_cli_uses_chat_service_for_message_processing(monkeypatch):
                 # Mock the generator to yield display and logic history and chunk
                 async def mock_gen(*args, **kwargs):
                     yield (
-                        [["Hello", "Hi there"]],
+                        [
+                            {"role": "user", "content": "Hello"},
+                            {"role": "assistant", "content": "**Gemini:**\nHi there"},
+                        ],
                         [
                             {"role": "user", "content": "Hello"},
                             {"role": "gemini", "content": "Hi there"},
