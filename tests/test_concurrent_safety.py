@@ -157,8 +157,13 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
                     return chunks
 
                 chunks = asyncio.run(run())
+                response_text = "".join(provider.extract_text_from_chunk(c) for c in chunks)
                 with lock:
-                    results[thread_id] = {"prompt": prompt_text, "chunks": len(chunks)}
+                    results[thread_id] = {
+                        "prompt": prompt_text,
+                        "response": response_text,
+                        "chunks": len(chunks),
+                    }
             except Exception as e:
                 with lock:
                     errors.append({"thread_id": thread_id, "error": str(e)})
@@ -173,6 +178,10 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
 
         self.assertEqual(len(errors), 0, f"Errors occurred: {errors}")
         self.assertEqual(len(results), len(prompts))
+        # 各スレッドが自分のプロンプトに対応した応答を受け取っていることを確認
+        for _thread_id, result in results.items():
+            expected_response = f"Response for: {result['prompt']}"
+            self.assertEqual(result["response"], expected_response)
 
     @patch("google.genai.Client")
     def test_gemini_cache_thread_safety(self, mock_client_class):
@@ -194,15 +203,6 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
         mock_client.models.generate_content_stream.side_effect = slow_stream
 
         provider = GeminiProvider(api_key="test-key")
-
-        # Original get_model to count proxy creations
-        original_get_model = provider._adapter.get_model
-
-        def tracked_get_model(model_name, system_instruction=None):
-            proxy = original_get_model(model_name, system_instruction)
-            return proxy
-
-        provider._adapter.get_model = tracked_get_model
 
         shared_prompt = "You are a helpful assistant"
         call_count = 10
@@ -233,6 +233,12 @@ class TestGeminiConcurrentSafety(unittest.TestCase):
 
         self.assertEqual(len(errors), 0, f"Concurrent errors: {errors}")
         self.assertEqual(len(completed), call_count)
+        # 同一プロンプトに対してモデルプロキシは1個だけキャッシュされることを確認
+        self.assertEqual(
+            len(provider._adapter._model_cache),
+            1,
+            "同一プロンプトに対してモデルプロキシは一度だけキャッシュされるべきです",
+        )
 
 
 class TestSessionScopedProviders(unittest.TestCase):
@@ -241,17 +247,21 @@ class TestSessionScopedProviders(unittest.TestCase):
     @patch("google.genai.Client")
     def test_session_isolated_providers(self, mock_client_class):
         """create_provider should return different instances for different sessions"""
-        from multi_llm_chat.llm_provider import create_provider
+        from multi_llm_chat.providers.gemini import GeminiProvider
 
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
 
-        provider1 = create_provider("gemini")
-        provider2 = create_provider("gemini")
+        # api_key を直接渡してアダプターが必ず生成されるようにする
+        provider1 = GeminiProvider(api_key="test-key-1")
+        provider2 = GeminiProvider(api_key="test-key-2")
 
         self.assertIsNot(provider1, provider2, "Sessions should have isolated provider instances")
 
         # Each provider has its own adapter with separate cache
+        self.assertIsNotNone(
+            provider1._adapter, "Adapter should be initialized when API key is set"
+        )
         self.assertIsNot(
             provider1._adapter,
             provider2._adapter,
