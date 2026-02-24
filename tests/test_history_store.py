@@ -56,6 +56,105 @@ def test_history_store_list(tmp_path):
     assert names == ["A chat", "B chat"]
 
 
+def test_save_and_load_autosave(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+
+    turns = [{"role": "user", "content": "draft message"}]
+    store.save_autosave("user-1", system_prompt="autosave sys", turns=turns)
+
+    assert store.has_autosave("user-1") is True
+
+    loaded = store.load_autosave("user-1")
+    assert loaded is not None
+    assert loaded["type"] == "autosave_draft"
+    assert loaded["schema_version"] == 1
+    assert loaded["user_id"] == "user-1"
+    assert loaded["system_prompt"] == "autosave sys"
+    assert loaded["turns"] == [
+        {"role": "user", "content": [{"type": "text", "content": "draft message"}]}
+    ]
+    datetime.fromisoformat(loaded["metadata"]["updated_at"])
+
+
+def test_autosave_schema_mismatch_ignored(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+    store.save_autosave("user-1", system_prompt="sys", turns=[])
+
+    autosave_path = tmp_path / "user-1" / "_autosave.json"
+    raw = json.loads(autosave_path.read_text())
+    raw["schema_version"] = 999
+    autosave_path.write_text(json.dumps(raw, ensure_ascii=False, indent=2))
+
+    # schema mismatch should not raise; it should be ignored
+    assert store.load_autosave("user-1") is None
+
+
+def test_autosave_does_not_break_manual_history(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+
+    store.save_autosave(
+        "user-1",
+        system_prompt="autosave sys",
+        turns=[{"role": "user", "content": "draft"}],
+    )
+
+    store.save_history(
+        "user-1",
+        "Named Chat",
+        system_prompt="manual sys",
+        turns=[{"role": "user", "content": "manual"}],
+    )
+
+    manual_loaded = store.load_history("user-1", "Named Chat")
+    assert manual_loaded["display_name"] == "Named Chat"
+    assert manual_loaded["system_prompt"] == "manual sys"
+    assert manual_loaded["turns"] == [
+        {"role": "user", "content": [{"type": "text", "content": "manual"}]}
+    ]
+
+    autosave_loaded = store.load_autosave("user-1")
+    assert autosave_loaded is not None
+    assert autosave_loaded["system_prompt"] == "autosave sys"
+
+
+def test_manual_history_reserved_name_rejected(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+
+    with pytest.raises(ValueError):
+        store.history_exists("user-1", "_autosave")
+
+    with pytest.raises(ValueError):
+        store.save_history("user-1", "_autosave", system_prompt="", turns=[])
+
+    with pytest.raises(ValueError):
+        store.load_history("user-1", "_autosave")
+
+
+def test_load_autosave_invalid_json_shape_ignored(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+    autosave_path = tmp_path / "user-1" / "_autosave.json"
+    autosave_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Top-level JSON is not an object
+    autosave_path.write_text(json.dumps([]))
+    assert store.load_autosave("user-1") is None
+
+    # metadata is not an object
+    autosave_path.write_text(
+        json.dumps(
+            {
+                "type": "autosave_draft",
+                "schema_version": 1,
+                "user_id": "user-1",
+                "system_prompt": "",
+                "turns": [],
+                "metadata": "invalid",
+            }
+        )
+    )
+    assert store.load_autosave("user-1") is None
+
+
 def test_cli_history_save_and_load(tmp_path, monkeypatch):
     monkeypatch.setenv("CHAT_HISTORY_DIR", str(tmp_path))
     monkeypatch.setenv("CHAT_HISTORY_USER_ID", "cli-user")

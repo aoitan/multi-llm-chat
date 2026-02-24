@@ -11,6 +11,10 @@ from .history_utils import content_to_text, normalize_history_turns
 # Schema version constants for history storage
 SCHEMA_VERSION_LEGACY = 1  # String-based content (deprecated in v2.0.0)
 SCHEMA_VERSION_STRUCTURED = 2  # List[Dict] content (current)
+AUTOSAVE_SCHEMA_VERSION = 1
+AUTOSAVE_TYPE = "autosave_draft"
+AUTOSAVE_FILENAME = "_autosave.json"
+AUTOSAVE_RESERVED_NAME = Path(AUTOSAVE_FILENAME).stem
 
 
 def _default_base_dir() -> Path:
@@ -35,6 +39,14 @@ def sanitize_name(name: str) -> str:
 
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", raw)
     if sanitized in {"", ".", ".."}:
+        raise ValueError("Invalid name")
+    return sanitized
+
+
+def _sanitize_display_name(display_name: str) -> str:
+    """Sanitize display name and reject reserved autosave filename."""
+    sanitized = sanitize_name(display_name)
+    if sanitized == AUTOSAVE_RESERVED_NAME:
         raise ValueError("Invalid name")
     return sanitized
 
@@ -83,11 +95,18 @@ class HistoryStore:
         return self.base_dir / sanitize_name(user_id)
 
     def _history_path(self, user_id: str, display_name: str) -> Path:
-        return self._user_dir(user_id) / f"{sanitize_name(display_name)}.json"
+        return self._user_dir(user_id) / f"{_sanitize_display_name(display_name)}.json"
+
+    def _autosave_path(self, user_id: str) -> Path:
+        return self._user_dir(user_id) / AUTOSAVE_FILENAME
 
     def history_exists(self, user_id: str, display_name: str) -> bool:
         """Check if a history file already exists."""
         return self._history_path(user_id, display_name).exists()
+
+    def has_autosave(self, user_id: str) -> bool:
+        """Check if an autosave draft file exists for a user."""
+        return self._autosave_path(user_id).exists()
 
     def list_histories(self, user_id: str) -> List[str]:
         """Return sorted display names for a user."""
@@ -141,13 +160,33 @@ class HistoryStore:
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
         return {"path": path, "overwritten": overwritten}
 
+    def save_autosave(self, user_id: str, system_prompt: str, turns):
+        """Persist autosave draft for a user."""
+        user_dir = self._user_dir(user_id)
+        user_dir.mkdir(parents=True, exist_ok=True)
+
+        normalized_turns = normalize_history_turns(turns or [])
+        now = datetime.now(timezone.utc).isoformat()
+
+        payload = {
+            "type": AUTOSAVE_TYPE,
+            "schema_version": AUTOSAVE_SCHEMA_VERSION,
+            "user_id": sanitize_name(user_id),
+            "system_prompt": system_prompt or "",
+            "turns": normalized_turns,
+            "metadata": {"updated_at": now},
+        }
+        path = self._autosave_path(user_id)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+        return {"path": path}
+
     def load_history(self, user_id: str, display_name: str):
         """Load a conversation by display name."""
         user_dir = self._user_dir(user_id)
         if not user_dir.exists():
             raise FileNotFoundError("User directory not found")
 
-        target_sanitized = sanitize_name(display_name)
+        target_sanitized = _sanitize_display_name(display_name)
         for path in user_dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text())
@@ -167,3 +206,34 @@ class HistoryStore:
                 return data
 
         raise FileNotFoundError("History not found")
+
+    def load_autosave(self, user_id: str):
+        """Load autosave draft data for a user.
+
+        Returns None if draft is missing, unreadable, or schema is incompatible.
+        """
+        path = self._autosave_path(user_id)
+        if not path.exists():
+            return None
+
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+        if not isinstance(data, dict):
+            return None
+
+        if data.get("schema_version") != AUTOSAVE_SCHEMA_VERSION:
+            return None
+        if data.get("type") != AUTOSAVE_TYPE:
+            return None
+
+        data.setdefault("system_prompt", "")
+        data["turns"] = normalize_history_turns(data.get("turns", []))
+        metadata = data.get("metadata", {})
+        if not isinstance(metadata, dict):
+            return None
+        if "updated_at" not in metadata:
+            metadata["updated_at"] = datetime.now(timezone.utc).isoformat()
+        data["metadata"] = metadata
+        return data
