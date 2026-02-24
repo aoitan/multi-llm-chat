@@ -155,6 +155,41 @@ def test_load_autosave_invalid_json_shape_ignored(tmp_path):
     assert store.load_autosave("user-1") is None
 
 
+def test_list_histories_filters_out_autosave(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+    store.save_autosave(
+        "user-1",
+        system_prompt="autosave sys",
+        turns=[{"role": "user", "content": "draft"}],
+    )
+    store.save_history(
+        "user-1",
+        "Named Chat",
+        system_prompt="manual sys",
+        turns=[{"role": "user", "content": "manual"}],
+    )
+
+    names = store.list_histories("user-1")
+    assert names == ["Named Chat"]
+
+
+def test_autosave_type_mismatch_ignored(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+    store.save_autosave("user-1", system_prompt="sys", turns=[])
+
+    autosave_path = tmp_path / "user-1" / "_autosave.json"
+    raw = json.loads(autosave_path.read_text())
+    raw["type"] = "wrong_type"
+    autosave_path.write_text(json.dumps(raw, ensure_ascii=False, indent=2))
+
+    assert store.load_autosave("user-1") is None
+
+
+def test_has_autosave_false_when_no_autosave_exists(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+    assert store.has_autosave("user-1") is False
+
+
 def test_cli_history_save_and_load(tmp_path, monkeypatch):
     monkeypatch.setenv("CHAT_HISTORY_DIR", str(tmp_path))
     monkeypatch.setenv("CHAT_HISTORY_USER_ID", "cli-user")
