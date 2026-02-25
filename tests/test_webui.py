@@ -1,7 +1,7 @@
 """Tests for the WebUI package, refactored for the new architecture."""
 
 import asyncio
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from multi_llm_chat.webui.components import update_token_display
 from multi_llm_chat.webui.handlers import (
@@ -172,6 +172,33 @@ class TestWebUIHandlers:
             # Check that the service was initialized and its state was set correctly
             assert mock_service_instance.system_prompt == system_prompt
             mock_service_instance.process_message.assert_called_once_with("@gemini Hello")
+
+    def test_respond_replaces_service_after_cancelling_old_autosave(self):
+        old_service = MagicMock()
+        new_service = MagicMock()
+
+        async def mock_process_message(*args, **kwargs):
+            yield (
+                [["u", "a"]],
+                [{"role": "user", "content": "u"}],
+                {"type": "text", "content": ""},
+            )
+
+        new_service.process_message.side_effect = mock_process_message
+
+        with patch("multi_llm_chat.webui.handlers.ChatService", return_value=new_service):
+            result_gen = validate_and_respond(
+                "Hi",
+                display_history=[],
+                logic_history=[],
+                system_prompt="",
+                user_id="test_user",
+                chat_service=old_service,
+            )
+            asyncio.run(consume_async_gen(result_gen))
+
+        old_service.configure_autosave.assert_called_once_with(user_id=None)
+        new_service.configure_autosave.assert_called_once_with(user_id="test_user")
 
     def test_save_history_action_saves_to_file(self):
         """handlers.save_history_action: should save history to file using HistoryStore"""

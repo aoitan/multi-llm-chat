@@ -1,11 +1,13 @@
 """Tests for ChatService - business logic layer for chat operations"""
 
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from multi_llm_chat.chat_service import ChatService, parse_mention
+from multi_llm_chat.core_modules.agentic_loop import AgenticLoopResult
 
 
 async def consume_async_gen(gen):
@@ -640,6 +642,263 @@ class TestChatServiceEmptyResponseHandling(
         # Logic history should have accumulated text (concatenated in one entry)
         assert len(final_logic) == 2
         assert final_logic[1]["content"][0]["content"] == "部分的な応答"
+
+
+class _FakeAutosaveStore:
+    def __init__(self):
+        self.calls = []
+
+    def save_autosave(self, user_id, system_prompt, turns):
+        self.calls.append(
+            {
+                "user_id": user_id,
+                "system_prompt": system_prompt,
+                "turns": turns,
+            }
+        )
+
+
+class TestChatServiceAutosave:
+    @pytest.mark.asyncio
+    async def test_autosave_updates_on_user_message(self):
+        store = _FakeAutosaveStore()
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=0,
+        )
+
+        await consume_async_gen(service.process_message("memo only"))
+
+        assert len(store.calls) == 1
+        assert store.calls[0]["user_id"] == "user-1"
+        assert store.calls[0]["turns"][-1]["role"] == "user"
+        assert store.calls[0]["turns"][-1]["content"] == [{"type": "text", "content": "memo only"}]
+
+    @patch("multi_llm_chat.chat_service.execute_with_tools_stream")
+    @patch("multi_llm_chat.chat_service.create_provider")
+    @pytest.mark.asyncio
+    async def test_autosave_updates_on_assistant_finalize(
+        self,
+        mock_create_provider,
+        mock_execute_with_tools_stream,
+    ):
+        store = _FakeAutosaveStore()
+        mock_create_provider.return_value = MagicMock(name="gemini_provider")
+
+        async def fake_stream(*args, **kwargs):
+            yield {"type": "text", "content": "done"}
+            yield AgenticLoopResult(
+                chunks=[{"type": "text", "content": "done"}],
+                history_delta=[
+                    {
+                        "role": "gemini",
+                        "content": [{"type": "text", "content": "done"}],
+                    }
+                ],
+                final_text="done",
+                iterations_used=1,
+                timed_out=False,
+                error=None,
+            )
+
+        mock_execute_with_tools_stream.side_effect = fake_stream
+
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=0,
+        )
+        await consume_async_gen(service.process_message("@gemini hi"))
+
+        assert len(store.calls) >= 2
+        assert store.calls[-1]["turns"][-1]["role"] == "gemini"
+        assert store.calls[-1]["turns"][-1]["content"] == [{"type": "text", "content": "done"}]
+
+    @patch("multi_llm_chat.chat_service.execute_with_tools_stream")
+    @patch("multi_llm_chat.chat_service.create_provider")
+    @pytest.mark.asyncio
+    async def test_autosave_debounce(
+        self,
+        mock_create_provider,
+        mock_execute_with_tools_stream,
+    ):
+        store = _FakeAutosaveStore()
+        now = [0.0]
+        sleep_calls = []
+
+        def fake_clock():
+            return now[0]
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+            now[0] += delay
+
+        mock_create_provider.return_value = MagicMock(name="gemini_provider")
+
+        async def fake_stream(*args, **kwargs):
+            yield AgenticLoopResult(
+                chunks=[],
+                history_delta=[
+                    {
+                        "role": "gemini",
+                        "content": [{"type": "text", "content": "done"}],
+                    }
+                ],
+                final_text="done",
+                iterations_used=1,
+                timed_out=False,
+                error=None,
+            )
+
+        mock_execute_with_tools_stream.side_effect = fake_stream
+
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=2.0,
+            autosave_clock=fake_clock,
+            autosave_sleep=fake_sleep,
+        )
+
+        await consume_async_gen(service.process_message("@gemini hi"))
+        await asyncio.sleep(0)
+
+        assert len(store.calls) == 2
+        assert sleep_calls == [2.0]
+        # Debounced flush should persist the latest state (assistant included)
+        assert store.calls[-1]["turns"][-1]["role"] == "gemini"
+
+    @pytest.mark.asyncio
+    async def test_configure_autosave_cancels_previous_pending_task(self):
+        store = _FakeAutosaveStore()
+        now = [0.0]
+        sleep_calls = []
+
+        def fake_clock():
+            return now[0]
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+            now[0] += delay
+
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=2.0,
+            autosave_clock=fake_clock,
+            autosave_sleep=fake_sleep,
+        )
+        # first save (immediate)
+        service.request_autosave()
+        # second request schedules delayed save
+        service.request_autosave()
+        # reconfigure should cancel old pending task
+        service.configure_autosave(user_id="user-2", store=store, min_interval_sec=2.0)
+
+        await asyncio.sleep(0)
+        assert len(store.calls) == 1
+
+    def test_request_autosave_debounces_with_thread_timer_without_running_loop(self):
+        store = _FakeAutosaveStore()
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=2.0,
+            autosave_clock=lambda: 0.0,
+        )
+
+        # first save (immediate)
+        service.request_autosave()
+        timers = []
+
+        with patch(
+            "multi_llm_chat.chat_service.asyncio.get_running_loop",
+            side_effect=RuntimeError("no running event loop"),
+        ), patch("multi_llm_chat.chat_service.threading.Timer") as mock_timer:
+            def build_timer(delay, fn):
+                timer = MagicMock()
+                timer.delay = delay
+                timer.fn = fn
+                timer.is_alive.return_value = True
+                timers.append(timer)
+                return timer
+
+            mock_timer.side_effect = build_timer
+
+            # second request should debounce via threading.Timer
+            service.request_autosave()
+
+        # should not save immediately on second request
+        assert len(store.calls) == 1
+        assert len(timers) == 1
+        assert timers[0].delay == 2.0
+        timers[0].fn()
+
+        # delayed callback should persist once
+        assert len(store.calls) == 2
+        assert store.calls[-1]["user_id"] == "user-1"
+
+    @pytest.mark.asyncio
+    async def test_request_autosave_cancels_pending_before_immediate_save(self):
+        store = _FakeAutosaveStore()
+        now = [0.0]
+        sleep_calls = []
+
+        def fake_clock():
+            return now[0]
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+            now[0] += delay
+
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=2.0,
+            autosave_clock=fake_clock,
+            autosave_sleep=fake_sleep,
+        )
+
+        # first save (immediate)
+        service.request_autosave()
+        # second request schedules delayed save
+        service.request_autosave()
+        # time passes enough for immediate save branch
+        now[0] = 2.1
+        service.request_autosave()
+
+        await asyncio.sleep(0)
+
+        # Should be first immediate + third immediate only (no delayed duplicate)
+        assert len(store.calls) == 2
+        assert sleep_calls == []
+
+    @pytest.mark.asyncio
+    async def test_flush_autosave_saves_pending_state_immediately(self):
+        store = _FakeAutosaveStore()
+        now = [0.0]
+
+        def fake_clock():
+            return now[0]
+
+        async def fake_sleep(delay):
+            now[0] += delay
+
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=2.0,
+            autosave_clock=fake_clock,
+            autosave_sleep=fake_sleep,
+        )
+
+        service.request_autosave()
+        service.request_autosave()
+        service.flush_autosave()
+        await asyncio.sleep(0)
+
+        assert len(store.calls) == 2
 
 
 if __name__ == "__main__":

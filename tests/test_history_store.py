@@ -117,17 +117,36 @@ def test_autosave_does_not_break_manual_history(tmp_path):
     assert autosave_loaded["system_prompt"] == "autosave sys"
 
 
-def test_manual_history_reserved_name_rejected(tmp_path):
+def test_manual_history_reserved_name_rejected_for_save(tmp_path):
     store = HistoryStore(base_dir=tmp_path)
 
-    with pytest.raises(ValueError):
-        store.history_exists("user-1", "_autosave")
+    assert store.history_exists("user-1", "_autosave") is False
 
     with pytest.raises(ValueError):
         store.save_history("user-1", "_autosave", system_prompt="", turns=[])
 
-    with pytest.raises(ValueError):
+    with pytest.raises(FileNotFoundError):
         store.load_history("user-1", "_autosave")
+
+
+def test_load_history_supports_legacy_reserved_filename(tmp_path):
+    store = HistoryStore(base_dir=tmp_path)
+    user_dir = tmp_path / "user-1"
+    user_dir.mkdir(parents=True, exist_ok=True)
+
+    legacy_payload = {
+        "display_name": "_autosave",
+        "system_prompt": "legacy",
+        "turns": [{"role": "user", "content": "hello"}],
+        "metadata": {"schema_version": 1},
+    }
+    (user_dir / "_autosave.json").write_text(
+        json.dumps(legacy_payload, ensure_ascii=False, indent=2)
+    )
+
+    loaded = store.load_history("user-1", "_autosave")
+    assert loaded["display_name"] == "_autosave"
+    assert loaded["system_prompt"] == "legacy"
 
 
 def test_load_autosave_invalid_json_shape_ignored(tmp_path):

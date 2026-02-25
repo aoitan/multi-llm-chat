@@ -5,9 +5,13 @@ independent of UI implementation. This allows both CLI and WebUI to share
 the same business logic without duplication.
 """
 
+import asyncio
 import logging
+import threading
+import time
 
 from .core import AgenticLoopResult, execute_with_tools_stream
+from .history import HistoryStore
 from .llm_provider import create_provider
 from .mcp import get_mcp_manager
 
@@ -46,6 +50,156 @@ PROVIDER_DISPLAY_NAMES = {
 }
 
 
+class _AutosaveDebouncer:
+    """Debounce autosave requests and persist only the latest state."""
+
+    def __init__(self, store, user_id, get_state, min_interval_sec=2.0, clock=None, sleep=None):
+        self._store = store
+        self._user_id = user_id
+        self._get_state = get_state
+        self._min_interval_sec = float(min_interval_sec)
+        self._clock = clock or time.monotonic
+        self._sleep = sleep or asyncio.sleep
+        self._last_saved_at = None
+        self._pending_task = None
+        self._pending_loop = None
+        self._pending_timer = None
+        self._pending_token = 0
+        self._lock = threading.Lock()
+
+    def request_save(self):
+        """Request autosave with debounce."""
+        with self._lock:
+            last_saved_at = self._last_saved_at
+        now = self._clock()
+        if last_saved_at is None:
+            self.cancel_pending()
+            self._save_now()
+            return
+
+        elapsed = now - last_saved_at
+        if elapsed >= self._min_interval_sec:
+            self.cancel_pending()
+            self._save_now()
+            return
+
+        if self._has_pending():
+            return
+
+        delay = max(0.0, self._min_interval_sec - elapsed)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._schedule_threaded_save(delay)
+            return
+
+        with self._lock:
+            self._pending_token += 1
+            token = self._pending_token
+        task = loop.create_task(self._delayed_save(delay, token))
+        with self._lock:
+            self._pending_task = task
+            self._pending_loop = loop
+
+    def _save_now(self):
+        try:
+            system_prompt, turns = self._get_state()
+            self._store.save_autosave(self._user_id, system_prompt, turns)
+            with self._lock:
+                self._last_saved_at = self._clock()
+        except Exception as exc:
+            logger.warning("Autosave failed for user '%s': %s", self._user_id, exc)
+
+    async def _delayed_save(self, delay, token):
+        try:
+            await self._sleep(delay)
+            if not self._is_token_active(token):
+                return
+            self._save_now()
+        except Exception as exc:
+            logger.warning("Autosave delayed-save failed for user '%s': %s", self._user_id, exc)
+        finally:
+            current = asyncio.current_task()
+            with self._lock:
+                if self._pending_task is current:
+                    self._pending_task = None
+                    self._pending_loop = None
+
+    def _schedule_threaded_save(self, delay):
+        with self._lock:
+            self._pending_token += 1
+            token = self._pending_token
+        timer_holder = {}
+
+        def _run():
+            timer = timer_holder["timer"]
+            try:
+                if not self._is_token_active(token):
+                    return
+                self._save_now()
+            finally:
+                with self._lock:
+                    if self._pending_timer is timer:
+                        self._pending_timer = None
+
+        timer = threading.Timer(delay, _run)
+        timer.daemon = True
+        timer_holder["timer"] = timer
+        with self._lock:
+            self._pending_timer = timer
+        timer.start()
+
+    def _has_pending(self):
+        with self._lock:
+            if self._pending_task is not None and not self._pending_task.done():
+                return True
+            if self._pending_timer is not None and self._pending_timer.is_alive():
+                return True
+            return False
+
+    def _is_token_active(self, token):
+        with self._lock:
+            return token == self._pending_token
+
+    def cancel_pending(self):
+        """Cancel pending delayed save task if exists."""
+        task = None
+        loop = None
+        timer = None
+        with self._lock:
+            if self._pending_task is not None and not self._pending_task.done():
+                task = self._pending_task
+                loop = self._pending_loop
+            self._pending_task = None
+            self._pending_loop = None
+
+            if self._pending_timer is not None and self._pending_timer.is_alive():
+                timer = self._pending_timer
+            self._pending_timer = None
+            self._pending_token += 1
+
+        if task is not None:
+            try:
+                current_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                current_loop = None
+
+            if loop is not None and loop is current_loop:
+                task.cancel()
+            elif loop is not None and loop.is_running():
+                loop.call_soon_threadsafe(task.cancel)
+            else:
+                task.cancel()
+
+        if timer is not None:
+            timer.cancel()
+
+    def flush_now(self):
+        """Force autosave now and clear pending debounce work."""
+        self.cancel_pending()
+        self._save_now()
+
+
 class ChatService:
     """Business logic layer for chat operations
 
@@ -70,6 +224,11 @@ class ChatService:
         gemini_provider=None,
         chatgpt_provider=None,
         mcp_client=None,
+        autosave_store=None,
+        autosave_user_id=None,
+        autosave_min_interval_sec=2.0,
+        autosave_clock=None,
+        autosave_sleep=None,
     ):
         """Initialize ChatService with optional existing state and providers
 
@@ -85,6 +244,12 @@ class ChatService:
         self.display_history = display_history if display_history is not None else []
         self.logic_history = logic_history if logic_history is not None else []
         self.system_prompt = system_prompt
+        self._autosave_store = autosave_store
+        self._autosave_user_id = None
+        self._autosave_min_interval_sec = autosave_min_interval_sec
+        self._autosave_clock = autosave_clock
+        self._autosave_sleep = autosave_sleep
+        self._autosave_debouncer = None
 
         # Store injected providers or None for lazy initialization
         self._gemini_provider = gemini_provider
@@ -96,6 +261,13 @@ class ChatService:
         else:
             # Try to get global MCPServerManager
             self.mcp_client = get_mcp_manager()
+
+        if autosave_user_id:
+            self.configure_autosave(
+                autosave_user_id,
+                store=autosave_store,
+                min_interval_sec=autosave_min_interval_sec,
+            )
 
     @property
     def gemini_provider(self):
@@ -144,6 +316,58 @@ class ChatService:
             }
         )
 
+    def configure_autosave(self, user_id, store=None, min_interval_sec=None):
+        """Configure autosave behavior for this service instance."""
+        if not user_id:
+            if self._autosave_debouncer is not None:
+                self._autosave_debouncer.cancel_pending()
+            self._autosave_user_id = None
+            self._autosave_debouncer = None
+            return
+
+        resolved_store = store if store is not None else self._autosave_store
+        if resolved_store is None:
+            resolved_store = HistoryStore()
+
+        resolved_interval = (
+            self._autosave_min_interval_sec
+            if min_interval_sec is None
+            else min_interval_sec
+        )
+
+        if (
+            self._autosave_debouncer is not None
+            and self._autosave_user_id == user_id
+            and resolved_store is self._autosave_store
+            and resolved_interval == self._autosave_min_interval_sec
+        ):
+            return
+
+        if self._autosave_debouncer is not None:
+            self._autosave_debouncer.cancel_pending()
+
+        self._autosave_store = resolved_store
+        self._autosave_user_id = user_id
+        self._autosave_min_interval_sec = resolved_interval
+        self._autosave_debouncer = _AutosaveDebouncer(
+            store=self._autosave_store,
+            user_id=user_id,
+            get_state=lambda: (self.system_prompt, self.logic_history),
+            min_interval_sec=resolved_interval,
+            clock=self._autosave_clock,
+            sleep=self._autosave_sleep,
+        )
+
+    def request_autosave(self):
+        """Request autosave if configured."""
+        if self._autosave_debouncer is not None:
+            self._autosave_debouncer.request_save()
+
+    def flush_autosave(self):
+        """Flush pending autosave immediately if configured."""
+        if self._autosave_debouncer is not None:
+            self._autosave_debouncer.flush_now()
+
     async def process_message(self, user_message, tools=None):
         """Process user message and generate LLM responses
 
@@ -163,6 +387,7 @@ class ChatService:
         user_entry = {"role": "user", "content": [{"type": "text", "content": user_message}]}
         self.logic_history.append(user_entry)
         self.display_history.append({"role": "user", "content": user_message})
+        self.request_autosave()
         yield self.display_history, self.logic_history, {"type": "text", "content": ""}
 
         # If no mention, treat as memo (no LLM call)
@@ -254,6 +479,7 @@ class ChatService:
                 self._handle_api_error(e, model_name)
                 yield self.display_history, self.logic_history, {"type": "error", "content": str(e)}
 
+            self.request_autosave()
             yield self.display_history, self.logic_history, {"type": "text", "content": ""}
 
     def set_system_prompt(self, prompt):
@@ -263,6 +489,7 @@ class ChatService:
             prompt: New system prompt text
         """
         self.system_prompt = prompt
+        self.request_autosave()
 
     def append_tool_results(self, tool_results):
         """Append tool execution results to logic history.

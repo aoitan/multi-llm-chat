@@ -371,6 +371,7 @@ async def main():
     # Create session-scoped ChatService for provider reuse
     # ChatService will automatically use global MCPServerManager if available
     service = ChatService()
+    service.configure_autosave(user_id=user_id, store=store)
 
     async def _cli_loop():
         nonlocal history, system_prompt, is_dirty
@@ -393,6 +394,8 @@ async def main():
                     new_prompt = _handle_system_command(args, system_prompt)
                     if new_prompt != system_prompt:
                         system_prompt = new_prompt
+                        service.logic_history = history
+                        service.set_system_prompt(new_prompt)
                         is_dirty = True
                 elif command == "/reset":
                     if is_dirty and not _confirm(
@@ -400,12 +403,16 @@ async def main():
                     ):
                         continue
                     history = reset_history()
+                    service.logic_history = history
+                    service.system_prompt = system_prompt
                     is_dirty = bool(system_prompt)  # system promptのみの場合はdirty扱いを継続
                     print("チャット履歴をリセットしました。")
                 elif command == "/history":
                     history, system_prompt, is_dirty = _handle_history_command(
                         args, user_id, store, history, system_prompt, is_dirty
                     )
+                    service.logic_history = history
+                    service.system_prompt = system_prompt
                 elif command == "/copy":
                     _handle_copy_command(args, history)
                 else:
@@ -427,6 +434,9 @@ async def main():
             is_dirty = True
 
     await _cli_loop()
+    service.logic_history = history
+    service.system_prompt = system_prompt
+    service.flush_autosave()
     return history, system_prompt
 
 

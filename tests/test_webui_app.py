@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from multi_llm_chat.webui.app import (
+    update_ui_on_prompt_change,
     update_ui_on_user_id_change,
 )
 from multi_llm_chat.webui.handlers import logic_history_to_display
@@ -188,3 +189,25 @@ class TestWebUIApp:
         assert display_history[2]["role"] == "assistant"
         assert "**ChatGPT:**" in display_history[2]["content"]
         assert "ChatGPT answer" in display_history[2]["content"]
+
+    def test_update_ui_on_prompt_change_triggers_autosave(self):
+        with (
+            patch("multi_llm_chat.webui.app.has_history_for_user", return_value=True),
+            patch("multi_llm_chat.webui.app.ChatService") as MockChatService,
+        ):
+            mock_service = MockChatService.return_value
+            mock_service.configure_autosave.return_value = None
+            mock_service.set_system_prompt.return_value = None
+
+            token, send_button, returned_service = update_ui_on_prompt_change(
+                "test-user",
+                "new prompt",
+                [{"role": "user", "content": "hi"}],
+                None,
+            )
+
+        assert returned_service is mock_service
+        mock_service.configure_autosave.assert_called_once_with(user_id="test-user")
+        mock_service.set_system_prompt.assert_called_once_with("new prompt")
+        assert "interactive" in send_button
+        assert token is not None
