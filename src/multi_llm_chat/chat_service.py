@@ -350,9 +350,7 @@ class ChatService:
             resolved_store = HistoryStore()
 
         resolved_interval = (
-            self._autosave_min_interval_sec
-            if min_interval_sec is None
-            else min_interval_sec
+            self._autosave_min_interval_sec if min_interval_sec is None else min_interval_sec
         )
 
         if (

@@ -812,10 +812,14 @@ class TestChatServiceAutosave:
         service.request_autosave()
         timers = []
 
-        with patch(
-            "multi_llm_chat.chat_service.asyncio.get_running_loop",
-            side_effect=RuntimeError("no running event loop"),
-        ), patch("multi_llm_chat.chat_service.threading.Timer") as mock_timer:
+        with (
+            patch(
+                "multi_llm_chat.chat_service.asyncio.get_running_loop",
+                side_effect=RuntimeError("no running event loop"),
+            ),
+            patch("multi_llm_chat.chat_service.threading.Timer") as mock_timer,
+        ):
+
             def build_timer(delay, fn):
                 timer = MagicMock()
                 timer.delay = delay
