@@ -5,6 +5,7 @@ import os
 
 import gradio as gr
 
+from ..chat_service import ChatService
 from .components import update_token_display
 from .handlers import (
     check_history_name_exists,
@@ -602,7 +603,7 @@ with gr.Blocks() as demo:
     reset_button.click(handle_new_chat, inputs=new_chat_inputs, outputs=new_chat_outputs)
 
     # Update token display and button state when system prompt or history changes
-    def update_ui_on_prompt_change(user_id, prompt, history):
+    def update_ui_on_prompt_change(user_id, prompt, history, chat_service):
         """Updates token display and send button when system prompt changes."""
         has_history = has_history_for_user(user_id)
         state = WebUIState(
@@ -614,12 +615,19 @@ with gr.Blocks() as demo:
         )
         button_states = state.get_button_states()
         token_display_value = update_token_display(prompt, history)
-        return token_display_value, button_states["send_button"]
+        if user_id and user_id.strip():
+            if chat_service is None:
+                chat_service = ChatService()
+            chat_service.logic_history = history
+            chat_service.configure_autosave(user_id=user_id)
+            chat_service.set_system_prompt(prompt)
+
+        return token_display_value, button_states["send_button"], chat_service
 
     system_prompt_input.change(
         update_ui_on_prompt_change,
-        [user_id_input, system_prompt_input, logic_history_state],
-        [token_display, send_button],
+        [user_id_input, system_prompt_input, logic_history_state, chat_service_state],
+        [token_display, send_button, chat_service_state],
     )
 
     # イベントハンドラを定義（user_inputとsend_buttonの両方）

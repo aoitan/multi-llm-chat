@@ -265,7 +265,10 @@ async def respond(
     # Initialize or reuse ChatService (session-scoped for provider reuse)
     # Reset service if history was cleared (e.g., new chat action)
     if chat_service is None or not logic_history:
+        if chat_service is not None and not logic_history:
+            chat_service.configure_autosave(user_id=None)
         chat_service = ChatService()
+    chat_service.configure_autosave(user_id=user_id)
 
     # Update service state with current histories and system prompt
     chat_service.display_history = display_history

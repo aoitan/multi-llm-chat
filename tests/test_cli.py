@@ -93,6 +93,49 @@ def test_system_command_clear():
     assert any("クリア" in str(call) for call in mock_print.call_args_list)
 
 
+def test_system_command_update_triggers_autosave(monkeypatch):
+    """CLI /system 更新時に autosave を発火すること"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+
+    test_inputs = [
+        "/system You are helpful.",
+        "exit",
+    ]
+
+    with patch("multi_llm_chat.cli.HistoryStore") as MockStore:
+        mock_store_instance = MockStore.return_value
+        with patch("builtins.input", side_effect=test_inputs):
+            with patch("builtins.print"):
+                asyncio.run(cli.main())
+
+    mock_store_instance.save_autosave.assert_any_call("test-user", "You are helpful.", [])
+    assert mock_store_instance.save_autosave.call_count >= 1
+
+
+def test_cli_flush_autosave_uses_latest_state_after_reset(monkeypatch):
+    """CLI終了時flushが最新状態（/reset後）を保存すること"""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+
+    test_inputs = [
+        "memo",
+        "/reset",
+        "y",
+        "exit",
+    ]
+
+    with patch("multi_llm_chat.cli.HistoryStore") as MockStore:
+        mock_store_instance = MockStore.return_value
+        with patch("builtins.input", side_effect=test_inputs):
+            with patch("builtins.print"):
+                asyncio.run(cli.main())
+
+    assert mock_store_instance.save_autosave.call_args_list
+    _, last_kwargs = mock_store_instance.save_autosave.call_args_list[-1]
+    assert last_kwargs == {}
+    last_args = mock_store_instance.save_autosave.call_args_list[-1].args
+    assert last_args == ("test-user", "", [])
+
+
 def test_system_command_token_limit_exceeded():
     """CLI /system should reject prompt exceeding token limit"""
     long_prompt = "test " * 300000  # Very long prompt

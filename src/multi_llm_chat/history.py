@@ -102,7 +102,11 @@ class HistoryStore:
 
     def history_exists(self, user_id: str, display_name: str) -> bool:
         """Check if a history file already exists."""
-        return self._history_path(user_id, display_name).exists()
+        try:
+            path = self._history_path(user_id, display_name)
+        except ValueError:
+            return False
+        return path.exists()
 
     def has_autosave(self, user_id: str) -> bool:
         """Check if an autosave draft file exists for a user."""
@@ -119,6 +123,8 @@ class HistoryStore:
             try:
                 data = json.loads(path.read_text())
             except (json.JSONDecodeError, OSError):
+                continue
+            if data.get("type") == AUTOSAVE_TYPE:
                 continue
             name = data.get("display_name")
             if name:
@@ -186,11 +192,16 @@ class HistoryStore:
         if not user_dir.exists():
             raise FileNotFoundError("User directory not found")
 
-        target_sanitized = _sanitize_display_name(display_name)
+        target_sanitized = sanitize_name(display_name)
+        if target_sanitized != AUTOSAVE_RESERVED_NAME:
+            target_sanitized = _sanitize_display_name(display_name)
         for path in user_dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text())
             except (json.JSONDecodeError, OSError):
+                continue
+
+            if data.get("type") == AUTOSAVE_TYPE:
                 continue
 
             if data.get("display_name") == display_name or path.stem == target_sanitized:
