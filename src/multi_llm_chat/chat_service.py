@@ -64,6 +64,7 @@ class _AutosaveDebouncer:
         self._pending_task = None
         self._pending_loop = None
         self._pending_timer = None
+        self._pending_scheduled = False
         self._pending_token = 0
         self._lock = threading.Lock()
 
@@ -71,35 +72,50 @@ class _AutosaveDebouncer:
         """Request autosave with debounce."""
         with self._lock:
             last_saved_at = self._last_saved_at
-        now = self._clock()
-        if last_saved_at is None:
+            if last_saved_at is not None:
+                now = self._clock()
+                elapsed = now - last_saved_at
+            else:
+                elapsed = None
+
+            if last_saved_at is None:
+                immediate = True
+                delay = None
+                token = None
+            elif elapsed >= self._min_interval_sec:
+                immediate = True
+                delay = None
+                token = None
+            elif self._has_pending_locked():
+                return
+            else:
+                immediate = False
+                delay = max(0.0, self._min_interval_sec - elapsed)
+                self._pending_scheduled = True
+                self._pending_token += 1
+                token = self._pending_token
+
+        if immediate:
             self.cancel_pending()
             self._save_now()
             return
 
-        elapsed = now - last_saved_at
-        if elapsed >= self._min_interval_sec:
-            self.cancel_pending()
-            self._save_now()
-            return
-
-        if self._has_pending():
-            return
-
-        delay = max(0.0, self._min_interval_sec - elapsed)
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            self._schedule_threaded_save(delay)
+            self._schedule_threaded_save(delay, token)
             return
 
-        with self._lock:
-            self._pending_token += 1
-            token = self._pending_token
-        task = loop.create_task(self._delayed_save(delay, token))
+        try:
+            task = loop.create_task(self._delayed_save(delay, token))
+        except Exception:
+            with self._lock:
+                self._pending_scheduled = False
+            raise
         with self._lock:
             self._pending_task = task
             self._pending_loop = loop
+            self._pending_scheduled = False
 
     def _save_now(self):
         try:
@@ -125,10 +141,7 @@ class _AutosaveDebouncer:
                     self._pending_task = None
                     self._pending_loop = None
 
-    def _schedule_threaded_save(self, delay):
-        with self._lock:
-            self._pending_token += 1
-            token = self._pending_token
+    def _schedule_threaded_save(self, delay, token):
         timer_holder = {}
 
         def _run():
@@ -147,15 +160,21 @@ class _AutosaveDebouncer:
         timer_holder["timer"] = timer
         with self._lock:
             self._pending_timer = timer
+            self._pending_scheduled = False
         timer.start()
 
     def _has_pending(self):
         with self._lock:
-            if self._pending_task is not None and not self._pending_task.done():
-                return True
-            if self._pending_timer is not None and self._pending_timer.is_alive():
-                return True
-            return False
+            return self._has_pending_locked()
+
+    def _has_pending_locked(self):
+        if self._pending_scheduled:
+            return True
+        if self._pending_task is not None and not self._pending_task.done():
+            return True
+        if self._pending_timer is not None and self._pending_timer.is_alive():
+            return True
+        return False
 
     def _is_token_active(self, token):
         with self._lock:
@@ -176,6 +195,7 @@ class _AutosaveDebouncer:
             if self._pending_timer is not None and self._pending_timer.is_alive():
                 timer = self._pending_timer
             self._pending_timer = None
+            self._pending_scheduled = False
             self._pending_token += 1
 
         if task is not None:

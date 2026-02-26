@@ -900,6 +900,37 @@ class TestChatServiceAutosave:
 
         assert len(store.calls) == 2
 
+    def test_request_autosave_avoids_reentrant_double_schedule(self):
+        store = _FakeAutosaveStore()
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=2.0,
+            autosave_clock=lambda: 0.0,
+        )
+
+        # first save (immediate)
+        service.request_autosave()
+
+        class _FakeLoop:
+            def __init__(self):
+                self.create_task_calls = 0
+
+            def create_task(self, coro):
+                self.create_task_calls += 1
+                if self.create_task_calls == 1:
+                    service.request_autosave()
+                coro.close()
+                task = MagicMock()
+                task.done.return_value = False
+                return task
+
+        fake_loop = _FakeLoop()
+        with patch("multi_llm_chat.chat_service.asyncio.get_running_loop", return_value=fake_loop):
+            service.request_autosave()
+
+        assert fake_loop.create_task_calls == 1
+
 
 if __name__ == "__main__":
     unittest.main()

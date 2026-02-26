@@ -103,10 +103,10 @@ class HistoryStore:
     def history_exists(self, user_id: str, display_name: str) -> bool:
         """Check if a history file already exists."""
         try:
-            self.load_history(user_id, display_name)
-            return True
-        except (FileNotFoundError, ValueError):
+            path = self._history_path(user_id, display_name)
+        except ValueError:
             return False
+        return path.exists()
 
     def has_autosave(self, user_id: str) -> bool:
         """Check if an autosave draft file exists for a user."""
