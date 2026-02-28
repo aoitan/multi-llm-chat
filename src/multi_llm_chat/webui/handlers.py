@@ -282,7 +282,12 @@ async def respond(
     chat_service.logic_history = logic_history
     chat_service.system_prompt = system_prompt
 
+    final_display = display_history
+    final_logic = logic_history
+
     async for updated_display, updated_logic, chunk in chat_service.process_message(user_message):
+        final_display = updated_display
+        final_logic = updated_logic
         chunk_type = chunk.get("type")
         if chunk_type in ["tool_call", "tool_result"]:
             # Format and add tool response to display history
@@ -295,6 +300,11 @@ async def respond(
             append_autosave_warning(updated_display, warning)
 
         yield updated_display, updated_display, updated_logic, chat_service
+
+    warning = chat_service.consume_autosave_warning()
+    if warning:
+        append_autosave_warning(final_display, warning)
+        yield final_display, final_display, final_logic, chat_service
 
 
 async def validate_and_respond(

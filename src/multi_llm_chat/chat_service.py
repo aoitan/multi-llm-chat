@@ -130,15 +130,18 @@ class _AutosaveDebouncer:
             self._pending_scheduled = False
 
     def _save_now(self):
+        now = self._clock()
         try:
             system_prompt, turns = self._get_state()
             self._store.save_autosave(self._user_id, system_prompt, turns)
-            with self._lock:
-                self._last_saved_at = self._clock()
         except Exception as exc:
             logger.warning("Autosave failed for user '%s': %s", self._user_id, exc, exc_info=True)
             if self._on_error is not None:
                 self._on_error(self._user_id, exc)
+        finally:
+            with self._lock:
+                if self._last_saved_at is None or self._last_saved_at < now:
+                    self._last_saved_at = now
 
     async def _delayed_save(self, delay, token):
         try:

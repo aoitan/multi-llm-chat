@@ -139,7 +139,7 @@ class TestWebUIHandlers:
             )
 
         chat_service.process_message.side_effect = mock_process_message
-        chat_service.consume_autosave_warning.side_effect = [AUTOSAVE_FAILURE_WARNING]
+        chat_service.consume_autosave_warning.side_effect = [AUTOSAVE_FAILURE_WARNING, None]
 
         result_gen = respond(
             "memo",
@@ -151,6 +151,35 @@ class TestWebUIHandlers:
         )
         results = asyncio.run(consume_async_gen(result_gen))
 
+        final_display = results[-1][0]
+        assert final_display[-1]["role"] == "assistant"
+        assert final_display[-1]["content"] == AUTOSAVE_FAILURE_WARNING
+
+    def test_respond_emits_deferred_autosave_warning_after_stream(self):
+        """handlers.respond: should emit warning even when it appears after streaming ends."""
+        chat_service = MagicMock()
+
+        async def mock_process_message(*args, **kwargs):
+            yield (
+                [{"role": "user", "content": "memo"}],
+                [{"role": "user", "content": [{"type": "text", "content": "memo"}]}],
+                {"type": "text", "content": ""},
+            )
+
+        chat_service.process_message.side_effect = mock_process_message
+        chat_service.consume_autosave_warning.side_effect = [None, AUTOSAVE_FAILURE_WARNING]
+
+        result_gen = respond(
+            "memo",
+            display_history=[{"role": "user", "content": "memo"}],
+            logic_history=[{"role": "user", "content": [{"type": "text", "content": "memo"}]}],
+            system_prompt="",
+            user_id="user-1",
+            chat_service=chat_service,
+        )
+        results = asyncio.run(consume_async_gen(result_gen))
+
+        assert len(results) == 2
         final_display = results[-1][0]
         assert final_display[-1]["role"] == "assistant"
         assert final_display[-1]["content"] == AUTOSAVE_FAILURE_WARNING
