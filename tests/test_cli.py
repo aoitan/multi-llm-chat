@@ -154,9 +154,9 @@ def test_cli_autosave_failure_emits_warning(monkeypatch):
                 asyncio.run(cli.main())
 
     warning_calls = [call for call in mock_print.call_args_list if call.args]
-    assert any(
-        AUTOSAVE_FAILURE_WARNING in str(call.args[0]) for call in warning_calls
-    )
+    assert any(AUTOSAVE_FAILURE_WARNING in str(call.args[0]) for call in warning_calls)
+
+
 def test_system_command_token_limit_exceeded():
     """CLI /system should reject prompt exceeding token limit"""
     long_prompt = "test " * 300000  # Very long prompt
