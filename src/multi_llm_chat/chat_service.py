@@ -412,7 +412,6 @@ class ChatService:
             warning = self._autosave_warning
             self._autosave_warning = None
         return warning
-
     def request_autosave(self):
         """Request autosave if configured."""
         if self._autosave_debouncer is not None:
