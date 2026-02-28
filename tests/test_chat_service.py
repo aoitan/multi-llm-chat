@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from multi_llm_chat.chat_service import ChatService, parse_mention
+from multi_llm_chat.chat_service import AUTOSAVE_FAILURE_WARNING, ChatService, parse_mention
 from multi_llm_chat.core_modules.agentic_loop import AgenticLoopResult
 
 
@@ -659,6 +659,40 @@ class _FakeAutosaveStore:
 
 
 class TestChatServiceAutosave:
+    @pytest.mark.asyncio
+    async def test_autosave_failure_is_non_fatal(self):
+        class _FailingAutosaveStore:
+            def save_autosave(self, user_id, system_prompt, turns):
+                raise OSError("disk full")
+
+        service = ChatService(
+            autosave_store=_FailingAutosaveStore(),
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=0,
+        )
+
+        await consume_async_gen(service.process_message("memo only"))
+
+        assert service.logic_history[-1]["role"] == "user"
+        assert service.logic_history[-1]["content"] == [{"type": "text", "content": "memo only"}]
+
+    @pytest.mark.asyncio
+    async def test_autosave_failure_emits_warning(self):
+        class _FailingAutosaveStore:
+            def save_autosave(self, user_id, system_prompt, turns):
+                raise OSError("disk full")
+
+        service = ChatService(
+            autosave_store=_FailingAutosaveStore(),
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=0,
+        )
+
+        await consume_async_gen(service.process_message("memo only"))
+
+        assert service.consume_autosave_warning() == AUTOSAVE_FAILURE_WARNING
+        assert service.consume_autosave_warning() is None
+
     @pytest.mark.asyncio
     async def test_autosave_updates_on_user_message(self):
         store = _FakeAutosaveStore()
