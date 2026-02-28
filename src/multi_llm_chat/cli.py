@@ -29,6 +29,13 @@ def _display_tool_response(response_type, content):
         print()  # Blank line
 
 
+def _print_autosave_warning_if_any(service):
+    """Print autosave warning if the service has one."""
+    warning = service.consume_autosave_warning()
+    if warning:
+        print(warning)
+
+
 async def _process_service_stream(service, user_message):
     """Process ChatService stream and print responses for CLI with real-time streaming.
 
@@ -396,6 +403,7 @@ async def main():
                         system_prompt = new_prompt
                         service.logic_history = history
                         service.set_system_prompt(new_prompt)
+                        _print_autosave_warning_if_any(service)
                         is_dirty = True
                 elif command == "/reset":
                     if is_dirty and not _confirm(
@@ -431,12 +439,14 @@ async def main():
 
             # Process message through ChatService and handle CLI-specific display
             _, history = await _process_service_stream(service, prompt)
+            _print_autosave_warning_if_any(service)
             is_dirty = True
 
     await _cli_loop()
     service.logic_history = history
     service.system_prompt = system_prompt
     service.flush_autosave()
+    _print_autosave_warning_if_any(service)
     return history, system_prompt
 
 

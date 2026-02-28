@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from multi_llm_chat.chat_service import ChatService, parse_mention
+from multi_llm_chat.chat_service import AUTOSAVE_FAILURE_WARNING, ChatService, parse_mention
 from multi_llm_chat.core_modules.agentic_loop import AgenticLoopResult
 
 
@@ -660,6 +660,40 @@ class _FakeAutosaveStore:
 
 class TestChatServiceAutosave:
     @pytest.mark.asyncio
+    async def test_autosave_failure_is_non_fatal(self):
+        class _FailingAutosaveStore:
+            def save_autosave(self, user_id, system_prompt, turns):
+                raise OSError("disk full")
+
+        service = ChatService(
+            autosave_store=_FailingAutosaveStore(),
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=0,
+        )
+
+        await consume_async_gen(service.process_message("memo only"))
+
+        assert service.logic_history[-1]["role"] == "user"
+        assert service.logic_history[-1]["content"] == [{"type": "text", "content": "memo only"}]
+
+    @pytest.mark.asyncio
+    async def test_autosave_failure_emits_warning(self):
+        class _FailingAutosaveStore:
+            def save_autosave(self, user_id, system_prompt, turns):
+                raise OSError("disk full")
+
+        service = ChatService(
+            autosave_store=_FailingAutosaveStore(),
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=0,
+        )
+
+        await consume_async_gen(service.process_message("memo only"))
+
+        assert service.consume_autosave_warning() == AUTOSAVE_FAILURE_WARNING
+        assert service.consume_autosave_warning() is None
+
+    @pytest.mark.asyncio
     async def test_autosave_updates_on_user_message(self):
         store = _FakeAutosaveStore()
         service = ChatService(
@@ -842,6 +876,49 @@ class TestChatServiceAutosave:
         # delayed callback should persist once
         assert len(store.calls) == 2
         assert store.calls[-1]["user_id"] == "user-1"
+
+    def test_request_autosave_debounces_repeated_failures(self):
+        class _FailingAutosaveStore:
+            def __init__(self):
+                self.calls = 0
+
+            def save_autosave(self, user_id, system_prompt, turns):
+                self.calls += 1
+                raise OSError("disk full")
+
+        store = _FailingAutosaveStore()
+        service = ChatService(
+            autosave_store=store,
+            autosave_user_id="user-1",
+            autosave_min_interval_sec=2.0,
+            autosave_clock=lambda: 0.0,
+        )
+
+        service.request_autosave()
+        timers = []
+
+        with (
+            patch(
+                "multi_llm_chat.chat_service.asyncio.get_running_loop",
+                side_effect=RuntimeError("no running event loop"),
+            ),
+            patch("multi_llm_chat.chat_service.threading.Timer") as mock_timer,
+        ):
+
+            def build_timer(delay, fn):
+                timer = MagicMock()
+                timer.delay = delay
+                timer.fn = fn
+                timer.is_alive.return_value = True
+                timers.append(timer)
+                return timer
+
+            mock_timer.side_effect = build_timer
+            service.request_autosave()
+
+        assert store.calls == 1
+        assert len(timers) == 1
+        assert timers[0].delay == 2.0
 
     @pytest.mark.asyncio
     async def test_request_autosave_cancels_pending_before_immediate_save(self):

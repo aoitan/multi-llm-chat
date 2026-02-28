@@ -17,6 +17,8 @@ from .mcp import get_mcp_manager
 
 logger = logging.getLogger(__name__)
 
+AUTOSAVE_FAILURE_WARNING = "[System: 自動保存に失敗しました。会話は継続されます。]"
+
 
 def parse_mention(message):
     """Parse mention from user message
@@ -53,13 +55,23 @@ PROVIDER_DISPLAY_NAMES = {
 class _AutosaveDebouncer:
     """Debounce autosave requests and persist only the latest state."""
 
-    def __init__(self, store, user_id, get_state, min_interval_sec=2.0, clock=None, sleep=None):
+    def __init__(
+        self,
+        store,
+        user_id,
+        get_state,
+        min_interval_sec=2.0,
+        clock=None,
+        sleep=None,
+        on_error=None,
+    ):
         self._store = store
         self._user_id = user_id
         self._get_state = get_state
         self._min_interval_sec = float(min_interval_sec)
         self._clock = clock or time.monotonic
         self._sleep = sleep or asyncio.sleep
+        self._on_error = on_error
         self._last_saved_at = None
         self._pending_task = None
         self._pending_loop = None
@@ -118,13 +130,18 @@ class _AutosaveDebouncer:
             self._pending_scheduled = False
 
     def _save_now(self):
+        now = self._clock()
         try:
             system_prompt, turns = self._get_state()
             self._store.save_autosave(self._user_id, system_prompt, turns)
-            with self._lock:
-                self._last_saved_at = self._clock()
         except Exception as exc:
-            logger.warning("Autosave failed for user '%s': %s", self._user_id, exc)
+            logger.warning("Autosave failed for user '%s': %s", self._user_id, exc, exc_info=True)
+            if self._on_error is not None:
+                self._on_error(self._user_id, exc)
+        finally:
+            with self._lock:
+                if self._last_saved_at is None or self._last_saved_at < now:
+                    self._last_saved_at = now
 
     async def _delayed_save(self, delay, token):
         try:
@@ -133,7 +150,14 @@ class _AutosaveDebouncer:
                 return
             self._save_now()
         except Exception as exc:
-            logger.warning("Autosave delayed-save failed for user '%s': %s", self._user_id, exc)
+            logger.warning(
+                "Autosave delayed-save failed for user '%s': %s",
+                self._user_id,
+                exc,
+                exc_info=True,
+            )
+            if self._on_error is not None:
+                self._on_error(self._user_id, exc)
         finally:
             current = asyncio.current_task()
             with self._lock:
@@ -270,6 +294,8 @@ class ChatService:
         self._autosave_clock = autosave_clock
         self._autosave_sleep = autosave_sleep
         self._autosave_debouncer = None
+        self._autosave_warning = None
+        self._autosave_warning_lock = threading.Lock()
 
         # Store injected providers or None for lazy initialization
         self._gemini_provider = gemini_provider
@@ -374,7 +400,18 @@ class ChatService:
             min_interval_sec=resolved_interval,
             clock=self._autosave_clock,
             sleep=self._autosave_sleep,
+            on_error=self._handle_autosave_error,
         )
+
+    def _handle_autosave_error(self, user_id, error):
+        with self._autosave_warning_lock:
+            self._autosave_warning = AUTOSAVE_FAILURE_WARNING
+
+    def consume_autosave_warning(self):
+        with self._autosave_warning_lock:
+            warning = self._autosave_warning
+            self._autosave_warning = None
+        return warning
 
     def request_autosave(self):
         """Request autosave if configured."""

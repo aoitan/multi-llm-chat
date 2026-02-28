@@ -34,6 +34,13 @@ def format_tool_response(response_type, content):
     return ""
 
 
+def append_autosave_warning(display_history, warning_message):
+    """Append autosave warning as an assistant system message."""
+    if not warning_message:
+        return
+    display_history.append({"role": "assistant", "content": warning_message})
+
+
 def logic_history_to_display(logic_history):
     """Converts logic history to display history format (messages format).
 
@@ -275,7 +282,12 @@ async def respond(
     chat_service.logic_history = logic_history
     chat_service.system_prompt = system_prompt
 
+    final_display = display_history
+    final_logic = logic_history
+
     async for updated_display, updated_logic, chunk in chat_service.process_message(user_message):
+        final_display = updated_display
+        final_logic = updated_logic
         chunk_type = chunk.get("type")
         if chunk_type in ["tool_call", "tool_result"]:
             # Format and add tool response to display history
@@ -283,7 +295,16 @@ async def respond(
             if formatted:
                 updated_display[-1]["content"] += formatted
 
+        warning = chat_service.consume_autosave_warning()
+        if warning:
+            append_autosave_warning(updated_display, warning)
+
         yield updated_display, updated_display, updated_logic, chat_service
+
+    warning = chat_service.consume_autosave_warning()
+    if warning:
+        append_autosave_warning(final_display, warning)
+        yield final_display, final_display, final_logic, chat_service
 
 
 async def validate_and_respond(

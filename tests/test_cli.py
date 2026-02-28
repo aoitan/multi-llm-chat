@@ -2,6 +2,7 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 import multi_llm_chat.cli as cli
+from multi_llm_chat.chat_service import AUTOSAVE_FAILURE_WARNING
 
 
 def _create_mock_provider(response_text, provider_type="gemini"):
@@ -134,6 +135,26 @@ def test_cli_flush_autosave_uses_latest_state_after_reset(monkeypatch):
     assert last_kwargs == {}
     last_args = mock_store_instance.save_autosave.call_args_list[-1].args
     assert last_args == ("test-user", "", [])
+
+
+def test_cli_autosave_failure_emits_warning(monkeypatch):
+    """CLI should show warning and continue when autosave fails."""
+    monkeypatch.setenv("CHAT_HISTORY_USER_ID", "test-user")
+
+    test_inputs = [
+        "memo",
+        "exit",
+    ]
+
+    with patch("multi_llm_chat.cli.HistoryStore") as MockStore:
+        mock_store_instance = MockStore.return_value
+        mock_store_instance.save_autosave.side_effect = OSError("disk full")
+        with patch("builtins.input", side_effect=test_inputs):
+            with patch("builtins.print") as mock_print:
+                asyncio.run(cli.main())
+
+    warning_calls = [call for call in mock_print.call_args_list if call.args]
+    assert any(AUTOSAVE_FAILURE_WARNING in str(call.args[0]) for call in warning_calls)
 
 
 def test_system_command_token_limit_exceeded():
